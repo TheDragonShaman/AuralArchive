@@ -16,12 +16,12 @@ ENV/
 database/auralarchive_database.db
 
 # Config and auth files - SENSITIVE
-/auth/audible_auth.json
-/config/config.txt
-.env
-*.env
-secrets.json
 auth/
+config/config.txt
+.env
+.env.*
+!.env.example
+secrets.json
 credentials/
 *.key
 *.pem
@@ -68,3 +68,13 @@ Thumbs.db
 
 # Reference data - should not be tracked
 reference_data/
+
+# Documentation and review files
+readme/
+review-index.md
+ROADMAP.md
+
+# Docker and environment files
+docker-compose.yml
+Dockerfile.dev
+.dockerignore
