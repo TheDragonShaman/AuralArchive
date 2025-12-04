@@ -1,0 +1,70 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.pytest_cache/
+venv/
+env/
+ENV/
+.venv/
+
+# Database files
+*.db
+database/auralarchive_database.db
+
+# Config and auth files - SENSITIVE
+/auth/audible_auth.json
+/config/config.txt
+.env
+*.env
+secrets.json
+auth/
+credentials/
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Logs - may contain sensitive data
+*.log
+/logs/
+/auralarchive_web.log
+
+# Backups - may contain sensitive data
+/backups/
+
+# Cache directories - temporary files
+/static/cache/
+cache/
+
+# Test files - often contain sensitive test data
+test_*.py
+*_test.py
+/test.py
+/test_jackett.py
+/test_jackett_debug.sh
+/test_qb.py
+/card_design_preview.html
+analyze_library.py
+
+# IDE/Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+.temporary/
+
+# Reference data - should not be tracked
+reference_data/

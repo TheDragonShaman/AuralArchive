@@ -1,0 +1,697 @@
+{% extends 'base.html' %}
+
+{% block title %}Library - AuralArchive{% endblock %}
+
+{% block content %}
+<div class="w-full">
+    
+    <!-- Top Control Bar -->
+    <div class="bg-base-200 border-y border-base-content/10 px-4 sm:px-6 lg:px-10 py-5 -mt-px">
+        <div class="flex flex-wrap items-center gap-4">
+            
+            <!-- Search Library -->
+            <div class="flex-1 min-w-[200px] max-w-md">
+                <label for="searchInput" class="text-xs font-semibold uppercase tracking-wider text-base-content/60 block mb-1">
+                    Search Library
+                </label>
+                <input type="text" id="searchInput" placeholder="Search books by title, author, or series..." 
+                       class="input input-sm input-bordered w-full bg-base-100">
+            </div>
+
+            <!-- Status Filter -->
+            <div class="min-w-[140px]">
+                <label for="statusFilter" class="text-xs font-semibold uppercase tracking-wider text-base-content/60 block mb-1">
+                    Status
+                </label>
+                <select id="statusFilter" class="select select-sm select-bordered w-full bg-base-100">
+                    <option value="">All Status</option>
+                    <option value="owned">Owned</option>
+                    <option value="audible_library">Audible Library</option>
+                    <option value="wanted">Wanted</option>
+                    <option value="downloading">Downloading</option>
+                </select>
+            </div>
+
+            <!-- Genre Filter -->
+            <div class="min-w-[140px]">
+                <label for="genreFilter" class="text-xs font-semibold uppercase tracking-wider text-base-content/60 block mb-1">
+                    Genre
+                </label>
+                <select id="genreFilter" class="select select-sm select-bordered w-full bg-base-100">
+                    <option value="">All Genres</option>
+                    <option value="fiction">Fiction</option>
+                    <option value="non-fiction">Non-Fiction</option>
+                    <option value="self-help">Self-Help</option>
+                    <option value="science">Science</option>
+                    <option value="history">History</option>
+                </select>
+            </div>
+
+            <!-- Sort By -->
+            <div class="min-w-[120px]">
+                <label for="sortFilter" class="text-xs font-semibold uppercase tracking-wider text-base-content/60 block mb-1">
+                    Sort By
+                </label>
+                <select id="sortFilter" class="select select-sm select-bordered w-full bg-base-100">
+                    <option value="title">Title</option>
+                    <option value="author">Author</option>
+                    <option value="rating">Rating</option>
+                    <option value="date">Date Added</option>
+                </select>
+            </div>
+
+            <!-- Actions -->
+            <div class="min-w-[140px]">
+                <label class="text-xs font-semibold uppercase tracking-wider text-base-content/60 block mb-1">
+                    Actions
+                </label>
+                <button class="btn btn-soft btn-primary w-full" id="selectModeBtn">
+                    <i class="fas fa-check-square"></i> Select Books
+                </button>
+            </div>
+
+            <!-- View Controls -->
+            <div class="min-w-[100px]">
+                <label for="gridViewBtn" class="text-xs font-semibold uppercase tracking-wider text-base-content/60 block mb-1">
+                    View
+                </label>
+                            <div class="join" role="group" aria-label="View options">
+                <button class="join-item btn btn-soft btn-primary" id="gridViewBtn" onclick="setView('grid')" aria-label="Grid view">
+                    <i class="fas fa-th"></i>
+                </button>
+                <button class="join-item btn btn-soft" id="listViewBtn" onclick="setView('table')" aria-label="Table view">
+                    <i class="fas fa-list"></i>
+                </button>
+                <button class="join-item btn btn-soft" id="compactViewBtn" onclick="setView('compact')" aria-label="Compact list view">
+                    <i class="fas fa-th-list"></i>
+                </button>
+            </div>
+            </div>
+
+            <!-- Size Slider -->
+            <div class="min-w-[180px]">
+                <label for="sizeSlider" class="text-xs font-semibold uppercase tracking-wider text-base-content/60 block mb-1">
+                    Size
+                </label>
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-image text-xs text-base-content/60"></i>
+                    <input type="range" id="sizeSlider" min="0" max="100" value="50" 
+                           class="range range-primary range-xs flex-1" step="1">
+                    <i class="fas fa-image text-sm text-base-content/60"></i>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+
+    <!-- Selection Toolbar (Hidden by default) -->
+    <div class="alert shadow-lg bg-primary/10 border-l-4 border-primary px-6 py-3 hidden" id="selectionToolbar">
+        <div class="flex-1">
+            <i class="fas fa-check-square text-primary"></i>
+            <span id="selectedCount" class="font-semibold">0 books selected</span>
+        </div>
+        <div class="flex gap-2">
+            <button class="btn btn-soft" id="selectAllBtn">
+                <i class="fas fa-check-double"></i> Select All
+            </button>
+            <button class="btn btn-soft" id="clearSelectionBtn">
+                <i class="fas fa-times"></i> Clear Selection
+            </button>
+            <button class="btn btn-soft btn-primary" id="updateMetadataBtn">
+                <i class="fas fa-sync"></i> Update Metadata
+            </button>
+            <button class="btn btn-soft btn-accent" id="changeStatusBtn">
+                <i class="fas fa-exchange-alt"></i> Change Status
+            </button>
+            <button class="btn btn-soft btn-error" id="deleteSelectedBtn">
+                <i class="fas fa-trash"></i> Delete Selected
+            </button>
+        </div>
+    </div>
+
+    <!-- Books Grid -->
+    <div class="p-6">
+        <!-- Grid View -->
+        <div class="grid gap-4 size-md" id="booksGrid">
+            {% if books and books|length > 0 %}
+                {% for book in books %}
+                <div class="cursor-pointer book-card group relative"
+                     data-book-id="{{ book.id }}"
+                     data-status="{{ book.ownership_status or 'unknown' }}"
+                     data-genre="{{ book.genre or 'unknown' }}"
+                     data-title="{{ book.title|lower }}"
+                     data-author="{{ book.author|lower }}">
+                    
+                    <!-- Book Cover -->
+                    <div class="book-cover-container relative bg-base-300 rounded-sm overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300">
+                        {% if book.cover_image %}
+                            <img src="{{ book.cover_image }}" 
+                                 alt="{{ book.title }}" 
+                                 class="w-full h-full object-cover"
+                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                            <div class="w-full h-full hidden items-center justify-center text-base-content/30 text-xs font-bold flex-col gap-2" style="display:none;">
+                                <i class="fas fa-book text-3xl"></i>
+                                <span>NO COVER</span>
+                            </div>
+                        {% else %}
+                            <div class="w-full h-full flex items-center justify-center text-base-content/30 text-xs font-bold flex-col gap-2">
+                                <i class="fas fa-book text-3xl"></i>
+                                <span>NO COVER</span>
+                            </div>
+                        {% endif %}
+                        
+                        <!-- Selection Checkbox (Hidden by default) -->
+                        <div class="absolute top-2 left-2 selection-checkbox hidden">
+                            <input type="checkbox" class="checkbox checkbox-primary checkbox-sm shadow-lg bg-base-100" aria-label="Select {{ book.title }}" />
+                        </div>
+
+                        <!-- Hover Overlay with Quick Actions -->
+                        <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-end justify-center pb-3">
+                            <div class="flex gap-1">
+                                <button class="btn btn-soft btn-primary btn-xs shadow-lg" onclick="event.stopPropagation(); openBookModal({{ book.id }})" title="Book Details">
+                                    <i class="fas fa-info"></i>
+                                </button>
+                                <button class="btn btn-soft btn-accent btn-xs shadow-lg" onclick="event.stopPropagation(); searchForBook({{ book.id }})" title="Interactive Download">
+                                    <i class="fas fa-download"></i>
+                                </button>
+                                <button class="btn btn-soft btn-warning btn-xs shadow-lg" onclick="event.stopPropagation(); autoDownloadBook({{ book.id }}, this)" title="Auto Download">
+                                    <i class="fas fa-bolt"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Book Info Below Cover -->
+                    <div class="mt-1.5">
+                        <h3 class="text-sm line-clamp-2 leading-tight font-semibold text-base-content">
+                            {{ book.title }}
+                        </h3>
+                        <p class="text-xs text-base-content/60 line-clamp-1">
+                            {{ book.author }}
+                        </p>
+                        {% if book.rating %}
+                        {% set rating_float = book.rating|float %}
+                        <div class="flex items-center gap-1.5 mt-0.5 text-xs text-base-content/60">
+                            <span>{{ "%.1f"|format(rating_float) }}</span>
+                            {% if book.num_ratings %}
+                            <span class="text-base-content/50">({{ book.num_ratings }})</span>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <!-- Empty State -->
+                <div class="col-span-full text-center py-24">
+                    <i class="fas fa-books text-6xl text-base-content/20 mb-4"></i>
+                    <h3 class="text-2xl font-bold mb-2">Your library is empty</h3>
+                    <p class="text-base-content/60 mb-6">Start adding audiobooks to build your collection</p>
+                    <a href="/discover" class="btn btn-soft btn-primary">
+                        <i class="fas fa-compass"></i> Discover Books
+                    </a>
+                </div>
+            {% endif %}
+        </div>
+
+        <script>
+            (function() {
+                try {
+                    const savedSize = localStorage.getItem('libraryCardSize');
+                    if (!savedSize) {
+                        return;
+                    }
+
+                    const slider = document.getElementById('sizeSlider');
+                    if (slider) {
+                        slider.value = savedSize;
+                    }
+
+                    const grid = document.getElementById('booksGrid');
+                    if (!grid) {
+                        return;
+                    }
+
+                    const value = parseInt(savedSize, 10);
+                    const classes = ['size-xs', 'size-sm', 'size-md', 'size-lg', 'size-xl'];
+                    grid.classList.remove(...classes);
+
+                    let sizeClass = 'size-md';
+                    if (value <= 20) {
+                        sizeClass = 'size-xs';
+                    } else if (value <= 40) {
+                        sizeClass = 'size-sm';
+                    } else if (value <= 60) {
+                        sizeClass = 'size-md';
+                    } else if (value <= 80) {
+                        sizeClass = 'size-lg';
+                    } else {
+                        sizeClass = 'size-xl';
+                    }
+
+                    grid.classList.add(sizeClass);
+                } catch (err) {
+                    console.warn('Failed to apply saved library card size:', err);
+                }
+            })();
+        </script>
+
+        <!-- Table View -->
+        <div class="hidden" id="booksTable">
+            {% if books and books|length > 0 %}
+            <div class="overflow-x-auto">
+                <table class="table table-zebra">
+                    <thead>
+                        <tr>
+                            <th class="w-16"></th>
+                            <th>Cover</th>
+                            <th>Title</th>
+                            <th>Author</th>
+                            <th>Series</th>
+                            <th>Narrator</th>
+                            <th>Runtime</th>
+                            <th>Rating</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for book in books %}
+                        <tr class="hover cursor-pointer book-table-row"
+                            data-book-id="{{ book.id }}"
+                            data-status="{{ book.ownership_status or 'unknown' }}"
+                            data-genre="{{ book.genre or 'unknown' }}"
+                            data-title="{{ book.title|lower }}"
+                            data-author="{{ book.author|lower }}"
+                            onclick="openBookModal({{ book.id }})">
+                            <td>
+                                <div class="selection-checkbox hidden">
+                                    <input type="checkbox" class="checkbox checkbox-primary checkbox-sm" onclick="event.stopPropagation();" aria-label="Select {{ book.title }}" />
+                                </div>
+                            </td>
+                            <td>
+                                <div class="avatar">
+                                    <div class="w-16 h-16" style="border-radius: 0.25rem;">
+                                        {% if book.cover_image %}
+                                            <img src="{{ book.cover_image }}" alt="{{ book.title }}" style="border-radius: 0.25rem;" />
+                                        {% else %}
+                                            <div class="w-full h-full bg-base-300 flex items-center justify-center">
+                                                <i class="fas fa-book text-base-content/30"></i>
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="font-bold line-clamp-1">{{ book.title }}</div>
+                            </td>
+                            <td>
+                                <span class="line-clamp-1">{{ book.author }}</span>
+                            </td>
+                            <td>
+                                {% if book.series and book.series != 'N/A' %}
+                                    <span class="line-clamp-1">{{ book.series }}</span>
+                                    {% if book.sequence and book.sequence != 'N/A' %}
+                                        <div class="text-xs opacity-60">#{{ book.sequence }}</div>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="opacity-40">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if book.narrator and book.narrator != 'Unknown' %}
+                                    <span class="line-clamp-1">{{ book.narrator }}</span>
+                                {% else %}
+                                    <span class="opacity-40">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if book.runtime %}
+                                    {{ book.runtime }}
+                                {% else %}
+                                    <span class="opacity-40">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if book.rating and book.rating != 'N/A' %}
+                                    <div class="flex items-center gap-1">
+                                        <i class="fas fa-star text-warning text-xs"></i>
+                                        <span>{{ book.rating }}</span>
+                                    </div>
+                                    {% if book.num_ratings and book.num_ratings > 0 %}
+                                        <div class="text-xs opacity-60">({{ book.num_ratings|int }})</div>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="opacity-40">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% set status = book.ownership_status or 'unknown' %}
+                                {% if status == 'owned' or status == 'audible_library' %}
+                                    <div class="badge badge-success badge-soft gap-1">
+                                        <i class="fas fa-check text-xs"></i>
+                                        Owned
+                                    </div>
+                                {% elif status == 'wanted' %}
+                                    <div class="badge badge-warning badge-soft gap-1">
+                                        <i class="fas fa-star text-xs"></i>
+                                        Wanted
+                                    </div>
+                                {% elif status == 'downloading' %}
+                                    <div class="badge badge-info badge-soft gap-1">
+                                        <i class="fas fa-download text-xs"></i>
+                                        Downloading
+                                    </div>
+                                {% else %}
+                                    <div class="badge badge-soft gap-1">
+                                        <i class="fas fa-question text-xs"></i>
+                                        Unknown
+                                    </div>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="flex gap-1">
+                                    <button class="btn btn-soft btn-primary btn-xs" onclick="event.stopPropagation(); openBookModal({{ book.id }})" title="Book Details">
+                                        <i class="fas fa-info"></i>
+                                    </button>
+                                    <button class="btn btn-soft btn-accent btn-xs" onclick="event.stopPropagation(); searchForBook({{ book.id }})" title="Interactive Download">
+                                        <i class="fas fa-download"></i>
+                                    </button>
+                                    <button class="btn btn-soft btn-warning btn-xs" onclick="event.stopPropagation(); autoDownloadBook({{ book.id }}, this)" title="Auto Download">
+                                        <i class="fas fa-bolt"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+                <!-- Empty State -->
+                <div class="text-center py-24">
+                    <i class="fas fa-books text-6xl text-base-content/20 mb-4"></i>
+                    <h3 class="text-2xl font-bold mb-2">Your library is empty</h3>
+                    <p class="text-base-content/60 mb-6">Start adding audiobooks to build your collection</p>
+                    <a href="/discover" class="btn btn-soft btn-primary">
+                        <i class="fas fa-compass"></i> Discover Books
+                    </a>
+                </div>
+            {% endif %}
+        </div>
+
+        <!-- Compact List View -->
+        <div class="hidden" id="booksCompact">
+            {% if books and books|length > 0 %}
+            <div class="overflow-x-auto">
+                <table class="table table-xs">
+                    <thead>
+                        <tr>
+                            <th class="w-6"></th>
+                            <th class="w-10">Cover</th>
+                            <th class="w-48">Title</th>
+                            <th class="w-40">Author</th>
+                            <th class="w-40">Series</th>
+                            <th class="w-40">Narrator</th>
+                            <th class="w-20">Runtime</th>
+                            <th class="w-20">Rating</th>
+                            <th class="w-16">Status</th>
+                            <th class="w-16"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for book in books %}
+                        <tr class="hover cursor-pointer"
+                            data-book-id="{{ book.id }}"
+                            data-status="{{ book.ownership_status or 'unknown' }}"
+                            data-genre="{{ book.genre or 'unknown' }}"
+                            data-title="{{ book.title|lower }}"
+                            data-author="{{ book.author|lower }}"
+                            onclick="openBookModal({{ book.id }})">
+                            <td>
+                                <div class="selection-checkbox hidden">
+                                    <input type="checkbox" class="checkbox checkbox-primary checkbox-xs" onclick="event.stopPropagation();" aria-label="Select {{ book.title }}" />
+                                </div>
+                            </td>
+                            <td>
+                                <div class="avatar">
+                                    <div class="w-8 h-8" style="border-radius: 0.25rem;">
+                                        {% if book.cover_image %}
+                                            <img src="{{ book.cover_image }}" alt="{{ book.title }}" style="border-radius: 0.25rem;" />
+                                        {% else %}
+                                            <div class="w-full h-full bg-base-300 flex items-center justify-center">
+                                                <i class="fas fa-book text-xs text-base-content/30"></i>
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="font-semibold text-xs line-clamp-1">{{ book.title }}</div>
+                                {% if book.release_date and book.release_date != 'Unknown' %}
+                                    <div class="text-[10px] opacity-50">{{ book.release_date[:4] }}</div>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="text-xs line-clamp-1">{{ book.author }}</span>
+                            </td>
+                            <td>
+                                {% if book.series and book.series != 'N/A' %}
+                                    <div class="text-xs line-clamp-1">{{ book.series }}</div>
+                                    {% if book.sequence and book.sequence != 'N/A' %}
+                                        <div class="text-[10px] opacity-50">Book #{{ book.sequence }}</div>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="opacity-40 text-xs">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if book.narrator and book.narrator != 'Unknown' %}
+                                    <span class="text-xs line-clamp-1">{{ book.narrator }}</span>
+                                {% else %}
+                                    <span class="opacity-40 text-xs">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if book.runtime %}
+                                    <span class="text-xs whitespace-nowrap">{{ book.runtime }}</span>
+                                {% else %}
+                                    <span class="opacity-40 text-xs">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if book.rating and book.rating != 'N/A' %}
+                                    <div class="flex items-center gap-0.5">
+                                        <i class="fas fa-star text-warning" style="font-size: 0.625rem;"></i>
+                                        <span class="text-xs">{{ book.rating }}</span>
+                                    </div>
+                                    {% if book.num_ratings and book.num_ratings > 0 %}
+                                        <div class="text-[10px] opacity-50">({{ (book.num_ratings / 1000) | round(1) }}k)</div>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="opacity-40 text-xs">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% set status = book.ownership_status or 'unknown' %}
+                                {% if status == 'owned' or status == 'audible_library' %}
+                                    <div class="badge badge-success badge-soft badge-xs">
+                                        <i class="fas fa-check" style="font-size: 0.5rem;"></i>
+                                    </div>
+                                {% elif status == 'wanted' %}
+                                    <div class="badge badge-warning badge-soft badge-xs">
+                                        <i class="fas fa-star" style="font-size: 0.5rem;"></i>
+                                    </div>
+                                {% elif status == 'downloading' %}
+                                    <div class="badge badge-info badge-soft badge-xs">
+                                        <i class="fas fa-download" style="font-size: 0.5rem;"></i>
+                                    </div>
+                                {% else %}
+                                    <div class="badge badge-soft badge-xs">
+                                        <i class="fas fa-question" style="font-size: 0.5rem;"></i>
+                                    </div>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="flex gap-0.5">
+                                    <button class="btn btn-soft btn-primary btn-xs" onclick="event.stopPropagation(); openBookModal({{ book.id }})" title="Book Details" style="padding: 0.125rem 0.375rem;">
+                                        <i class="fas fa-info" style="font-size: 0.625rem;"></i>
+                                    </button>
+                                    <button class="btn btn-soft btn-accent btn-xs" onclick="event.stopPropagation(); searchForBook({{ book.id }})" title="Interactive Download" style="padding: 0.125rem 0.375rem;">
+                                        <i class="fas fa-download" style="font-size: 0.625rem;"></i>
+                                    </button>
+                                    <button class="btn btn-soft btn-warning btn-xs" onclick="event.stopPropagation(); autoDownloadBook({{ book.id }}, this)" title="Auto Download" style="padding: 0.125rem 0.375rem;">
+                                        <i class="fas fa-bolt" style="font-size: 0.625rem;"></i>
+                                    </button>
+                                    <button class="btn btn-soft btn-warning btn-xs" onclick="event.stopPropagation(); autoDownloadBook({{ book.id }}, this)" title="Auto Download" style="padding: 0.125rem 0.375rem;">
+                                        <i class="fas fa-bolt" style="font-size: 0.625rem;"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+                <!-- Empty State -->
+                <div class="text-center py-24">
+                    <i class="fas fa-books text-6xl text-base-content/20 mb-4"></i>
+                    <h3 class="text-2xl font-bold mb-2">Your library is empty</h3>
+                    <p class="text-base-content/60 mb-6">Start adding audiobooks to build your collection</p>
+                    <a href="/discover" class="btn btn-soft btn-primary">
+                        <i class="fas fa-compass"></i> Discover Books
+                    </a>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+</div>
+
+<!-- Book Details Modal -->
+<dialog id="bookModal" class="modal modal-bottom sm:modal-middle">
+    <div class="modal-box max-w-5xl">
+        <div id="modalContent">
+            <!-- Modal content will be loaded dynamically -->
+            <div class="flex justify-center py-8">
+                <span class="loading loading-spinner loading-lg"></span>
+            </div>
+        </div>
+        <div class="modal-action">
+            <form method="dialog">
+                <button class="btn btn-soft btn-md">Close</button>
+            </form>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+    </form>
+</dialog>
+
+<!-- Bulk Progress Modal -->
+<dialog id="progressModal" class="modal">
+    <div class="modal-box">
+        <h3 class="font-bold text-lg flex items-center gap-2">
+            <span class="loading loading-spinner loading-sm"></span>
+            <span id="progressTitle">Processing...</span>
+        </h3>
+        
+        <div class="py-4 space-y-4">
+            <div id="progressDetails" class="text-sm opacity-70">
+                Preparing operation...
+            </div>
+            
+            <progress id="progressBar" class="progress progress-primary w-full" value="0" max="100"></progress>
+            
+            <div class="flex justify-between text-sm">
+                <span id="progressCount">0 / 0</span>
+                <span id="progressPercent">0%</span>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4">
+                <div class="stat bg-base-200 rounded-lg">
+                    <div class="stat-title">Success</div>
+                    <div class="stat-value text-success text-2xl" id="progressSuccess">0</div>
+                </div>
+                <div class="stat bg-base-200 rounded-lg">
+                    <div class="stat-title">Failed</div>
+                    <div class="stat-value text-error text-2xl" id="progressFailed">0</div>
+                </div>
+            </div>
+            
+            <div id="errorsList" class="collapse collapse-arrow bg-base-200 hidden">
+                <input type="checkbox" /> 
+                <div class="collapse-title font-medium text-error">
+                    View Errors
+                </div>
+                <div class="collapse-content"> 
+                    <div id="errorsContent" class="space-y-2 max-h-40 overflow-y-auto"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="modal-action">
+            <button class="btn btn-soft btn-primary hidden" id="progressCloseBtn" onclick="closeProgressModal()">Close</button>
+        </div>
+    </div>
+</dialog>
+
+<!-- Search/Download Modal -->
+<dialog id="searchModal" class="modal modal-bottom sm:modal-middle">
+    <div class="modal-box max-w-7xl w-full">
+        <h3 class="font-bold text-lg flex items-center gap-2">
+            <i class="fas fa-download"></i>
+            <span id="searchModalTitle">Interactive Download</span>
+        </h3>
+        
+        <!-- Book Info -->
+        <div class="bg-base-200 rounded-lg p-3 my-4" id="searchBookInfo">
+            <div class="text-sm">
+                <strong>Searching for:</strong> <span id="searchBookTitle"></span>
+            </div>
+            <div class="text-xs text-base-content/60">
+                <span id="searchBookAuthor"></span>
+            </div>
+        </div>
+        
+        <!-- Loading State -->
+        <div id="searchLoading" class="text-center py-8">
+            <span class="loading loading-spinner loading-lg text-primary"></span>
+            <p class="mt-2 text-base-content/60">Searching for downloads...</p>
+        </div>
+        
+        <!-- Results -->
+        <div id="searchResults" class="hidden">
+            <div class="mb-4">
+                <span class="text-sm font-semibold"><span id="resultsCount">0</span> results found</span>
+            </div>
+            
+            <div class="overflow-x-auto max-h-96">
+                <table class="table table-zebra table-sm">
+                    <thead>
+                        <tr>
+                            <th>Title</th>
+                            <th>Format</th>
+                            <th>Size</th>
+                            <th>Quality</th>
+                            <th>Confidence</th>
+                            <th>Seeders/Peers</th>
+                            <th>Source</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="searchResultsBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- No Results -->
+        <div id="searchNoResults" class="hidden text-center py-8">
+            <i class="fas fa-search text-4xl text-base-content/20 mb-2"></i>
+            <p class="text-base-content/60">No results found</p>
+        </div>
+        
+        <!-- Error -->
+        <div id="searchError" class="hidden">
+            <div class="alert alert-error">
+                <i class="fas fa-exclamation-circle"></i>
+                <span id="searchErrorMessage"></span>
+            </div>
+        </div>
+        
+        <div class="modal-action">
+            <form method="dialog">
+                <button class="btn btn-soft">Close</button>
+            </form>
+        </div>
+    </div>
+</dialog>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/library.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,1037 @@
+{% extends 'base.html' %}
+{% block title %}Settings · AuralArchive{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto space-y-8">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+            <h1 class="text-3xl font-semibold tracking-tight">Control Center</h1>
+            <p class="text-sm text-base-content/70">Tune integrations, automation, and download behavior.</p>
+            <p id="configUpdatedAt" class="text-xs text-base-content/50 mt-2">Loading configuration…</p>
+        </div>
+        <button type="button" id="refreshSettings" class="btn btn-outline btn-sm gap-2">
+            <i class="fas fa-rotate"></i>
+            <span>Refresh</span>
+        </button>
+    </div>
+
+    <div class="tabs tabs-border w-full" id="settingsTabs">
+        <input type="radio" name="settings_tabs" role="tab" class="tab" aria-label="General" checked />
+        <div role="tabpanel" class="tab-content border border-base-300 bg-base-100 p-6 space-y-6">
+            <div class="space-y-2">
+                <h2 class="text-lg font-semibold">General</h2>
+                <p class="text-sm text-base-content/60">Adjust logging verbosity and automatic search defaults.</p>
+            </div>
+            <form id="generalForm" data-status-target="generalStatus" class="space-y-6" novalidate>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-control">
+                        <label class="label pb-1">
+                            <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Log level</span>
+                        </label>
+                        <select id="app_log_level" class="select select-bordered w-full">
+                            <option value="DEBUG">Debug</option>
+                            <option value="INFO">Info</option>
+                            <option value="WARNING">Warning</option>
+                            <option value="ERROR">Error</option>
+                        </select>
+                    </div>
+                    <div class="form-control">
+                        <label class="label pb-1">
+                            <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Theme</span>
+                        </label>
+                        <select id="app_theme" class="select select-bordered w-full">
+                            <option value="dark">Dark</option>
+                            <option value="nord">Nord</option>
+                            <option value="blueberry">BlueBerry</option>
+                        </select>
+                        <label class="label">
+                            <span class="label-text-alt text-base-content/60">Preview changes instantly; save to keep the preference.</span>
+                        </label>
+                    </div>
+                    <div class="form-control">
+                        <label class="label pb-1">
+                            <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Quality threshold</span>
+                        </label>
+                        <input id="quality_threshold" type="number" min="0" step="1" class="input input-bordered w-full" placeholder="5" />
+                    </div>
+                </div>
+                <div class="form-control">
+                    <label class="label cursor-pointer">
+                        <span class="label-text">Enable automatic downloads</span>
+                        <input id="auto_download_enabled" type="checkbox" class="toggle toggle-primary" />
+                    </label>
+                </div>
+                <div id="generalStatus" class="text-xs text-base-content/60 h-4"></div>
+                <div class="flex justify-end">
+                    <button type="submit" class="btn btn-primary btn-sm gap-2">
+                        <i class="fas fa-save"></i>
+                        <span>Save General Settings</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <input type="radio" name="settings_tabs" role="tab" class="tab" aria-label="AudioBookShelf" />
+        <div role="tabpanel" class="tab-content border border-base-300 bg-base-100 p-6 space-y-6">
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div class="space-y-1">
+                    <h2 class="text-lg font-semibold">AudioBookShelf</h2>
+                    <p class="text-sm text-base-content/60">Configure library sync, API access, and import preferences.</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <button type="button" id="absTestButton" class="btn btn-outline btn-sm gap-2">
+                        <i class="fas fa-plug"></i>
+                        <span>Test Connection</span>
+                    </button>
+                    <button type="button" id="absRefreshLibraries" class="btn btn-outline btn-sm gap-2">
+                        <i class="fas fa-database"></i>
+                        <span>Refresh Libraries</span>
+                    </button>
+                    <button type="button" id="absManualSync" class="btn btn-primary btn-sm gap-2">
+                        <i class="fas fa-sync-alt"></i>
+                        <span>Manual Sync</span>
+                    </button>
+                </div>
+            </div>
+            <div id="absConnectionStatus" class="text-xs text-base-content/60 min-h-4"></div>
+            <form id="absForm" data-status-target="absStatus" class="space-y-6" novalidate>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-control">
+                        <label class="label pb-1">
+                            <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Server URL</span>
+                        </label>
+                        <input id="abs_host" type="text" class="input input-bordered w-full" placeholder="http://127.0.0.1:13378" />
+                    </div>
+                    <div class="form-control">
+                        <label class="label pb-1">
+                            <span class="label-text text-xs uppercase tracking-wide text-base-content/60">API key</span>
+                        </label>
+                        <input id="abs_api_key" type="password" class="input input-bordered w-full" autocomplete="off" />
+                    </div>
+                    <div class="form-control md:col-span-2">
+                        <label class="label pb-1">
+                            <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Library</span>
+                        </label>
+                        <select id="abs_library_id" class="select select-bordered w-full">
+                            <option value="">Select a library</option>
+                        </select>
+                        <label class="label">
+                            <span id="absLibraryHelper" class="label-text-alt text-base-content/60">Load libraries after testing the connection.</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-control">
+                        <label class="label cursor-pointer">
+                            <span class="label-text">Enable sync</span>
+                            <input id="abs_enabled" type="checkbox" class="toggle toggle-primary" />
+                        </label>
+                    </div>
+                    <div class="form-control">
+                        <label class="label cursor-pointer">
+                            <span class="label-text">Match metadata during sync</span>
+                            <input id="abs_sync_metadata" type="checkbox" class="toggle toggle-primary" />
+                        </label>
+                    </div>
+                    <div class="form-control">
+                        <label class="label cursor-pointer">
+                            <span class="label-text">Sync owned titles only</span>
+                            <input id="abs_sync_only_owned" type="checkbox" class="toggle toggle-primary" />
+                        </label>
+                    </div>
+                    <div class="form-control">
+                        <label class="label cursor-pointer">
+                            <span class="label-text">Auto sync on schedule</span>
+                            <input id="abs_auto_sync" type="checkbox" class="toggle toggle-primary" />
+                        </label>
+                    </div>
+                    <div class="form-control md:col-span-2">
+                        <label class="label pb-1">
+                            <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Sync frequency</span>
+                        </label>
+                        <input id="abs_sync_frequency" type="text" class="input input-bordered w-full" placeholder="30min" />
+                    </div>
+                </div>
+                <div id="absStatus" class="text-xs text-base-content/60 min-h-4"></div>
+                <div class="flex justify-end">
+                    <button type="submit" class="btn btn-primary btn-sm gap-2">
+                        <i class="fas fa-save"></i>
+                        <span>Save AudioBookShelf Settings</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <input type="radio" name="settings_tabs" role="tab" class="tab" aria-label="Audible" />
+        <div role="tabpanel" class="tab-content border border-base-300 bg-base-100 p-6 space-y-6">
+            <div class="space-y-2">
+                <h2 class="text-lg font-semibold">Audible</h2>
+                <p class="text-sm text-base-content/60">Authenticate with Audible, monitor connection health, and manage library sync operations.</p>
+            </div>
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <p id="audibleStatusHelper" class="text-xs text-base-content/60">Loading Audible status…</p>
+                <div class="flex flex-wrap items-center gap-2">
+                    <button type="button" id="audibleRefreshButton" class="btn btn-outline btn-sm gap-2">
+                        <i class="fas fa-sync-alt"></i>
+                        <span>Refresh Status</span>
+                    </button>
+                    <button type="button" id="audibleSetupButton" class="btn btn-outline btn-sm gap-2">
+                        <i class="fas fa-book"></i>
+                        <span>Setup Guide</span>
+                    </button>
+                    <button type="button" id="audibleAuthenticateButton" class="btn btn-primary btn-sm gap-2">
+                        <i class="fas fa-key"></i>
+                        <span>Authenticate</span>
+                    </button>
+                    <button type="button" id="audibleRevokeButton" class="btn btn-outline btn-sm btn-error gap-2 hidden">
+                        <i class="fas fa-ban"></i>
+                        <span>Revoke</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="audibleStatusCards">
+                <div class="rounded-lg border border-base-300 bg-base-100 p-4 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-xs uppercase tracking-wide text-base-content/60">Authentication</p>
+                            <p id="audibleAuthHeadline" class="text-lg font-semibold">Loading…</p>
+                        </div>
+                        <span id="audibleAuthBadge" class="badge badge-sm">-</span>
+                    </div>
+                    <p id="audibleAuthDetails" class="text-sm text-base-content/60">Checking authentication status…</p>
+                    <div id="audibleAccountSummary" class="text-xs text-base-content/60 space-y-1 hidden"></div>
+                </div>
+
+                <div class="rounded-lg border border-base-300 bg-base-100 p-4 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-xs uppercase tracking-wide text-base-content/60">Library Cache</p>
+                            <p id="audibleCacheHeadline" class="text-lg font-semibold">Unknown</p>
+                        </div>
+                        <span id="audibleCacheBadge" class="badge badge-sm">-</span>
+                    </div>
+                    <p id="audibleCacheDetails" class="text-sm text-base-content/60">Awaiting cache information.</p>
+                    <p id="audibleExportSummary" class="text-xs text-base-content/50"></p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-6">
+                <aside class="space-y-3">
+                    <div class="rounded-lg border border-base-300 bg-base-100 p-4 space-y-3">
+                        <h3 class="text-sm font-semibold uppercase tracking-wide text-base-content/60">Quick Actions</h3>
+                        <button type="button" id="audibleSyncFullButton" class="btn btn-outline btn-sm w-full justify-start gap-2">
+                            <i class="fas fa-sync"></i>
+                            <span>Full Library Sync</span>
+                        </button>
+                        <button type="button" id="audibleSyncQuickButton" class="btn btn-outline btn-sm w-full justify-start gap-2">
+                            <i class="fas fa-step-forward"></i>
+                            <span>Quick Sync (Delta)</span>
+                        </button>
+                        <button type="button" id="audibleRefreshLibraryButton" class="btn btn-outline btn-sm w-full justify-start gap-2">
+                            <i class="fas fa-redo"></i>
+                            <span>Refresh Library Cache</span>
+                        </button>
+                        <button type="button" id="audibleDownloadAllButton" class="btn btn-outline btn-sm w-full justify-start gap-2">
+                            <i class="fas fa-cloud-download-alt"></i>
+                            <span>Download Entire Library</span>
+                        </button>
+                        <button type="button" id="audibleExportButton" class="btn btn-outline btn-sm w-full justify-start gap-2">
+                            <i class="fas fa-download"></i>
+                            <span>Export Library (JSON)</span>
+                        </button>
+                        <button type="button" id="audibleStatsButton" class="btn btn-outline btn-sm w-full justify-start gap-2">
+                            <i class="fas fa-chart-pie"></i>
+                            <span>Load Library Stats</span>
+                        </button>
+                        <button type="button" id="audibleValidateButton" class="btn btn-outline btn-sm w-full justify-start gap-2">
+                            <i class="fas fa-shield-check"></i>
+                            <span>Validate Credentials</span>
+                        </button>
+                        <p id="audibleBulkDownloadStatus" class="text-xs text-base-content/60"></p>
+                    </div>
+                    <div class="rounded-lg border border-base-300 bg-base-100 p-4 space-y-3">
+                        <h3 class="text-sm font-semibold uppercase tracking-wide text-base-content/60">Integration Notes</h3>
+                        <div id="audibleInfoPanel" class="text-sm text-base-content/70 leading-relaxed">
+                            Use the quick actions above to authenticate, run syncs, or refresh your library.
+                        </div>
+                    </div>
+                </aside>
+
+                <div class="space-y-4">
+                    <div class="rounded-lg border border-base-300 bg-base-100 p-4 space-y-3">
+                        <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                            <div>
+                                <h3 class="text-base font-semibold">Library Statistics</h3>
+                                <p class="text-sm text-base-content/60">Get a snapshot of your owned Audible titles.</p>
+                            </div>
+                            <button type="button" id="audibleStatsRefreshButton" class="btn btn-outline btn-xs gap-2">
+                                <i class="fas fa-redo"></i>
+                                <span>Refresh</span>
+                            </button>
+                        </div>
+                        <div id="audibleStatsContent" class="text-sm text-base-content/70">
+                            Statistics have not been loaded yet.
+                        </div>
+                    </div>
+
+                    <div class="rounded-lg border border-base-300 bg-base-100 p-4 space-y-3">
+                        <div>
+                            <h3 class="text-base font-semibold">Capabilities</h3>
+                            <p class="text-sm text-base-content/60">Feature availability is based on authentication status and recent sync operations.</p>
+                        </div>
+                        <ul id="audibleCapabilitiesList" class="space-y-2 text-sm text-base-content/70">
+                            <li>Loading capabilities…</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <input type="radio" name="settings_tabs" role="tab" class="tab" aria-label="Download Clients" />
+        <div role="tabpanel" class="tab-content border border-base-300 bg-base-100 p-6 space-y-6">
+            <div class="space-y-2">
+                <h2 class="text-lg font-semibold">Download Clients</h2>
+                <p class="text-sm text-base-content/60">Manage multiple torrent and usenet clients. Add a client to make it available to download workflows.</p>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
+                <aside class="space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-sm font-semibold uppercase tracking-wide text-base-content/60">Configured Clients</h3>
+                        <button type="button" id="downloadClientAddButton" class="btn btn-outline btn-xs">
+                            <i class="fas fa-plus"></i>
+                            <span>Add</span>
+                        </button>
+                    </div>
+                    <div id="downloadClientsList" class="space-y-2">
+                        <div class="rounded-lg border border-dashed border-base-300 p-4 text-sm text-base-content/60">
+                            No download clients configured yet.
+                        </div>
+                    </div>
+                </aside>
+                <form id="downloadClientForm" data-status-target="downloadClientStatus" class="space-y-6" novalidate>
+                    <div id="downloadClientEmptyState" class="rounded-lg border border-dashed border-base-300 p-6 text-center text-sm text-base-content/60">
+                        Select or add a download client to edit connection details.
+                    </div>
+                    <div id="downloadClientEditor" class="space-y-6 hidden">
+                        <input type="hidden" id="download_client_key" />
+                        <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                            <div class="space-y-1">
+                                <h3 id="downloadClientHeading" class="text-lg font-semibold">New Client</h3>
+                                <p id="downloadClientHelper" class="text-sm text-base-content/60">Fill in the details below and save to activate this client.</p>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button type="button" id="downloadClientTestButton" class="btn btn-outline btn-sm gap-2">
+                                    <i class="fas fa-plug"></i>
+                                    <span>Test Connection</span>
+                                </button>
+                                <button type="button" id="downloadClientDeleteButton" class="btn btn-outline btn-sm btn-error gap-2 hidden">
+                                    <i class="fas fa-trash"></i>
+                                    <span>Delete</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="form-control">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Client Type</span>
+                                </label>
+                                <select id="download_client_type" class="select select-bordered w-full">
+                                    <option value="qbittorrent">qBittorrent</option>
+                                    <option value="deluge">Deluge</option>
+                                    <option value="transmission">Transmission</option>
+                                    <option value="sabnzbd">SABnzbd</option>
+                                    <option value="nzbget">NZBGet</option>
+                                </select>
+                                <label class="label">
+                                    <span id="downloadClientTypeHelper" class="label-text-alt text-base-content/60">Choose the client protocol you want to configure.</span>
+                                </label>
+                            </div>
+                            <div class="form-control">
+                                <label class="label cursor-pointer">
+                                    <span class="label-text">Enable client</span>
+                                    <input id="download_client_enabled" type="checkbox" class="toggle toggle-primary" />
+                                </label>
+                            </div>
+                            <div class="form-control">
+                                <label class="label cursor-pointer">
+                                    <span class="label-text">Auto-start downloads</span>
+                                    <input id="download_client_auto" type="checkbox" class="toggle toggle-primary" />
+                                </label>
+                            </div>
+                        </div>
+
+                        <div data-client-panel="qbittorrent" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="form-control">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Host</span>
+                                </label>
+                                <input id="qb_host" type="text" class="input input-bordered w-full" placeholder="127.0.0.1" />
+                            </div>
+                            <div class="form-control">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Port</span>
+                                </label>
+                                <input id="qb_port" type="number" min="1" step="1" class="input input-bordered w-full" placeholder="8080" />
+                            </div>
+                            <div class="form-control">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Username</span>
+                                </label>
+                                <input id="qb_username" type="text" class="input input-bordered w-full" />
+                            </div>
+                            <div class="form-control">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Password</span>
+                                </label>
+                                <input id="qb_password" type="password" class="input input-bordered w-full" autocomplete="off" />
+                            </div>
+                            <div class="form-control md:col-span-2">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Category</span>
+                                </label>
+                                <input id="qb_category" type="text" class="input input-bordered w-full" placeholder="auralarchive" />
+                            </div>
+                            <div class="form-control md:col-span-2" data-qb-path-mappings>
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Path mappings</span>
+                                </label>
+                                <div id="qbPathMappings" class="space-y-2"></div>
+                                <div class="flex items-center justify-between mt-2">
+                                    <p class="text-xs text-base-content/50">Map qBittorrent's internal paths to the host paths AuralArchive can access.</p>
+                                    <button type="button" id="qbPathMappingAdd" class="btn btn-outline btn-xs">
+                                        <i class="fas fa-plus"></i>
+                                        <span>Add Mapping</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div data-client-panel="deluge" class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden">
+                            <div class="form-control">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Host</span>
+                                </label>
+                                <input id="deluge_host" type="text" class="input input-bordered w-full" placeholder="127.0.0.1" />
+                            </div>
+                            <div class="form-control">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Port</span>
+                                </label>
+                                <input id="deluge_port" type="number" min="1" step="1" class="input input-bordered w-full" placeholder="8112" />
+                            </div>
+                            <div class="form-control md:col-span-2">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Password</span>
+                                </label>
+                                <input id="deluge_password" type="password" class="input input-bordered w-full" autocomplete="off" />
+                            </div>
+                        </div>
+
+                        <div data-client-panel="transmission" class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden">
+                            <div class="form-control">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Host</span>
+                                </label>
+                                <input id="transmission_host" type="text" class="input input-bordered w-full" placeholder="127.0.0.1" />
+                            </div>
+                            <div class="form-control">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Port</span>
+                                </label>
+                                <input id="transmission_port" type="number" min="1" step="1" class="input input-bordered w-full" placeholder="9091" />
+                            </div>
+                            <div class="form-control">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Username</span>
+                                </label>
+                                <input id="transmission_username" type="text" class="input input-bordered w-full" />
+                            </div>
+                            <div class="form-control">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Password</span>
+                                </label>
+                                <input id="transmission_password" type="password" class="input input-bordered w-full" autocomplete="off" />
+                            </div>
+                        </div>
+
+                        <div data-client-panel="sabnzbd" class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden">
+                            <div class="form-control">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Host</span>
+                                </label>
+                                <input id="sabnzbd_host" type="text" class="input input-bordered w-full" placeholder="127.0.0.1" />
+                            </div>
+                            <div class="form-control">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Port</span>
+                                </label>
+                                <input id="sabnzbd_port" type="number" min="1" step="1" class="input input-bordered w-full" placeholder="8080" />
+                            </div>
+                            <div class="form-control">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Username</span>
+                                </label>
+                                <input id="sabnzbd_username" type="text" class="input input-bordered w-full" />
+                            </div>
+                            <div class="form-control">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Password</span>
+                                </label>
+                                <input id="sabnzbd_password" type="password" class="input input-bordered w-full" autocomplete="off" />
+                            </div>
+                            <div class="form-control md:col-span-2">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">API key</span>
+                                </label>
+                                <input id="sabnzbd_api_key" type="text" class="input input-bordered w-full" autocomplete="off" />
+                            </div>
+                        </div>
+
+                        <div data-client-panel="nzbget" class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden">
+                            <div class="form-control">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Host</span>
+                                </label>
+                                <input id="nzbget_host" type="text" class="input input-bordered w-full" placeholder="127.0.0.1" />
+                            </div>
+                            <div class="form-control">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Port</span>
+                                </label>
+                                <input id="nzbget_port" type="number" min="1" step="1" class="input input-bordered w-full" placeholder="6789" />
+                            </div>
+                            <div class="form-control">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Username</span>
+                                </label>
+                                <input id="nzbget_username" type="text" class="input input-bordered w-full" />
+                            </div>
+                            <div class="form-control">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Password</span>
+                                </label>
+                                <input id="nzbget_password" type="password" class="input input-bordered w-full" autocomplete="off" />
+                            </div>
+                        </div>
+
+                        <div id="downloadClientStatus" class="text-xs text-base-content/60 h-4"></div>
+                        <div class="flex justify-end">
+                            <button type="submit" class="btn btn-primary btn-sm gap-2">
+                                <i class="fas fa-save"></i>
+                                <span>Save Client</span>
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <input type="radio" name="settings_tabs" role="tab" class="tab" aria-label="Indexers" />
+        <div role="tabpanel" class="tab-content border border-base-300 bg-base-100 p-6 space-y-6">
+            <div class="space-y-2">
+                <h2 class="text-lg font-semibold">Indexers</h2>
+                <p class="text-sm text-base-content/60">Connect multiple torznab or newznab sources and set the order they are queried.</p>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
+                <aside class="space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-sm font-semibold uppercase tracking-wide text-base-content/60">Configured Indexers</h3>
+                        <button type="button" id="indexerAddButton" class="btn btn-outline btn-xs">
+                            <i class="fas fa-plus"></i>
+                            <span>Add</span>
+                        </button>
+                    </div>
+                    <div id="indexersList" class="space-y-2">
+                        <div class="rounded-lg border border-dashed border-base-300 p-4 text-sm text-base-content/60">
+                            No indexers configured yet.
+                        </div>
+                    </div>
+                </aside>
+                <form id="indexerForm" data-status-target="indexerStatus" class="space-y-6" novalidate>
+                    <div id="indexerEmptyState" class="rounded-lg border border-dashed border-base-300 p-6 text-center text-sm text-base-content/60">
+                        Select or add an indexer to edit connection details.
+                    </div>
+                    <div id="indexerEditor" class="space-y-6 hidden">
+                        <input type="hidden" id="indexer_key" />
+                        <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                            <div class="space-y-1">
+                                <h3 id="indexerHeading" class="text-lg font-semibold">New Indexer</h3>
+                                <p id="indexerHelper" class="text-sm text-base-content/60">Provide the API endpoint and key from your indexer or aggregator.</p>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button type="button" id="indexerRefreshButton" class="btn btn-outline btn-sm gap-2">
+                                    <i class="fas fa-sync"></i>
+                                    <span>Reload List</span>
+                                </button>
+                                <button type="button" id="indexerTestButton" class="btn btn-outline btn-sm gap-2">
+                                    <i class="fas fa-plug"></i>
+                                    <span>Test Connection</span>
+                                </button>
+                                <button type="button" id="indexerDeleteButton" class="btn btn-outline btn-sm btn-error gap-2 hidden">
+                                    <i class="fas fa-trash"></i>
+                                    <span>Delete</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="form-control md:col-span-2">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Display Name</span>
+                                </label>
+                                <input id="indexer_name" type="text" class="input input-bordered w-full" placeholder="Jackett - My Tracker" />
+                            </div>
+                            <div class="form-control md:col-span-2">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Indexer Key</span>
+                                </label>
+                                <input id="indexer_custom_key" type="text" class="input input-bordered w-full" placeholder="jackett_primary" />
+                                <label class="label">
+                                    <span class="label-text-alt text-base-content/60">Used internally to identify this indexer. Letters, numbers, and underscores only.</span>
+                                </label>
+                            </div>
+                            <div class="form-control">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Type</span>
+                                </label>
+                                <select id="indexer_type" class="select select-bordered w-full">
+                                    <option value="jackett">Jackett</option>
+                                    <option value="prowlarr">Prowlarr</option>
+                                    <option value="nzbhydra2">NZBHydra2</option>
+                                    <option value="direct">Direct</option>
+                                </select>
+                            </div>
+                            <div class="form-control">
+                                <label class="label cursor-pointer">
+                                    <span class="label-text">Enabled</span>
+                                    <input id="indexer_enabled" type="checkbox" class="toggle toggle-primary" />
+                                </label>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="form-control md:col-span-2" data-indexer-field="standard">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Feed URL</span>
+                                </label>
+                                <input id="indexer_feed_url" type="text" class="input input-bordered w-full" placeholder="http://127.0.0.1:9117/api/v2.0/indexers/all/results/torznab" />
+                            </div>
+                            <div class="form-control md:col-span-2" data-indexer-field="standard">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">API Key</span>
+                                </label>
+                                <input id="indexer_api_key" type="text" class="input input-bordered w-full" autocomplete="off" />
+                            </div>
+                            <div class="form-control md:col-span-2 hidden" data-indexer-field="direct">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Base URL</span>
+                                </label>
+                                <input id="indexer_base_url" type="text" class="input input-bordered w-full" placeholder="https://provider.example.com" />
+                                <label class="label">
+                                    <span class="label-text-alt text-base-content/60">Root endpoint for the direct provider (no trailing slash).</span>
+                                </label>
+                            </div>
+                            <div class="form-control md:col-span-2 hidden" data-indexer-field="direct">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Session ID</span>
+                                </label>
+                                <textarea id="indexer_session_id" class="textarea textarea-bordered w-full font-mono break-all" rows="3" autocomplete="off" placeholder="Paste active session token" spellcheck="false"></textarea>
+                                <label class="label">
+                                    <span class="label-text-alt text-base-content/60">Used as the authentication token when calling the direct provider API.</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="form-control">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Priority</span>
+                                </label>
+                                <input id="indexer_priority" type="number" min="0" max="999" step="1" class="input input-bordered w-full" placeholder="100" />
+                                <label class="label">
+                                    <span class="label-text-alt">Lower numbers run first during searches.</span>
+                                </label>
+                            </div>
+                            <div class="form-control">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Categories</span>
+                                </label>
+                                <input id="indexer_categories" type="text" class="input input-bordered w-full" placeholder="3030, 3031" />
+                                <label class="label">
+                                    <span class="label-text-alt">Comma separated torznab/newznab category IDs.</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div id="indexerStatus" class="text-xs text-base-content/60 h-4"></div>
+                        <div class="flex justify-end">
+                            <button type="submit" class="btn btn-primary btn-sm gap-2">
+                                <i class="fas fa-save"></i>
+                                <span>Save Indexer</span>
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <input type="radio" name="settings_tabs" role="tab" class="tab" aria-label="Media Management" />
+        <div role="tabpanel" class="tab-content border border-base-300 bg-base-100 p-6 space-y-8">
+            <div class="space-y-2">
+                <h2 class="text-lg font-semibold">Media Management</h2>
+                <p class="text-sm text-base-content/60">Coordinate naming templates, staging paths, and download processing rules.</p>
+            </div>
+            <form id="mediaManagementForm" data-status-target="mediaStatus" class="space-y-10" novalidate>
+                <section class="space-y-4">
+                    <div class="space-y-1">
+                        <h3 class="text-base font-semibold">Naming Template</h3>
+                        <p class="text-sm text-base-content/60">Select how organized files are structured when moved into the library.</p>
+                    </div>
+                    <div class="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4">
+                        <div class="form-control">
+                            <label class="label pb-1">
+                                <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Template</span>
+                            </label>
+                            <select id="mm_naming_template" class="select select-bordered w-full"></select>
+                        </div>
+                        <div class="rounded-lg border border-base-300 bg-base-200/40 p-4">
+                            <p class="text-xs font-semibold uppercase tracking-wide text-base-content/60 mb-2">Preview</p>
+                            <ul id="mmNamingPreviewList" class="space-y-1 text-sm text-base-content/80">
+                                <li class="italic text-base-content/50">Select a template to preview organized filenames.</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="form-control">
+                        <label class="label pb-1">
+                            <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Library root path</span>
+                        </label>
+                        <input id="mm_library_path" type="text" class="input input-bordered w-full" placeholder="/mnt/audiobooks" />
+                        <label class="label">
+                            <span class="label-text-alt text-base-content/60">Imported audiobooks are organized into this directory after processing.</span>
+                        </label>
+                    </div>
+                    <div class="form-control">
+                        <label class="label pb-1">
+                            <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Import staging directory</span>
+                        </label>
+                        <input id="mm_import_directory" type="text" class="input input-bordered w-full" placeholder="/downloads/import" />
+                        <label class="label">
+                            <span class="label-text-alt text-base-content/60">Place manual files here so the server can enumerate them (no uploads required).</span>
+                        </label>
+                    </div>
+                </section>
+                <section class="space-y-4">
+                    <div class="space-y-1">
+                        <h3 class="text-base font-semibold">Download Workflow</h3>
+                        <p class="text-sm text-base-content/60">Tune queue behavior, cleanup policies, and staging directories.</p>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-control">
+                            <label class="label cursor-pointer">
+                                <span class="label-text">Enable seeding</span>
+                                <input id="dm_seeding_enabled" type="checkbox" class="toggle toggle-primary" />
+                            </label>
+                        </div>
+                        <div class="form-control">
+                            <label class="label cursor-pointer">
+                                <span class="label-text">Keep torrent after import</span>
+                                <input id="dm_keep_torrent_active" type="checkbox" class="toggle toggle-primary" />
+                            </label>
+                        </div>
+                        <div class="form-control">
+                            <label class="label cursor-pointer">
+                                <span class="label-text">Wait for client completion</span>
+                                <input id="dm_wait_for_completion" type="checkbox" class="toggle toggle-primary" />
+                            </label>
+                        </div>
+                        <div class="form-control">
+                            <label class="label cursor-pointer">
+                                <span class="label-text">Delete source after import</span>
+                                <input id="dm_delete_source" type="checkbox" class="toggle toggle-primary" />
+                            </label>
+                        </div>
+                        <div class="form-control">
+                            <label class="label cursor-pointer">
+                                <span class="label-text">Delete temp files after conversion</span>
+                                <input id="dm_delete_temp" type="checkbox" class="toggle toggle-primary" />
+                            </label>
+                        </div>
+                        <div class="form-control">
+                            <label class="label cursor-pointer">
+                                <span class="label-text">Auto process queue</span>
+                                <input id="dm_auto_process_queue" type="checkbox" class="toggle toggle-primary" />
+                            </label>
+                        </div>
+                        <div class="form-control">
+                            <label class="label cursor-pointer">
+                                <span class="label-text">Auto start monitoring</span>
+                                <input id="dm_auto_start_monitoring" type="checkbox" class="toggle toggle-primary" />
+                            </label>
+                        </div>
+                        <div class="form-control">
+                            <label class="label cursor-pointer">
+                                <span class="label-text">Monitor seeding downloads</span>
+                                <input id="dm_monitor_seeding" type="checkbox" class="toggle toggle-primary" />
+                            </label>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-control">
+                            <label class="label pb-1">
+                                <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Failed retention (days)</span>
+                            </label>
+                            <input id="dm_retention_days" type="number" min="0" step="1" class="input input-bordered w-full" placeholder="7" />
+                        </div>
+                        <div class="form-control">
+                            <label class="label pb-1">
+                                <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Temp download path</span>
+                            </label>
+                            <input id="dm_temp_download_path" type="text" class="input input-bordered w-full" placeholder="/tmp/auralarchive/downloads" />
+                        </div>
+                        <div class="form-control">
+                            <label class="label pb-1">
+                                <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Temp conversion path</span>
+                            </label>
+                            <input id="dm_temp_conversion_path" type="text" class="input input-bordered w-full" placeholder="/tmp/auralarchive/converting" />
+                        </div>
+                        <div class="form-control">
+                            <label class="label pb-1">
+                                <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Temp failed path</span>
+                            </label>
+                            <input id="dm_temp_failed_path" type="text" class="input input-bordered w-full" placeholder="/tmp/auralarchive/failed" />
+                        </div>
+                        <div class="form-control">
+                            <label class="label pb-1">
+                                <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Max concurrent downloads</span>
+                            </label>
+                            <input id="dm_max_concurrent_downloads" type="number" min="1" step="1" class="input input-bordered w-full" placeholder="2" />
+                        </div>
+                        <div class="form-control">
+                            <label class="label pb-1">
+                                <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Default queue priority</span>
+                            </label>
+                            <input id="dm_queue_priority" type="number" min="0" max="10" step="1" class="input input-bordered w-full" placeholder="5" />
+                        </div>
+                        <div class="form-control">
+                            <label class="label pb-1">
+                                <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Polling interval (seconds)</span>
+                            </label>
+                            <input id="dm_monitor_interval" type="number" min="1" step="1" class="input input-bordered w-full" placeholder="2" />
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-control">
+                            <label class="label pb-1">
+                                <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Search retry attempts</span>
+                            </label>
+                            <input id="dm_retry_search" type="number" min="0" step="1" class="input input-bordered w-full" placeholder="3" />
+                        </div>
+                        <div class="form-control">
+                            <label class="label pb-1">
+                                <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Download retry attempts</span>
+                            </label>
+                            <input id="dm_retry_download" type="number" min="0" step="1" class="input input-bordered w-full" placeholder="2" />
+                        </div>
+                        <div class="form-control">
+                            <label class="label pb-1">
+                                <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Conversion retry attempts</span>
+                            </label>
+                            <input id="dm_retry_conversion" type="number" min="0" step="1" class="input input-bordered w-full" placeholder="1" />
+                        </div>
+                        <div class="form-control">
+                            <label class="label pb-1">
+                                <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Import retry attempts</span>
+                            </label>
+                            <input id="dm_retry_import" type="number" min="0" step="1" class="input input-bordered w-full" placeholder="2" />
+                        </div>
+                        <div class="form-control md:col-span-2">
+                            <label class="label pb-1">
+                                <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Retry backoff (minutes)</span>
+                            </label>
+                            <input id="dm_retry_backoff" type="number" min="1" step="1" class="input input-bordered w-full" placeholder="30" />
+                        </div>
+                    </div>
+                </section>
+                <section class="space-y-4">
+                    <div class="space-y-1">
+                        <h3 class="text-base font-semibold">Audible Direct Downloads</h3>
+                        <p class="text-sm text-base-content/60">Choose the default format, quality, and safety options when downloading owned Audible titles.</p>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-control">
+                            <label class="label pb-1">
+                                <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Preferred format</span>
+                            </label>
+                            <select id="audible_format" class="select select-bordered w-full">
+                                <option value="aaxc">AAXC (Enhanced)</option>
+                                <option value="aax">AAX (Legacy)</option>
+                                <option value="aax-fallback">AAX with automatic fallback</option>
+                            </select>
+                        </div>
+                        <div class="form-control">
+                            <label class="label pb-1">
+                                <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Audio quality</span>
+                            </label>
+                            <select id="audible_quality" class="select select-bordered w-full">
+                                <option value="best">Best available</option>
+                                <option value="high">High</option>
+                                <option value="normal">Standard</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-control">
+                            <label class="label cursor-pointer">
+                                <span class="label-text">Fallback if preferred format fails</span>
+                                <input id="audible_aax_fallback" type="checkbox" class="toggle toggle-primary" />
+                            </label>
+                        </div>
+                        <div class="form-control">
+                            <label class="label cursor-pointer">
+                                <span class="label-text">Save voucher files for AAXC downloads</span>
+                                <input id="audible_save_voucher" type="checkbox" class="toggle toggle-primary" />
+                            </label>
+                        </div>
+                        <div class="form-control">
+                            <label class="label cursor-pointer">
+                                <span class="label-text">Download cover artwork</span>
+                                <input id="audible_include_cover" type="checkbox" class="toggle toggle-primary" />
+                            </label>
+                        </div>
+                        <div class="form-control">
+                            <label class="label cursor-pointer">
+                                <span class="label-text">Download chapter metadata</span>
+                                <input id="audible_include_chapters" type="checkbox" class="toggle toggle-primary" />
+                            </label>
+                        </div>
+                        <div class="form-control">
+                            <label class="label cursor-pointer">
+                                <span class="label-text">Download supplemental PDF (when available)</span>
+                                <input id="audible_include_pdf" type="checkbox" class="toggle toggle-primary" />
+                            </label>
+                        </div>
+                        <div class="form-control">
+                            <label class="label pb-1">
+                                <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Concurrent Audible downloads</span>
+                            </label>
+                            <input id="audible_concurrent_downloads" type="number" min="1" max="5" step="1" class="input input-bordered w-full" placeholder="1" />
+                        </div>
+                    </div>
+                </section>
+                <div id="mediaStatus" class="text-xs text-base-content/60 h-4"></div>
+                <div class="flex justify-end">
+                    <button type="submit" class="btn btn-primary btn-sm gap-2">
+                        <i class="fas fa-save"></i>
+                        <span>Save Media Management Settings</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <dialog id="audibleAuthModal" class="modal modal-bottom sm:modal-middle">
+        <div class="modal-box w-full max-w-lg space-y-4">
+            <div class="space-y-2">
+                <h3 class="text-lg font-semibold">Authenticate with Audible</h3>
+                <p class="text-sm text-base-content/60">Enter your Audible credentials. They are exchanged for a device token; the password is never stored.</p>
+            </div>
+            <form id="audibleAuthForm" class="space-y-4" novalidate>
+                <div class="form-control">
+                    <label class="label pb-1">
+                        <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Email</span>
+                    </label>
+                    <input id="audible_auth_email" type="email" class="input input-bordered w-full" autocomplete="username" required />
+                </div>
+                <div class="form-control">
+                    <label class="label pb-1">
+                        <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Password</span>
+                    </label>
+                    <input id="audible_auth_password" type="password" class="input input-bordered w-full" autocomplete="current-password" required />
+                </div>
+                <div class="form-control">
+                    <label class="label pb-1">
+                        <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Marketplace</span>
+                    </label>
+                    <select id="audible_auth_country" class="select select-bordered w-full">
+                        <option value="us">United States (US)</option>
+                        <option value="ca">Canada (CA)</option>
+                        <option value="uk">United Kingdom (UK)</option>
+                        <option value="de">Germany (DE)</option>
+                        <option value="fr">France (FR)</option>
+                        <option value="it">Italy (IT)</option>
+                        <option value="es">Spain (ES)</option>
+                        <option value="au">Australia (AU)</option>
+                    </select>
+                    <label class="label">
+                        <span class="label-text-alt text-base-content/60">Select the Audible marketplace tied to your account.</span>
+                    </label>
+                </div>
+                <div id="audibleAuthFormStatus" class="text-xs text-error min-h-4"></div>
+                <div class="modal-action">
+                    <button type="button" class="btn btn-ghost" data-modal-close="audibleAuthModal">Cancel</button>
+                    <button type="submit" class="btn btn-primary gap-2">
+                        <i class="fas fa-arrow-right"></i>
+                        <span>Continue</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+        <form method="dialog" class="modal-backdrop">
+            <button>Close</button>
+        </form>
+    </dialog>
+
+    <dialog id="audibleOtpModal" class="modal modal-bottom sm:modal-middle">
+        <div class="modal-box w-full max-w-md space-y-4">
+            <div class="space-y-2">
+                <h3 class="text-lg font-semibold">Enter One-Time Password</h3>
+                <p class="text-sm text-base-content/60">Check your authenticator or SMS and enter the six-digit code.</p>
+            </div>
+            <form id="audibleOtpForm" class="space-y-4" novalidate>
+                <div class="form-control">
+                    <label class="label pb-1">
+                        <span class="label-text text-xs uppercase tracking-wide text-base-content/60">OTP Code</span>
+                    </label>
+                    <input id="audible_auth_otp" type="text" class="input input-bordered w-full text-center text-lg tracking-widest" maxlength="6" pattern="[0-9]{6}" inputmode="numeric" autocomplete="one-time-code" required />
+                </div>
+                <div id="audibleOtpFormStatus" class="text-xs text-error min-h-4"></div>
+                <div class="modal-action">
+                    <button type="button" class="btn btn-ghost" data-modal-close="audibleOtpModal">Cancel</button>
+                    <button type="submit" class="btn btn-primary gap-2">
+                        <i class="fas fa-check"></i>
+                        <span>Verify</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+        <form method="dialog" class="modal-backdrop">
+            <button>Close</button>
+        </form>
+    </dialog>
+
+    <dialog id="audibleSuccessModal" class="modal modal-bottom sm:modal-middle">
+        <div class="modal-box w-full max-w-md space-y-4">
+            <div class="flex items-center gap-3">
+                <span class="text-2xl text-success">
+                    <i class="fas fa-check-circle"></i>
+                </span>
+                <div>
+                    <h3 class="text-lg font-semibold">Audible Connected</h3>
+                    <p class="text-sm text-base-content/60">Your Audible device token has been stored securely.</p>
+                </div>
+            </div>
+            <div class="rounded-lg border border-base-300 bg-base-200/40 p-4 space-y-1 text-sm">
+                <p><span class="font-semibold">Account:</span> <span id="audibleSuccessAccount">—</span></p>
+                <p><span class="font-semibold">Marketplace:</span> <span id="audibleSuccessMarketplace">—</span></p>
+            </div>
+            <div class="modal-action">
+                <button type="button" class="btn btn-primary" data-modal-close="audibleSuccessModal">Close</button>
+            </div>
+        </div>
+        <form method="dialog" class="modal-backdrop">
+            <button>Close</button>
+        </form>
+    </dialog>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/settings.js') }}"></script>
+{% endblock %}

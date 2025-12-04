@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}AuralArchive{% endblock %}</title>
+    <script>
+        (function() {
+            try {
+                var savedTheme = localStorage.getItem('theme');
+                if (savedTheme) {
+                    document.documentElement.setAttribute('data-theme', savedTheme);
+                }
+            } catch (err) {
+                console.warn('Theme preload failed:', err);
+            }
+        })();
+    </script>
+    
+    <!-- DaisyUI from CDN (includes light and dark themes) -->
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- DaisyUI Docs Typeface (Outfit) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Custom Theme Definitions -->
+    <style>
+        [data-theme="dark"] {
+            color-scheme: dark;
+            --color-base-100: oklch(28% 0.045 255);
+            --color-base-200: oklch(23% 0.04 255);
+            --color-base-300: oklch(18% 0.035 255);
+            --color-base-content: oklch(92% 0.012 255);
+            --color-primary: oklch(58% 0.18 276);
+            --color-primary-content: oklch(97% 0.024 276);
+            --color-secondary: oklch(63% 0.12 181);
+            --color-secondary-content: oklch(96% 0.015 181);
+            --color-accent: oklch(64% 0.14 163);
+            --color-accent-content: oklch(96% 0.012 163);
+            --color-neutral: oklch(32% 0.03 255);
+            --color-neutral-content: oklch(90% 0.01 255);
+            --color-info: oklch(72% 0.12 231);
+            --color-info-content: oklch(97% 0.015 231);
+            --color-success: oklch(70% 0.14 152);
+            --color-success-content: oklch(97% 0.02 152);
+            --color-warning: oklch(78% 0.21 82);
+            --color-warning-content: oklch(98% 0.025 82);
+            --color-error: oklch(66% 0.24 24);
+            --color-error-content: oklch(97% 0.02 24);
+            --b1: var(--color-base-100);
+            --b2: var(--color-base-200);
+            --b3: var(--color-base-300);
+            --bc: var(--color-base-content);
+            --p: var(--color-primary);
+            --pc: var(--color-primary-content);
+            --s: var(--color-secondary);
+            --sc: var(--color-secondary-content);
+            --a: var(--color-accent);
+            --ac: var(--color-accent-content);
+            --n: var(--color-neutral);
+            --nc: var(--color-neutral-content);
+            --in: var(--color-info);
+            --inc: var(--color-info-content);
+            --su: var(--color-success);
+            --suc: var(--color-success-content);
+            --wa: var(--color-warning);
+            --wac: var(--color-warning-content);
+            --er: var(--color-error);
+            --erc: var(--color-error-content);
+            --rounded-box: 0.25rem;
+            --rounded-btn: 0.25rem;
+            --rounded-badge: 0.25rem;
+            --animation-btn: 0.25s;
+            --animation-input: 0.2s;
+            --btn-focus-scale: 0.95;
+            --border: 1px;
+            --border-btn: 1px;
+            --tab-border: 1px;
+            --tab-radius: 0.25rem;
+            --radius-selector: 0.25rem;
+            --radius-field: 0.25rem;
+            --radius-box: 0.25rem;
+            --size-selector: 0.25rem;
+            --size-field: 0.25rem;
+            --depth: 0;
+            --noise: 0;
+        }
+
+        [data-theme="nord"] {
+            color-scheme: light;
+            --p: 59.435% 0.077 254.027;
+            --pc: 11.887% 0.015 254.027;
+            --s: 69.651% 0.059 248.687;
+            --sc: 13.93% 0.011 248.687;
+            --a: 77.464% 0.062 217.469;
+            --ac: 15.492% 0.012 217.469;
+            --n: 45.229% 0.035 264.131;
+            --nc: 89.925% 0.016 262.749;
+            --b1: 95.127% 0.007 260.731;
+            --b2: 93.299% 0.01 261.788;
+            --b3: 89.925% 0.016 262.749;
+            --bc: 32.437% 0.022 264.182;
+            --in: 0.67 0.201 154;
+            --inc: 13.841% 0.012 332.664;
+            --su: 76.827% 0.074 131.063;
+            --suc: 15.365% 0.014 131.063;
+            --wa: 85.486% 0.089 84.093;
+            --wac: 17.097% 0.017 84.093;
+            --er: 60.61% 0.12 15.341;
+            --erc: 12.122% 0.024 15.341;
+            --rounded-box: 0.25rem;
+            --rounded-btn: 0.25rem;
+            --rounded-badge: 0.25rem;
+            --animation-btn: 0.25s;
+            --animation-input: 0.2s;
+            --btn-focus-scale: 0.95;
+            --border: 1px;
+            --border-btn: 1px;
+            --tab-border: 1px;
+            --tab-radius: 0.25rem;
+            --radius-selector: 0.25rem;
+            --radius-field: 0.25rem;
+            --radius-box: 0.25rem;
+            --size-selector: 0.25rem;
+            --size-field: 0.25rem;
+            --depth: 0;
+            --noise: 0;
+        }
+
+        [data-theme="blueberry"] {
+            color-scheme: dark;
+            --color-base-100: oklch(29% 0.066 243.157);
+            --color-base-200: oklch(39% 0.09 240.876);
+            --color-base-300: oklch(44% 0.11 240.79);
+            --color-base-content: oklch(95% 0.026 236.824);
+            --color-primary: oklch(68% 0.169 237.323);
+            --color-primary-content: oklch(100% 0 0);
+            --color-secondary: oklch(62% 0.214 259.815);
+            --color-secondary-content: oklch(98% 0.026 102.212);
+            --color-accent: oklch(68% 0.169 237.323);
+            --color-accent-content: oklch(98% 0.003 247.858);
+            --color-neutral: oklch(44% 0.11 240.79);
+            --color-neutral-content: oklch(97% 0.013 236.62);
+            --color-info: oklch(68% 0.169 237.323);
+            --color-info-content: oklch(97% 0.013 236.62);
+            --color-success: oklch(69% 0.17 162.48);
+            --color-success-content: oklch(97% 0.021 166.113);
+            --color-warning: oklch(76% 0.188 70.08);
+            --color-warning-content: oklch(98% 0.022 95.277);
+            --color-error: oklch(63% 0.237 25.331);
+            --color-error-content: oklch(97% 0.013 17.38);
+            --b1: var(--color-base-100);
+            --b2: var(--color-base-200);
+            --b3: var(--color-base-300);
+            --bc: var(--color-base-content);
+            --p: var(--color-primary);
+            --pc: var(--color-primary-content);
+            --s: var(--color-secondary);
+            --sc: var(--color-secondary-content);
+            --a: var(--color-accent);
+            --ac: var(--color-accent-content);
+            --n: var(--color-neutral);
+            --nc: var(--color-neutral-content);
+            --in: var(--color-info);
+            --inc: var(--color-info-content);
+            --su: var(--color-success);
+            --suc: var(--color-success-content);
+            --wa: var(--color-warning);
+            --wac: var(--color-warning-content);
+            --er: var(--color-error);
+            --erc: var(--color-error-content);
+            --rounded-box: 0.25rem;
+            --rounded-btn: 0.25rem;
+            --rounded-badge: 0.25rem;
+            --animation-btn: 0.25s;
+            --animation-input: 0.2s;
+            --btn-focus-scale: 0.95;
+            --border: 2px;
+            --border-btn: 2px;
+            --tab-border: 2px;
+            --tab-radius: 0.25rem;
+            --radius-selector: 0.25rem;
+            --radius-field: 0.25rem;
+            --radius-box: 0.25rem;
+            --size-selector: 0.25rem;
+            --size-field: 0.25rem;
+            --depth: 1;
+            --noise: 0;
+        }
+
+        body {
+            font-family: 'Outfit', var(--font-sans);
+            letter-spacing: -0.01em;
+        }
+
+        .sidebar-link {
+            transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+        }
+
+        .sidebar-link:hover {
+            transform: translateX(2px);
+        }
+
+        .layout-drawer-toggle {
+            display: none;
+        }
+
+        .layout-shell {
+            display: grid;
+            grid-template-columns: 16rem minmax(0, 1fr);
+            min-height: 100vh;
+        }
+
+        .layout-sidebar {
+            width: 16rem;
+            position: relative;
+            z-index: 30;
+        }
+
+        .layout-main {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        .layout-navbar {
+            position: sticky;
+            top: 0;
+            inset-inline: 0;
+            z-index: 45;
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+            flex-shrink: 0;
+        }
+
+        .layout-main main > *:first-child {
+            margin-top: -5px;
+        }
+
+        .layout-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.45);
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease;
+            z-index: 20;
+            pointer-events: none;
+        }
+
+        .layout-drawer-toggle:checked ~ .layout-overlay {
+            opacity: 1;
+            visibility: visible;
+            pointer-events: auto;
+        }
+
+        @media (min-width: 1024px) {
+            .layout-sidebar {
+                position: sticky;
+                top: 0;
+                height: 100vh;
+                align-self: flex-start;
+                overflow-y: auto;
+            }
+
+            body {
+                min-height: 100vh;
+            }
+        }
+
+        @media (max-width: 1023px) {
+            .layout-shell {
+                grid-template-columns: minmax(0, 1fr);
+            }
+
+            .layout-sidebar {
+                position: fixed;
+                top: 0;
+                bottom: 0;
+                left: 0;
+                transform: translateX(-100%);
+                transition: transform 0.3s ease;
+                box-shadow: 0 20px 45px rgba(0, 0, 0, 0.35);
+            }
+
+            .layout-main {
+                min-height: 100vh;
+            }
+
+            .layout-drawer-toggle:checked ~ .layout-shell .layout-sidebar {
+                transform: translateX(0);
+            }
+        }
+    </style>
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/library-silk.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/status-bar.css') }}">
+    
+    {% block extra_css %}{% endblock %}
+</head>
+<body class="bg-base-100 text-base-content">
+    <input id="layout-drawer" type="checkbox" class="layout-drawer-toggle">
+    <div class="layout-shell">
+        <aside class="layout-sidebar bg-base-200 border-r border-base-content/10 flex flex-col">
+            <div class="flex-1 flex flex-col">
+                <div class="px-4 border-b border-base-content/10 h-16 flex items-center">
+                    <a href="/" class="flex items-center gap-3">
+                        <img src="{{ url_for('static', filename='images/auralarchive_logo.png') }}" alt="AuralArchive" class="w-10 h-10 rounded-lg border border-base-content/10">
+                        <div>
+                            <h1 class="text-lg font-semibold tracking-tight text-base-content">AuralArchive</h1>
+                        </div>
+                    </a>
+                </div>
+
+                <nav class="flex-1 px-3 py-4">
+                    <ul class="menu menu-compact text-sm gap-1">
+                        {% set active = request.endpoint in ['main.dashboard', 'main.index'] %}
+                        <li>
+                            <a href="/" class="sidebar-link flex items-center gap-2 rounded-lg px-3 py-2 {{ 'bg-primary text-primary-content shadow-sm' if active else 'text-base-content/70 hover:text-base-content hover:bg-base-100' }}">
+                                <i class="fas fa-tachometer-alt text-sm"></i>
+                                <span class="text-xs uppercase tracking-wide">Dashboard</span>
+                            </a>
+                        </li>
+                        {% set active = request.endpoint == 'library.library_page' %}
+                        <li>
+                            <a href="/library" class="sidebar-link flex items-center gap-2 rounded-lg px-3 py-2 {{ 'bg-primary text-primary-content shadow-sm' if active else 'text-base-content/70 hover:text-base-content hover:bg-base-100' }}">
+                                <i class="fas fa-book text-sm"></i>
+                                <span class="text-xs uppercase tracking-wide">Library</span>
+                            </a>
+                        </li>
+                        {% set active = request.endpoint == 'search.search_page' %}
+                        <li>
+                            <a href="/search" class="sidebar-link flex items-center gap-2 rounded-lg px-3 py-2 {{ 'bg-primary text-primary-content shadow-sm' if active else 'text-base-content/70 hover:text-base-content hover:bg-base-100' }}">
+                                <i class="fas fa-search text-sm"></i>
+                                <span class="text-xs uppercase tracking-wide">Search</span>
+                            </a>
+                        </li>
+                        {% set active = 'series' in request.endpoint %}
+                        <li>
+                            <a href="/series" class="sidebar-link flex items-center gap-2 rounded-lg px-3 py-2 {{ 'bg-primary text-primary-content shadow-sm' if active else 'text-base-content/70 hover:text-base-content hover:bg-base-100' }}">
+                                <i class="fas fa-layer-group text-sm"></i>
+                                <span class="text-xs uppercase tracking-wide">Series</span>
+                            </a>
+                        </li>
+                        {% set active = 'authors' in request.endpoint %}
+                        <li>
+                            <a href="/authors" class="sidebar-link flex items-center gap-2 rounded-lg px-3 py-2 {{ 'bg-primary text-primary-content shadow-sm' if active else 'text-base-content/70 hover:text-base-content hover:bg-base-100' }}">
+                                <i class="fas fa-user-pen text-sm"></i>
+                                <span class="text-xs uppercase tracking-wide">Authors</span>
+                            </a>
+                        </li>
+                        {% set active = 'downloads' in request.endpoint %}
+                        <li>
+                            <a href="/downloads" class="sidebar-link flex items-center gap-2 rounded-lg px-3 py-2 {{ 'bg-primary text-primary-content shadow-sm' if active else 'text-base-content/70 hover:text-base-content hover:bg-base-100' }}">
+                                <i class="fas fa-download text-sm"></i>
+                                <span class="text-xs uppercase tracking-wide">Downloads</span>
+                            </a>
+                        </li>
+                        {% set active = 'import' in request.endpoint %}
+                        <li>
+                            <a href="/import" class="sidebar-link flex items-center gap-2 rounded-lg px-3 py-2 {{ 'bg-primary text-primary-content shadow-sm' if active else 'text-base-content/70 hover:text-base-content hover:bg-base-100' }}">
+                                <i class="fas fa-file-import text-sm"></i>
+                                <span class="text-xs uppercase tracking-wide">Import</span>
+                            </a>
+                        </li>
+                        {% set active = 'discover' in request.endpoint %}
+                        <li>
+                            <a href="/discover" class="sidebar-link flex items-center gap-2 rounded-lg px-3 py-2 {{ 'bg-primary text-primary-content shadow-sm' if active else 'text-base-content/70 hover:text-base-content hover:bg-base-100' }}">
+                                <i class="fas fa-compass text-sm"></i>
+                                <span class="text-xs uppercase tracking-wide">Discover</span>
+                            </a>
+                        </li>
+                        {% set active = 'settings' in request.endpoint %}
+                        <li>
+                            <a href="/settings" class="sidebar-link flex items-center gap-2 rounded-lg px-3 py-2 {{ 'bg-primary text-primary-content shadow-sm' if active else 'text-base-content/70 hover:text-base-content hover:bg-base-100' }}">
+                                <i class="fas fa-cog text-sm"></i>
+                                <span class="text-xs uppercase tracking-wide">Settings</span>
+                            </a>
+                        </li>
+                    </ul>
+                </nav>
+
+            </div>
+        </aside>
+
+        <div class="layout-main">
+            <div class="navbar layout-navbar bg-base-100/80 border-b border-base-content/10 backdrop-blur px-4 sm:px-6 lg:px-10">
+                <div class="flex-none">
+                    <label for="layout-drawer" class="btn btn-ghost btn-square md:hidden" aria-label="Toggle navigation">
+                        <i class="fas fa-bars text-base"></i>
+                    </label>
+                </div>
+                <div class="flex-1 flex items-center justify-between gap-4">
+                    <span class="hidden sm:inline text-sm font-semibold uppercase tracking-[0.35em] text-base-content/60">AuralArchive</span>
+                    <div class="flex items-center gap-2">
+                        <form action="{{ url_for('search.search_page') }}" method="get" class="form-control hidden md:block">
+                            <div class="join">
+                                <input type="search" name="q" value="{{ request.args.get('q', '') }}" placeholder="Quest for your next tale..." class="input input-bordered input-sm bg-base-100 join-item w-64" aria-label="Search the catalog" />
+                                <button type="submit" class="btn btn-soft btn-sm btn-square join-item" aria-label="Submit search">
+                                    <i class="fas fa-search text-sm"></i>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <main class="flex-1 px-4 sm:px-6 lg:px-10 pt-6 pb-8">
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
+    <label for="layout-drawer" aria-hidden="true" class="layout-overlay"></label>
+
+    <div class="toast toast-top toast-end z-50" id="toastContainer"></div>
+
+    <div class="status-bar-shell" aria-live="polite">
+        <div class="alert alert-neutral shadow-lg status-bar-alert" id="statusBar" role="status">
+            <div class="status-bar-content w-full">
+                <div class="status-bar-track">
+                    <div class="status-bar-left">
+                        <div class="badge badge-sm" id="statusBarLevel">INFO</div>
+                        <div class="status-bar-label">
+                            <i class="fas fa-wave-square"></i>
+                            <span>System Activity</span>
+                        </div>
+                        <span class="status-bar-separator" aria-hidden="true">•</span>
+                        <div class="status-bar-message" id="statusBarMessage">Monitoring logs…</div>
+                    </div>
+                    <div class="status-bar-right" id="statusBarMeta">
+                        <span id="statusBarSource">No events yet</span>
+                        <span class="status-bar-separator" aria-hidden="true">•</span>
+                        <span id="statusBarTimestamp">—</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script>
+        // Theme Management
+        function setTheme(theme, options = {}) {
+            const selectedTheme = theme || 'dark';
+            document.documentElement.setAttribute('data-theme', selectedTheme);
+            if (options.persist !== false) {
+                try {
+                    localStorage.setItem('theme', selectedTheme);
+                } catch (storageError) {
+                    console.warn('Unable to persist theme preference:', storageError);
+                }
+            }
+            updateThemeName(selectedTheme);
+        }
+        
+        function updateThemeName(theme) {
+            const themeNames = {
+                'nord': 'Nord',
+                'dark': 'Dark',
+                'blueberry': 'BlueBerry'
+            };
+            const nameElement = document.getElementById('currentThemeName');
+            if (nameElement) {
+                nameElement.textContent = themeNames[theme] || theme;
+            }
+        }
+        
+        // Load saved theme or default to dark
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        setTheme(savedTheme, { persist: false });
+
+        // Global notification function
+        function showNotification(message, type = 'info') {
+            const toast = document.getElementById('toastContainer');
+            const alertTypes = {
+                'success': 'alert-success',
+                'error': 'alert-error',
+                'warning': 'alert-warning',
+                'info': 'alert-info'
+            };
+            
+            const alert = document.createElement('div');
+            alert.className = `alert ${alertTypes[type] || 'alert-info'} shadow-lg`;
+            alert.innerHTML = `
+                <div>
+                    <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : type === 'warning' ? 'exclamation-triangle' : 'info-circle'}"></i>
+                    <span>${message}</span>
+                </div>
+            `;
+            
+            toast.appendChild(alert);
+            
+            setTimeout(() => {
+                alert.remove();
+            }, 5000);
+        }
+    </script>
+    <script src="{{ url_for('static', filename='js/status-bar.js') }}" defer></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

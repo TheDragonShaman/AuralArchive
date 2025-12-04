@@ -1,0 +1,402 @@
+import requests
+import logging
+import threading
+from typing import List, Dict, Optional, Any
+from datetime import datetime
+
+class AudnexusService:
+    """
+    Service for interacting with the Audnexus API
+    Provides author search, author details, and book metadata
+    """
+    
+    _instance: Optional['AudnexusService'] = None
+    _lock = threading.Lock()
+    _initialized = False
+    
+    def __new__(cls):
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+        return cls._instance
+    
+    def __init__(self):
+        if not self._initialized:
+            with self._lock:
+                if not self._initialized:
+                    self.logger = logging.getLogger("AudnexusService")
+                    self.base_url = "https://api.audnex.us"
+                    self.session = self._setup_session()
+                    self.logger.info("AudnexusService initialized successfully")
+                    AudnexusService._initialized = True
+    
+    def _setup_session(self) -> requests.Session:
+        """Setup requests session with proper headers"""
+        session = requests.Session()
+        session.headers.update({
+            "User-Agent": "AuralArchive/1.0 (Python Requests)",
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+        })
+        return session
+    
+    def search_authors(self, name: str, region: str = "us", num_results: int = 20) -> List[Dict]:
+        """
+        Search for authors by name
+        
+        Args:
+            name: Author name to search for
+            region: Region code (us, uk, ca, etc.)
+            num_results: Maximum number of results to return (for compatibility)
+            
+        Returns:
+            List of author objects with basic information
+        """
+        try:
+            self.logger.info(f"Searching authors for: {name}")
+            
+            params = {
+                "name": name,
+                "region": region
+            }
+            
+            response = self.session.get(
+                f"{self.base_url}/authors",
+                params=params,
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                authors = response.json()
+                self.logger.info(f"Found {len(authors)} authors for: {name}")
+                # Limit results to num_results for compatibility
+                return authors[:num_results] if num_results else authors
+            elif response.status_code == 400:
+                self.logger.warning(f"Bad request for author search: {name}")
+                return []
+            else:
+                self.logger.error(f"Author search failed with status {response.status_code}")
+                return []
+                
+        except Exception as e:
+            self.logger.error(f"Error searching authors for '{name}': {e}")
+            return []
+    
+    def get_author_details(self, asin: str, region: str = "us", update: bool = False) -> Optional[Dict]:
+        """
+        Get detailed author information by ASIN
+        
+        Args:
+            asin: Author ASIN
+            region: Region code
+            update: Force update from upstream
+            
+        Returns:
+            Author object with full details
+        """
+        try:
+            self.logger.info(f"Getting author details for ASIN: {asin}")
+            
+            params = {
+                "region": region,
+                "update": "1" if update else "0"
+            }
+            
+            response = self.session.get(
+                f"{self.base_url}/authors/{asin}",
+                params=params,
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                author = response.json()
+                self.logger.info(f"Retrieved author details for: {author.get('name', asin)}")
+                return author
+            elif response.status_code == 404:
+                self.logger.warning(f"Author not found: {asin}")
+                return None
+            else:
+                self.logger.error(f"Author details request failed with status {response.status_code}")
+                return None
+                
+        except Exception as e:
+            self.logger.error(f"Error getting author details for '{asin}': {e}")
+            return None
+    
+    def get_book_details(self, asin: str, region: str = "us", seed_authors: bool = True, update: bool = False) -> Optional[Dict]:
+        """
+        Get detailed book information by ASIN
+        
+        Args:
+            asin: Book ASIN
+            region: Region code
+            seed_authors: Whether to include author details
+            update: Force update from upstream
+            
+        Returns:
+            Book object with full details
+        """
+        try:
+            self.logger.info(f"Getting book details for ASIN: {asin}")
+            
+            params = {
+                "region": region,
+                "seedAuthors": "1" if seed_authors else "0",
+                "update": "1" if update else "0"
+            }
+            
+            response = self.session.get(
+                f"{self.base_url}/books/{asin}",
+                params=params,
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                book = response.json()
+                self.logger.info(f"Retrieved book details for: {book.get('title', asin)}")
+                return book
+            elif response.status_code == 404:
+                self.logger.warning(f"Book not found: {asin}")
+                return None
+            else:
+                self.logger.error(f"Book details request failed with status {response.status_code}")
+                return None
+                
+        except Exception as e:
+            self.logger.error(f"Error getting book details for '{asin}': {e}")
+            return None
+    
+    def get_book_chapters(self, asin: str, region: str = "us", update: bool = False) -> Optional[Dict]:
+        """
+        Get chapter information for a book
+        
+        Args:
+            asin: Book ASIN
+            region: Region code
+            update: Force update from upstream
+            
+        Returns:
+            Chapter data with timing information
+        """
+        try:
+            self.logger.info(f"Getting chapters for book ASIN: {asin}")
+            
+            params = {
+                "region": region,
+                "update": "1" if update else "0"
+            }
+            
+            response = self.session.get(
+                f"{self.base_url}/books/{asin}/chapters",
+                params=params,
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                chapters = response.json()
+                self.logger.info(f"Retrieved chapters for book: {asin}")
+                return chapters
+            elif response.status_code == 404:
+                self.logger.warning(f"Chapters not found for book: {asin}")
+                return None
+            else:
+                self.logger.error(f"Chapters request failed with status {response.status_code}")
+                return None
+                
+        except Exception as e:
+            self.logger.error(f"Error getting chapters for '{asin}': {e}")
+            return None
+    
+    def find_author_by_name(self, author_name: str, region: str = "us") -> Optional[Dict]:
+        """
+        Find the best matching author by name and return full details
+        
+        Args:
+            author_name: Name to search for
+            region: Region code
+            
+        Returns:
+            Full author details for best match
+        """
+        try:
+            # First search for authors
+            authors = self.search_authors(author_name, region)
+            
+            if not authors:
+                return None
+            
+            # Find best match (exact name match preferred)
+            best_match = None
+            exact_match = None
+            
+            for author in authors:
+                if author.get('name', '').lower() == author_name.lower():
+                    exact_match = author
+                    break
+                elif author_name.lower() in author.get('name', '').lower():
+                    if not best_match:
+                        best_match = author
+            
+            target_author = exact_match or best_match or authors[0]
+            
+            # Get full details for the best match
+            if target_author and target_author.get('asin'):
+                return self.get_author_details(target_author['asin'], region)
+            
+            return target_author
+            
+        except Exception as e:
+            self.logger.error(f"Error finding author '{author_name}': {e}")
+            return None
+    
+    def format_author_for_compatibility(self, author_data: Dict) -> Dict:
+        """
+        Format Audnexus author data to match existing application expectations
+        
+        Args:
+            author_data: Raw author data from Audnexus
+            
+        Returns:
+            Formatted author data compatible with existing code
+        """
+        try:
+            formatted = {
+                'asin': author_data.get('asin', ''),
+                'name': author_data.get('name', ''),
+                'author_image': author_data.get('image', ''),
+                'author_bio': author_data.get('description', ''),
+                'author_page_url': f"https://www.audible.com/author/{author_data.get('name', '').replace(' ', '-')}/{author_data.get('asin', '')}",
+                'genres': author_data.get('genres', []),
+                'similar_authors': author_data.get('similar', []),
+                'region': author_data.get('region', 'us'),
+                'last_updated': datetime.now().isoformat()
+            }
+            
+            return formatted
+            
+        except Exception as e:
+            self.logger.error(f"Error formatting author data: {e}")
+            return author_data
+    
+    def format_book_for_compatibility(self, book_data: Dict) -> Dict:
+        """
+        Format Audnexus book data to match existing application expectations
+        
+        Args:
+            book_data: Raw book data from Audnexus
+            
+        Returns:
+            Formatted book data compatible with existing code
+        """
+        try:
+            # Extract author names
+            authors = book_data.get('authors', [])
+            author_name = authors[0].get('name', '') if authors else ''
+            
+            # Extract narrator names
+            narrators = book_data.get('narrators', [])
+            narrator_name = narrators[0].get('name', '') if narrators else ''
+            
+            # Convert runtime from minutes to hours/minutes format
+            runtime_min = book_data.get('runtimeLengthMin', 0)
+            hours = runtime_min // 60
+            minutes = runtime_min % 60
+            runtime_str = f"{hours} hrs {minutes} mins" if hours > 0 else f"{minutes} mins"
+            
+            # Extract release year from date
+            release_date = book_data.get('releaseDate', '')
+            release_year = ''
+            if release_date:
+                try:
+                    release_year = release_date[:4]
+                except:
+                    pass
+            
+            formatted = {
+                'ASIN': book_data.get('asin', ''),
+                'Title': book_data.get('title', ''),
+                'Author': author_name,
+                'Authors': [author.get('name', '') for author in authors],
+                'Narrator': narrator_name,
+                'Narrators': [narrator.get('name', '') for narrator in narrators],
+                'Publisher': book_data.get('publisherName', ''),
+                'Release Date': release_year,
+                'Runtime': runtime_str,
+                'RuntimeMin': runtime_min,
+                'Cover Image': book_data.get('image', ''),
+                'Overall Rating': book_data.get('rating', ''),
+                'Summary': book_data.get('summary', ''),
+                'Description': book_data.get('description', ''),
+                'ISBN': book_data.get('isbn', ''),
+                'Language': book_data.get('language', ''),
+                'Format': book_data.get('formatType', ''),
+                'Genres': book_data.get('genres', []),
+                'Copyright': book_data.get('copyright', ''),
+                'IsAdult': book_data.get('isAdult', False),
+                'LiteratureType': book_data.get('literatureType', ''),
+                'Series': 'N/A',  # Will need to be extracted from title or description
+                'Sequence': 'N/A',  # Will need to be extracted from title or description
+                'Status': 'Available',
+                'Region': book_data.get('region', 'us')
+            }
+            
+            return formatted
+            
+        except Exception as e:
+            self.logger.error(f"Error formatting book data: {e}")
+            return book_data
+    
+    def test_connection(self) -> tuple[bool, str]:
+        """Test connection to Audnexus API"""
+        try:
+            self.logger.info("Testing Audnexus API connection...")
+            
+            # Simple test search
+            response = self.session.get(
+                f"{self.base_url}/authors",
+                params={"name": "Andy Weir", "region": "us"},
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                self.logger.info("Audnexus API connection test successful")
+                return True, f"API accessible - found {len(data)} authors"
+            else:
+                self.logger.error(f"Audnexus API test failed with status {response.status_code}")
+                return False, f"API returned status {response.status_code}"
+                
+        except Exception as e:
+            self.logger.error(f"Audnexus API connection test error: {e}")
+            return False, f"Connection error: {str(e)}"
+    
+    def get_service_status(self) -> Dict:
+        """Get comprehensive service status"""
+        try:
+            is_connected, message = self.test_connection()
+            
+            return {
+                'service_name': 'AudnexusService',
+                'base_url': self.base_url,
+                'initialized': self._initialized,
+                'connected': is_connected,
+                'status_message': message,
+                'endpoints': {
+                    'authors_search': f"{self.base_url}/authors",
+                    'author_details': f"{self.base_url}/authors/{{asin}}",
+                    'book_details': f"{self.base_url}/books/{{asin}}",
+                    'book_chapters': f"{self.base_url}/books/{{asin}}/chapters"
+                }
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error getting service status: {e}")
+            return {'error': str(e)}
+    
+    def reset_service(self):
+        """Reset the service (for testing or troubleshooting)"""
+        with self._lock:
+            self.__class__._initialized = False
+            self.__class__._instance = None
+            self.logger.info("AudnexusService reset")

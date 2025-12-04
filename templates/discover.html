@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+
+{% block title %}Discover - AuralArchive{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/search.css') }}">
+{% endblock %}
+
+{% block content %}
+<section class="search-page mx-auto px-6 py-8">
+    <div class="card bg-base-300/40 border border-base-content/10 shadow-lg">
+        <div class="card-body gap-6">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div class="space-y-1">
+                    <h1 class="text-3xl font-bold tracking-tight">Recommended For You</h1>
+                    <p class="text-base-content/70">Refresh curated picks or toggle between familiar grid, list, and table layouts.</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-3">
+                    <div class="btn-group">
+                        <button id="discover-view-grid" type="button" class="btn btn-sm btn-ghost view-toggle-btn is-active" aria-label="Grid view">
+                            <i class="fas fa-grip"></i>
+                            <span class="hidden sm:inline">Grid</span>
+                        </button>
+                        <button id="discover-view-list" type="button" class="btn btn-sm btn-ghost view-toggle-btn" aria-label="List view">
+                            <i class="fas fa-list"></i>
+                            <span class="hidden sm:inline">List</span>
+                        </button>
+                        <button id="discover-view-table" type="button" class="btn btn-sm btn-ghost view-toggle-btn" aria-label="Table view">
+                            <i class="fas fa-table"></i>
+                            <span class="hidden sm:inline">Table</span>
+                        </button>
+                    </div>
+                    <button id="refreshRecommendationsBtn" class="btn btn-primary btn-sm">
+                        <i class="fas fa-rotate-right mr-2"></i>
+                        Refresh Picks
+                    </button>
+                    <span id="recommendationStatus" class="badge badge-outline badge-sm capitalize">{{ 'Ready' if recommendations_configured else 'Unavailable' }}</span>
+                </div>
+            </div>
+
+            {% if recommendations_configured %}
+            <div id="discover-results" class="search-results-container hidden" aria-live="polite" data-view="grid"></div>
+            <div id="discover-empty" class="search-empty hidden">
+                <div class="empty-state card bg-base-200 border border-base-content/10 shadow-lg">
+                    <div class="card-body items-center text-center gap-4">
+                        <p class="text-base-content/70 max-w-md">Tap refresh to pull fresh picks from Audible, or verify your discovery sources in settings if nothing appears.</p>
+                        <button id="discover-empty-refresh" class="btn btn-primary btn-sm" type="button">Refresh Recommendations</button>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="flex flex-col items-center justify-center text-center py-10 space-y-4">
+                <i class="fas fa-circle-info text-4xl text-base-content/40"></i>
+                <div class="space-y-2">
+                    <h3 class="text-lg font-semibold">Recommendations Not Configured</h3>
+                    <p class="text-base-content/70">Connect your Audible credentials and enable discovery harvesting under <a class="link link-primary" href="/settings/audible">Settings &gt; Audible</a> to unlock tailored picks.</p>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script id="discover-config" type="application/json">
+    {{ {
+        'recommendationsConfigured': recommendations_configured,
+        'recommendationsEndpoint': url_for('discover.get_recommendations')
+    } | tojson }}
+</script>
+<script src="{{ url_for('static', filename='js/discover.js') }}"></script>
+{% endblock %}

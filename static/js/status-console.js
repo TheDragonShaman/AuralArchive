@@ -1,0 +1,1 @@
+// Removed status console script
