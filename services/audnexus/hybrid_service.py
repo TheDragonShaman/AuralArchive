@@ -43,45 +43,37 @@ class HybridAudiobookService:
     
     def search_author_page(self, author_name: str, region: str = "us") -> Optional[Dict]:
         """
-        Search for author information with Audnexus first, fallback to Audible
-        
-        Args:
-            author_name: Name of author to search for
-            region: Region code
-            
-        Returns:
-            Author data with metadata and book information
+        Search for author information with Audnexus first, fallback to Audible.
         """
         try:
             self.logger.info(f"Searching for author: {author_name}")
-            
-            # Try Audnexus first
+
+            # Primary: Audnexus
             author_data = self.audnexus.find_author_by_name(author_name, region)
-            
+
             if author_data:
                 formatted_author = self.audnexus.format_author_for_compatibility(author_data)
-                
-                # Add book count and other metadata
+
                 formatted_author['source'] = 'audnexus'
                 formatted_author['audible_author_id'] = author_data.get('asin', '')
-                formatted_author['total_books_count'] = 0  # Would need separate call to get books
+                formatted_author['total_books_count'] = 0
                 formatted_author['audible_books_count'] = 0
-                
+
                 self.logger.info(f"Found author via Audnexus: {author_name}")
                 return formatted_author
-            
-            # Fallback to Audible scraping
+
+            # Fallback: Audible scraping
             self.logger.info(f"Audnexus failed, trying Audible for: {author_name}")
             audible_data = self.audible.search_author_page(author_name)
-            
+
             if audible_data:
                 audible_data['source'] = 'audible'
                 self.logger.info(f"Found author via Audible: {author_name}")
                 return audible_data
-            
+
             self.logger.warning(f"Author not found in either service: {author_name}")
             return None
-            
+
         except Exception as e:
             self.logger.error(f"Error searching for author '{author_name}': {e}")
             return None

@@ -321,7 +321,6 @@ class AutomaticDownloadService:
                 self.metrics["total_books_queued"] += 1
                 self.metrics["last_book_queued"] = book["asin"]
                 self.metrics["last_queue_time"] = datetime.utcnow().isoformat()
-                # Remove from snapshot so UI reflects remaining backlog immediately
                 try:
                     self._queue_snapshot.remove(book)
                 except ValueError:
@@ -360,7 +359,7 @@ class AutomaticDownloadService:
             return {"success": False, "error": "Book release date is in the future"}
 
         result = download_service.add_to_queue(
-            book_asin=asin,
+            asin,
             search_result_id=None,
             priority=5,
             title=book.get("Title", "Unknown Title"),
@@ -368,15 +367,17 @@ class AutomaticDownloadService:
             download_type="torrent",
         )
 
-        if result.get("success"):
-            if book_id in self._skip_book_ids:
-                self._skip_book_ids.remove(book_id)
-                self._persist_skip_book_ids()
-            self.metrics["total_books_queued"] += 1
-            self.metrics["last_book_queued"] = asin
-            self.metrics["last_queue_time"] = datetime.utcnow().isoformat()
+        if not result.get("success"):
+            return {"success": False, "error": result.get("message", "Failed to queue")}
 
-        return result
+        if book_id in self._skip_book_ids:
+            self._skip_book_ids.remove(book_id)
+            self._persist_skip_book_ids()
+        self.metrics["total_books_queued"] += 1
+        self.metrics["last_book_queued"] = asin
+        self.metrics["last_queue_time"] = datetime.utcnow().isoformat()
+
+        return {"success": True, "download_id": result.get("download_id")}
 
     # ------------------------------------------------------------------
     # Release-date helpers

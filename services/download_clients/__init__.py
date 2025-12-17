@@ -2,7 +2,7 @@
 Download Clients Module
 =======================
 
-Download client implementations for torrents and usenet.
+Download client implementations for torrent workflows.
 Supports multiple clients with priority-based selection and automatic failover.
 """
 

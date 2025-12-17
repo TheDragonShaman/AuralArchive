@@ -2,7 +2,7 @@
 ================================
 
 Lightweight indexer that queries custom provider APIs using a session token
-(typically a cookie or bearer token) instead of a Torznab/Newznab feed.
+(typically a cookie or bearer token) instead of a Torznab feed.
 
 The provider is expected to expose JSON endpoints with the following defaults:
 
@@ -230,6 +230,11 @@ class DirectIndexer(BaseIndexer):
 
         if not response.content:
             return {}
+
+        expects_json = getattr(spec, "expects_json", True)
+
+        if not expects_json:
+            return response.text
 
         try:
             return response.json()

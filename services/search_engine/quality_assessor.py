@@ -132,6 +132,12 @@ class QualityAssessor:
             source_score = 7.0  # Default source score
             metadata_score = self._assess_metadata_quality(result)
             availability_score = self._assess_availability_quality(seeders)
+
+            # AudiobookBay always shows seeders as 1; don't penalize those results
+            indexer_name = (result.get('indexer') or '').lower()
+            source_tag = (result.get('_source') or '').lower()
+            if ('audiobookbay' in indexer_name or 'audiobookbay' in source_tag) and seeders <= 1:
+                availability_score = 8.0  # treat as healthy to avoid low-seeder penalties
             
             self.logger.info(f"Quality scores for '{result_title}': relevance={relevance_score:.1f}, format={format_score:.1f}, confidence will be calculated")
             

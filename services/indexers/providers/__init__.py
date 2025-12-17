@@ -48,3 +48,4 @@ __all__ = [
 # Ensure builtin providers register themselves
 from . import generic  # noqa: E402,F401
 from . import myanonamouse  # noqa: E402,F401
+from . import audiobookbay  # noqa: E402,F401

@@ -3,7 +3,7 @@ Client Selector
 ===============
 
 Selects appropriate download client based on:
-- Download type (torrent vs usenet)
+- Download type (torrent)
 - Client capability
 - Client priority
 - Client health/availability
@@ -14,8 +14,6 @@ CURRENTLY SUPPORTED CLIENTS:
 FUTURE SUPPORT PLANNED:
 - Deluge (torrent/magnet)
 - Transmission (torrent/magnet)
-- SABnzbd (usenet/NZB)
-- NZBGet (usenet/NZB)
 """
 
 import logging
@@ -30,7 +28,7 @@ class ClientSelector:
     Selects best download client for each download.
 
     Currently only qBittorrent is supported for torrent downloads.
-    Additional clients (Deluge, Transmission, SABnzbd, NZBGet) will be added.
+    Additional clients (Deluge, Transmission) will be added.
 
     Selection criteria:
     1. Capability matching (torrent/magnet vs NZB)
@@ -58,7 +56,7 @@ class ClientSelector:
         Select best client for the provided download type.
 
         Args:
-            download_type: "torrent", "magnet", or "nzb"
+            download_type: "torrent" or "magnet"
 
         Returns:
             The name of the client to use, or None if unsupported
@@ -66,8 +64,6 @@ class ClientSelector:
 
         if download_type in ("torrent", "magnet"):
             return self._select_torrent_client()
-        if download_type == "nzb":
-            return self._select_usenet_client()
 
         self.logger.error(f"Unknown download type: {download_type}")
         return None
@@ -78,18 +74,12 @@ class ClientSelector:
         self.logger.debug("Selecting torrent client: qbittorrent (only supported client)")
         return "qbittorrent"
 
-    def _select_usenet_client(self) -> Optional[str]:
-        """Select best available usenet client (not yet supported)."""
-
-        self.logger.warning("Usenet clients not yet supported - SABnzbd/NZBGet coming soon")
-        return None
-
     def get_client(self, client_name: str):
         """
         Get client instance by name.
 
         Currently supported: "qbittorrent".
-        Future support planned for: "deluge", "transmission", "sabnzbd", "nzbget".
+        Future support planned for: "deluge", "transmission".
         """
 
         if client_name in self._client_cache:
@@ -106,7 +96,7 @@ class ClientSelector:
                 self._client_configs[client_name] = config
                 return client
 
-            if client_name in ("deluge", "transmission", "sabnzbd", "nzbget"):
+            if client_name in ("deluge", "transmission"):
                 self.logger.warning(f"Client {client_name} not yet implemented - coming soon")
                 return None
 

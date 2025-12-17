@@ -1,19 +1,9 @@
 """
-Series Sync Service - AuralArchive
-
-Fetches series metadata from Audible and keeps local series/book records in
-sync with the remote catalog.
-
-Author: AuralArchive Development Team
-Updated: December 4, 2025
+Series Sync Service - Fetches and syncs series data from Audible API
 """
-
+import logging
 from typing import Dict, List, Optional, Tuple
-
-from utils.logger import get_module_logger
-
-
-LOGGER = get_module_logger("SeriesSyncService")
+from datetime import datetime
 
 class SeriesSyncService:
     """Service for syncing series data from Audible API"""
@@ -28,7 +18,7 @@ class SeriesSyncService:
         """
         self.client = audible_client
         self.db = database_service
-        self.logger = LOGGER
+        self.logger = logging.getLogger("SeriesSyncService")
     
     def extract_series_from_relationships(self, product_data: Dict) -> Optional[Dict]:
         """

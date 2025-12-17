@@ -2,10 +2,10 @@
 Base Indexer
 ============
 
-Abstract base class for all indexer implementations (Jackett, Prowlarr, NZBHydra2, etc.).
+Abstract base class for all indexer implementations (Jackett, Prowlarr, etc.).
 Defines the interface that all indexers must implement.
 
-Supports both Torznab and Newznab protocols for unified audiobook searching.
+Primarily targets Torznab-compatible torrent indexers and direct providers.
 """
 
 from abc import ABC, abstractmethod
@@ -20,7 +20,6 @@ logger = get_module_logger("Indexer.Base")
 class IndexerProtocol(Enum):
     """Supported indexer protocols."""
     TORZNAB = "torznab"  # Jackett, Prowlarr (torrents)
-    NEWZNAB = "newznab"  # NZBHydra2, Prowlarr (usenet)
     DIRECT = "direct"    # Custom direct provider API
 
 
@@ -39,7 +38,7 @@ class BaseIndexer(ABC):
     and implement all abstract methods.
     """
     
-    # Standard Torznab/Newznab categories
+    # Standard Torznab categories
     CATEGORY_AUDIOBOOK = "3030"  # Standard audiobook category
     CATEGORY_ALL = "8000"        # All audio categories
     
@@ -52,7 +51,7 @@ class BaseIndexer(ABC):
                 - name: Indexer name (user-friendly)
                 - base_url: Base URL of the indexer
                 - api_key: API key for authentication
-                - protocol: 'torznab' or 'newznab'
+                - protocol: 'torznab' or 'direct'
                 - categories: List of category IDs to search (optional)
                 - timeout: Request timeout in seconds (optional, default 30)
                 - verify_ssl: Whether to verify SSL certificates (optional, default True)
@@ -130,12 +129,12 @@ class BaseIndexer(ABC):
             List of result dictionaries with:
                 - indexer: str - Name of this indexer
                 - title: str - Release title
-                - download_url: str - .torrent URL or NZB URL
+                - download_url: str - .torrent URL
                 - size_bytes: int - File size in bytes
                 - publish_date: str - ISO format date
-                - seeders: int - Number of seeders (torrent only, -1 for usenet)
-                - peers: int - Number of peers (torrent only, -1 for usenet)
-                - protocol: str - 'torrent' or 'usenet'
+                - seeders: int - Number of seeders (torrent indexers)
+                - peers: int - Number of peers (torrent indexers)
+                - protocol: str - 'torrent'
                 - indexer_id: str - Unique ID from indexer
                 - category: str - Category ID
                 - info_url: str - URL to details page (optional)
@@ -168,7 +167,7 @@ class BaseIndexer(ABC):
         Returns:
             Dictionary with:
                 - name: str - Indexer name
-                - protocol: str - torznab or newznab
+                - protocol: str - torznab or direct
                 - base_url: str - Base URL
                 - available: bool - Whether indexer is currently available
                 - consecutive_failures: int - Number of consecutive failures
@@ -235,7 +234,7 @@ class BaseIndexer(ABC):
     
     def _get_standard_params(self, search_type: str = 'search') -> Dict[str, Any]:
         """
-        Get standard Torznab/Newznab API parameters.
+        Get standard Torznab API parameters.
         
         Args:
             search_type: Type of search (search, book, caps)

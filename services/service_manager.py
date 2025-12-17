@@ -1,20 +1,12 @@
 """
-Service Manager - AuralArchive
-
-Singleton factory that wires up services on demand so Flask handlers can share
-stateful clients without reinitializing dependencies.
-
-Author: AuralArchive Development Team
-Updated: December 4, 2025
+Service Manager - Centralized service initialization and management
+This implements a singleton pattern for all services to avoid redundant initial                            # self._services['download'] = DownloadService(config_service, database_service)
+                            self._services['download'] = None  # Placeholder until DownloadService is implementedzation
+UPDATED: Fixed imports for new modular service structure
 """
-
 import threading
-from typing import Any, Dict, Optional
-
-from utils.logger import get_module_logger
-
-
-LOGGER = get_module_logger("ServiceManager")
+import logging
+from typing import Optional, Dict, Any
 
 class ServiceManager:
     """
@@ -41,8 +33,9 @@ class ServiceManager:
                     ServiceManager._initialized = True
     
     def _setup_logger(self):
-        """Return the shared module logger."""
-        return LOGGER
+        """Setup logger using standardized configuration"""
+        from utils.logger import get_module_logger
+        return get_module_logger("ServiceManager")
 
     def get_database_service(self):
         """Get or create DatabaseService instance"""

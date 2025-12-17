@@ -1,19 +1,33 @@
 """
-Download Management API - AuralArchive
+Download Management API
+=======================
 
-Provides REST endpoints for queue CRUD, pause/resume, retries, and service
-status so the UI and automation tools can orchestrate downloads.
+REST API endpoints for download queue management and control.
 
-Author: AuralArchive Development Team
-Updated: December 4, 2025
+IMPORTANT: Currently only qBittorrent is supported as a download client.
+Additional torrent clients (Deluge, Transmission) will be added soon.
+
+Endpoints:
+- POST   /api/downloads/queue         - Add book to download queue
+- GET    /api/downloads/queue         - Get all queue items
+- GET    /api/downloads/queue/<id>    - Get specific download
+- DELETE /api/downloads/queue/<id>    - Cancel/remove download
+- POST   /api/downloads/queue/<id>/pause   - Pause download
+- POST   /api/downloads/queue/<id>/resume  - Resume download
+- POST   /api/downloads/queue/<id>/retry   - Retry failed download
+- GET    /api/downloads/status        - Get service status
+- GET    /api/downloads/statistics    - Get queue statistics
+- POST   /api/downloads/service/start - Start monitoring service
+- POST   /api/downloads/service/stop  - Stop monitoring service
 """
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, request, jsonify
+import logging
+from typing import Dict, Any
 
 from services.service_manager import get_download_management_service
-from utils.logger import get_module_logger
 
-logger = get_module_logger("API.DownloadManagement")
+logger = logging.getLogger(__name__)
 
 # Create blueprint
 download_management_bp = Blueprint('download_management', __name__)
@@ -63,28 +77,23 @@ def add_to_queue():
         
         # Get service
         dm_service = get_download_management_service()
-        
-        # Add to queue
+
         result = dm_service.add_to_queue(
-            book_asin=book_asin,
+            book_asin,
             search_result_id=data.get('search_result_id'),
             priority=data.get('priority', 5),
             seeding_enabled=data.get('seeding_enabled'),
             delete_source=data.get('delete_source')
         )
-        
-        if result['success']:
-            return jsonify(result), 201
-        else:
-            return jsonify(result), 400
-        
+
+        return jsonify(result), 200 if result.get('success') else 400
+
     except Exception as e:
         logger.error(f"Error adding to download queue: {e}", exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)
         }), 500
-
 
 @download_management_bp.route('/queue', methods=['GET'])
 def get_queue():

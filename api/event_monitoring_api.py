@@ -1,22 +1,14 @@
 """
-Event Monitoring API - AuralArchive
-
-Captures legacy endpoints that once surfaced event-bus metrics so the UI can
-gracefully report that the system has been retired.
-
-Author: AuralArchive Development Team
-Updated: December 4, 2025
+Event System Monitoring API
+Provides endpoints to monitor inter-service communication
 """
-
-from functools import wraps
-
 from flask import Blueprint, jsonify, request
-
-from utils.logger import get_module_logger
+import logging
+from functools import wraps
+from datetime import datetime, timedelta
 
 # Create blueprint
 event_monitoring_bp = Blueprint('event_monitoring', __name__)
-logger = get_module_logger("API.EventMonitoring")
 
 def handle_errors(f):
     """Decorator to handle API errors"""
@@ -25,7 +17,7 @@ def handle_errors(f):
         try:
             return f(*args, **kwargs)
         except Exception as e:
-                logger.error("Event monitoring API error in %s: %s", f.__name__, e)
+            logging.error(f"API Error in {f.__name__}: {e}")
             return jsonify({'error': str(e), 'success': False}), 500
     return decorated_function
 
@@ -137,7 +129,33 @@ def publish_test_event():
             'message': 'Event bus system removed - cannot publish events',
             'event_id': None
         })
-
+        
     except Exception as e:
-        logger.error("Failed to publish test event: %s", e)
         return jsonify({'error': f'Failed to publish event: {str(e)}'}), 500
+        correlation_id = data.get('correlation_id')
+        priority = data.get('priority', 0)
+        
+        # Publish the event (async, so we can't await here in Flask)
+        import asyncio
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        loop.run_until_complete(
+            event_bus.publish_event(
+                event_type=event_type,
+                source_service=source_service,
+                data=event_data,
+                target_service=target_service,
+                correlation_id=correlation_id,
+                priority=priority
+            )
+        )
+        
+        return jsonify({
+            'success': True,
+            'message': 'Test event published',
+            'event_type': event_type_str
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to publish test event: {str(e)}'}), 500

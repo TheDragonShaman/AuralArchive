@@ -320,7 +320,7 @@ class ConfigService:
             clients = []
             
             # Check common client sections
-            client_sections = ['qbittorrent', 'transmission', 'deluge', 'sabnzbd', 'nzbget']
+            client_sections = ['qbittorrent', 'transmission', 'deluge']
             
             for section in client_sections:
                 if config.has_section(section):

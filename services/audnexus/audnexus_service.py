@@ -1,5 +1,6 @@
 import requests
 import logging
+from utils.logger import get_module_logger
 import threading
 from typing import List, Dict, Optional, Any
 from datetime import datetime
@@ -25,8 +26,10 @@ class AudnexusService:
         if not self._initialized:
             with self._lock:
                 if not self._initialized:
-                    self.logger = logging.getLogger("AudnexusService")
+                    self.logger = get_module_logger("AudnexusService")
                     self.base_url = "https://api.audnex.us"
+                    # Keep connect/read timeouts short so UI doesn't hang on upstream slowness
+                    self.request_timeout = (5, 8)  # (connect, read)
                     self.session = self._setup_session()
                     self.logger.info("AudnexusService initialized successfully")
                     AudnexusService._initialized = True
@@ -64,7 +67,7 @@ class AudnexusService:
             response = self.session.get(
                 f"{self.base_url}/authors",
                 params=params,
-                timeout=30
+                timeout=self.request_timeout
             )
             
             if response.status_code == 200:
@@ -76,7 +79,15 @@ class AudnexusService:
                 self.logger.warning(f"Bad request for author search: {name}")
                 return []
             else:
-                self.logger.error(f"Author search failed with status {response.status_code}")
+                body_preview = response.text[:200] if response.text else ''
+                self.logger.error(
+                    "Author search failed",
+                    extra={
+                        'status_code': response.status_code,
+                        'author_name': name,
+                        'body': body_preview
+                    }
+                )
                 return []
                 
         except Exception as e:
@@ -106,7 +117,7 @@ class AudnexusService:
             response = self.session.get(
                 f"{self.base_url}/authors/{asin}",
                 params=params,
-                timeout=30
+                timeout=self.request_timeout
             )
             
             if response.status_code == 200:
@@ -117,7 +128,15 @@ class AudnexusService:
                 self.logger.warning(f"Author not found: {asin}")
                 return None
             else:
-                self.logger.error(f"Author details request failed with status {response.status_code}")
+                body_preview = response.text[:200] if response.text else ''
+                self.logger.error(
+                    "Author details request failed",
+                    extra={
+                        'status_code': response.status_code,
+                        'author_asin': asin,
+                        'body': body_preview
+                    }
+                )
                 return None
                 
         except Exception as e:
@@ -149,7 +168,7 @@ class AudnexusService:
             response = self.session.get(
                 f"{self.base_url}/books/{asin}",
                 params=params,
-                timeout=30
+                timeout=self.request_timeout
             )
             
             if response.status_code == 200:
@@ -160,7 +179,15 @@ class AudnexusService:
                 self.logger.warning(f"Book not found: {asin}")
                 return None
             else:
-                self.logger.error(f"Book details request failed with status {response.status_code}")
+                body_preview = response.text[:200] if response.text else ''
+                self.logger.error(
+                    "Book details request failed",
+                    extra={
+                        'status_code': response.status_code,
+                        'book_asin': asin,
+                        'body': body_preview
+                    }
+                )
                 return None
                 
         except Exception as e:
@@ -190,7 +217,7 @@ class AudnexusService:
             response = self.session.get(
                 f"{self.base_url}/books/{asin}/chapters",
                 params=params,
-                timeout=30
+                timeout=self.request_timeout
             )
             
             if response.status_code == 200:
@@ -201,7 +228,15 @@ class AudnexusService:
                 self.logger.warning(f"Chapters not found for book: {asin}")
                 return None
             else:
-                self.logger.error(f"Chapters request failed with status {response.status_code}")
+                body_preview = response.text[:200] if response.text else ''
+                self.logger.error(
+                    "Chapters request failed",
+                    extra={
+                        'status_code': response.status_code,
+                        'book_asin': asin,
+                        'body': body_preview
+                    }
+                )
                 return None
                 
         except Exception as e:

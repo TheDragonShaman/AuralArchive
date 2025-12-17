@@ -98,7 +98,7 @@ def start_streaming_download():
         # Get DownloadManagementService
         from services.service_manager import get_download_management_service
         download_service = get_download_management_service()
-        
+
         # Add to queue with download_type='audible'
         result = download_service.add_to_queue(
             book_asin=asin,
@@ -110,7 +110,7 @@ def start_streaming_download():
             audible_quality=quality,
             ownership_details=ownership_details
         )
-        
+
         if result['success']:
             logger.info(
                 "Queued Audible download asin=%s queue_id=%s",

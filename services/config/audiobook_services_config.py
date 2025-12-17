@@ -92,9 +92,7 @@ class AudiobookServicesConfigManager:
             "clients": {
                 "qbittorrent": asdict(ClientConfig(port=8080)),
                 "transmission": asdict(ClientConfig(port=9091)),
-                "deluge": asdict(ClientConfig(port=58846)),
-                "sabnzbd": asdict(ClientConfig(port=8080)),
-                "nzbget": asdict(ClientConfig(port=6789))
+                "deluge": asdict(ClientConfig(port=58846))
             },
             "download_coordination": {
                 "selector": {
@@ -102,8 +100,7 @@ class AudiobookServicesConfigManager:
                     "min_seeds": 2,
                     "max_size_gb": 10,
                     "preferred_formats": ["mp3", "m4a", "m4b"],
-                    "quality_preference": ["320kbps", "256kbps", "192kbps"],
-                    "fallback_to_usenet": True
+                    "quality_preference": ["320kbps", "256kbps", "192kbps"]
                 },
                 "queue": {
                     "max_concurrent_downloads": 3,

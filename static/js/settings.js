@@ -37,29 +37,6 @@
                 username: "transmission",
                 password: ""
             }
-        },
-        sabnzbd: {
-            label: "SABnzbd",
-            defaults: {
-                enabled: true,
-                auto_download: false,
-                host: "127.0.0.1",
-                port: 8080,
-                username: "",
-                password: "",
-                api_key: ""
-            }
-        },
-        nzbget: {
-            label: "NZBGet",
-            defaults: {
-                enabled: true,
-                auto_download: false,
-                host: "127.0.0.1",
-                port: 6789,
-                username: "",
-                password: ""
-            }
         }
     };
 
@@ -157,7 +134,7 @@
             const sessionId = values.session_id || "";
             const apiKey = values.api_key || values.key || "";
             const type = (values.type || inferIndexerType(key, values.protocol)).toLowerCase();
-            const protocol = (values.protocol || (type === "nzbhydra2" ? "newznab" : "torznab")).toLowerCase();
+            const protocol = (values.protocol || (isDirectIndexerType(type) ? "direct" : "torznab")).toLowerCase();
             const priority = toNumeric(values.priority, DEFAULT_INDEXER_PRIORITY);
             const categories = parseCategoriesList(values.categories);
             const verifySsl = values.verify_ssl != null ? toBoolean(values.verify_ssl) : true;
@@ -514,23 +491,6 @@
                     normalized.username = section.transmission_username || section.username || defaults.username;
                     normalized.password = stripQuotes(section.transmission_password || section.password || defaults.password);
                     break;
-                case "sabnzbd":
-                    normalized.enabled = toBoolean(section.enabled);
-                    normalized.auto_download = toBoolean(section.auto_download);
-                    normalized.host = section.host || defaults.host;
-                    normalized.port = toNumeric(section.port, defaults.port);
-                    normalized.username = section.username || defaults.username;
-                    normalized.password = stripQuotes(section.password || defaults.password);
-                    normalized.api_key = section.api_key || defaults.api_key;
-                    break;
-                case "nzbget":
-                    normalized.enabled = toBoolean(section.enabled);
-                    normalized.auto_download = toBoolean(section.auto_download);
-                    normalized.host = section.host || defaults.host;
-                    normalized.port = toNumeric(section.port, defaults.port);
-                    normalized.username = section.username || defaults.username;
-                    normalized.password = stripQuotes(section.password || defaults.password);
-                    break;
                 default:
                     break;
             }
@@ -640,21 +600,6 @@
                 setNumericInput("transmission_port", data.port, CLIENT_DEFINITIONS.transmission.defaults.port);
                 setInputValue("transmission_username", data.username);
                 setInputValue("transmission_password", data.password);
-                renderQbPathMappings();
-                break;
-            case "sabnzbd":
-                setInputValue("sabnzbd_host", data.host);
-                setNumericInput("sabnzbd_port", data.port, CLIENT_DEFINITIONS.sabnzbd.defaults.port);
-                setInputValue("sabnzbd_username", data.username);
-                setInputValue("sabnzbd_password", data.password);
-                setInputValue("sabnzbd_api_key", data.api_key);
-                renderQbPathMappings();
-                break;
-            case "nzbget":
-                setInputValue("nzbget_host", data.host);
-                setNumericInput("nzbget_port", data.port, CLIENT_DEFINITIONS.nzbget.defaults.port);
-                setInputValue("nzbget_username", data.username);
-                setInputValue("nzbget_password", data.password);
                 renderQbPathMappings();
                 break;
             default:
@@ -1053,19 +998,6 @@
                 payload.username = getInputValue("transmission_username");
                 payload.password = getInputValue("transmission_password");
                 break;
-            case "sabnzbd":
-                payload.host = getInputValue("sabnzbd_host") || CLIENT_DEFINITIONS.sabnzbd.defaults.host;
-                payload.port = toNumeric(getInputValue("sabnzbd_port"), CLIENT_DEFINITIONS.sabnzbd.defaults.port);
-                payload.username = getInputValue("sabnzbd_username");
-                payload.password = getInputValue("sabnzbd_password");
-                payload.api_key = getInputValue("sabnzbd_api_key");
-                break;
-            case "nzbget":
-                payload.host = getInputValue("nzbget_host") || CLIENT_DEFINITIONS.nzbget.defaults.host;
-                payload.port = toNumeric(getInputValue("nzbget_port"), CLIENT_DEFINITIONS.nzbget.defaults.port);
-                payload.username = getInputValue("nzbget_username");
-                payload.password = getInputValue("nzbget_password");
-                break;
             default:
                 break;
         }
@@ -1204,7 +1136,7 @@
             heading.textContent = "New Indexer";
             helper.textContent = isDirectIndexerType(typeSelect.value)
                 ? "Provide the base URL and session ID for your direct provider. Priority determines search order."
-                : "Provide the torznab/newznab endpoint and API key. Priority determines search order.";
+                : "Provide the torznab endpoint and API key. Priority determines search order.";
             deleteButton.classList.add("hidden");
             keyInput.value = generateSuggestedIndexerKey(typeSelect.value);
             keyInput.disabled = false;
@@ -1262,7 +1194,7 @@
             if (helper) {
                 helper.textContent = isDirectIndexerType(typeValue)
                     ? "Provide the base URL and session ID for your direct provider. Priority determines search order."
-                    : "Provide the torznab/newznab endpoint and API key. Priority determines search order.";
+                    : "Provide the torznab endpoint and API key. Priority determines search order.";
             }
         }
 
@@ -1279,9 +1211,6 @@
     }
 
     function inferIndexerType(key, protocol) {
-        if (protocol === "newznab") {
-            return "nzbhydra2";
-        }
         if (key && key.toLowerCase().includes("prowlarr")) {
             return "prowlarr";
         }
@@ -1340,17 +1269,17 @@
 
         if (existingIndexer) {
             if (existingIndexer.protocol) {
-                payload.protocol = existingIndexer.protocol;
+                payload.protocol = existingIndexer.protocol === "direct" ? "direct" : "torznab";
             } else if (isDirectIndexerType(typeValue)) {
                 payload.protocol = "direct";
             } else {
-                payload.protocol = payload.type === "nzbhydra2" ? "newznab" : "torznab";
+                payload.protocol = "torznab";
             }
         } else {
             if (isDirectIndexerType(typeValue)) {
                 payload.protocol = "direct";
             } else {
-                payload.protocol = payload.type === "nzbhydra2" ? "newznab" : "torznab";
+                payload.protocol = "torznab";
             }
         }
 
@@ -2437,9 +2366,48 @@
             return "";
         }
 
-        const items = entries.slice(0, 5).map(([name, count]) => {
-            const label = name ? escapeHtml(String(name)) : "Unknown";
-            return `<li class="flex items-center justify-between"><span>${label}</span><span class="text-xs text-base-content/60">${formatNumber(count)}</span></li>`;
+        const extractLabel = (raw) => {
+            if (!raw) return "Unknown";
+
+            // Direct object with expected fields
+            if (typeof raw === "object") {
+                return raw.name || raw.title || raw.label || raw.asin || "Unknown";
+            }
+
+            // String values (may be plain, JSON, or repr of a dict)
+            if (typeof raw === "string") {
+                const trimmed = raw.trim();
+
+                // Try JSON/dict-style parsing
+                if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+                    try {
+                        const normalized = trimmed.includes("'") ? trimmed.replace(/'/g, '"') : trimmed;
+                        const parsed = JSON.parse(normalized);
+                        if (parsed && typeof parsed === "object") {
+                            return parsed.name || parsed.title || parsed.label || parsed.asin || raw;
+                        }
+                    } catch (_) {
+                        /* fall through to regex */
+                    }
+                }
+
+                // Regex fallback to extract "name": "..." or 'name': '...'
+                const nameMatch = raw.match(/"name"\s*:\s*"([^"]+)"/) || raw.match(/'name'\s*:\s*'([^']+)'/);
+                if (nameMatch && nameMatch[1]) {
+                    return nameMatch[1];
+                }
+
+                return raw;
+            }
+
+            return String(raw);
+        };
+
+        const items = entries.slice(0, 5).map(([raw, count]) => {
+            const labelText = extractLabel(raw);
+            const safeLabel = escapeHtml(labelText);
+            const safeCount = formatNumber(count);
+            return `<li class="flex items-center justify-between"><span>${safeLabel}</span><span class="text-xs text-base-content/60">${safeCount}</span></li>`;
         });
 
         return `<div><p class="text-xs font-semibold uppercase tracking-wide text-base-content/60 mb-1">${escapeHtml(title)}</p><ul class="space-y-1 text-sm">${items.join("")}</ul></div>`;
@@ -2820,8 +2788,13 @@
             }
 
             const summaryParts = [result.message || "Bulk download started."];
-            if (result.download_id) {
+            if (result.job_id) {
+                summaryParts.push(`Job: ${result.job_id}`);
+            } else if (result.download_id) {
                 summaryParts.push(`ID: ${result.download_id}`);
+            }
+            if (Array.isArray(result.queued_download_ids) && result.queued_download_ids.length) {
+                summaryParts.push(`Jobs queued: ${result.queued_download_ids.length}`);
             }
             if (Array.isArray(result.warnings) && result.warnings.length) {
                 summaryParts.push(result.warnings.join(" "));

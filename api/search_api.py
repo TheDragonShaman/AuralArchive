@@ -1,24 +1,18 @@
 """
-Search API - AuralArchive
-
-Handles direct calls into the search engine/indexer stack for manual searches,
-indexer tests, and diagnostic utilities.
-
-Author: AuralArchive Development Team
-Updated: December 4, 2025
+Search API - Audiobook search endpoints using SearchEngineService and IndexerServiceManager
+Location: api/search_api.py
 """
 
+from flask import Blueprint, request, jsonify
 from datetime import datetime
+import logging
 from typing import Any, Dict, List
 
-from flask import Blueprint, jsonify, request
-
 from services.service_manager import get_config_service, get_status_service
-from utils.logger import get_module_logger
 from utils.search_normalization import normalize_search_terms
 
 search_api_bp = Blueprint('search_api', __name__, url_prefix='/api/search')
-logger = get_module_logger("API.Search")
+logger = logging.getLogger("SearchAPI")
 
 search_engine_service = None
 indexer_manager_service = None

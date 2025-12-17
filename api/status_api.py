@@ -1,22 +1,11 @@
-"""
-Status API - AuralArchive
-
-Provides a lightweight feed of curated service events for the dashboard and
-settings views.
-
-Author: AuralArchive Development Team
-Updated: December 4, 2025
-"""
-
+"""Status Feed API - surfaces user-friendly operations feed."""
 from datetime import datetime
 
 from flask import Blueprint, jsonify, request
 
 from services.service_manager import get_status_service
-from utils.logger import get_module_logger
 
 status_api_bp = Blueprint('status_api', __name__, url_prefix='/api/status')
-logger = get_module_logger("API.Status")
 
 
 @status_api_bp.route('/feed', methods=['GET'])
@@ -40,5 +29,4 @@ def get_status_feed():
             'generated_at': datetime.utcnow().isoformat()
         })
     except Exception as exc:
-        logger.error("Status feed failed: %s", exc)
         return jsonify({'success': False, 'events': [], 'error': str(exc)}), 500

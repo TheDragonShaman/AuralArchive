@@ -1,12 +1,4 @@
-"""
-Import API - AuralArchive
-
-Drives the manual import workflow: previews files, stages batch cards, and
-hands prepared jobs to the LocalFileImportCoordinator.
-
-Author: AuralArchive Development Team
-Updated: December 4, 2025
-"""
+"""API endpoints for manual audiobook imports."""
 
 import os
 import time
@@ -14,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request  # type: ignore
 
 from services.import_service import LocalFileImportCoordinator
 from services.service_manager import get_config_service

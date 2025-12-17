@@ -18,6 +18,7 @@ class ProviderRequestSpec:
     data: Optional[Any] = None
     json: Optional[Any] = None
     headers: Optional[Dict[str, str]] = None
+    expects_json: bool = True
     allow_missing: bool = False
 
 

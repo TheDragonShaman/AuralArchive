@@ -1,32 +1,31 @@
 """
-Settings API - AuralArchive
+Settings API Routes - Modern Backend for Redesigned Settings Interface
+======================================================================
 
-Backs the redesigned settings UI with grouped endpoints for system health,
-configuration management, log streaming, and automation controls.
-
-Author: AuralArchive Development Team
-Updated: December 4, 2025
+Provides clean, organized API endpoints for the new settings UI with:
+- Logical grouping of functionality
+- Performance optimization
+- Real-time monitoring capabilities
+- Proper error handling
 """
 
+from flask import Blueprint, jsonify, request, send_file, current_app
 from collections import deque
-import json
-import os
-import sqlite3
-import time
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
-
-from flask import Blueprint, current_app, jsonify, request, send_file
-import psutil
-
 from services.service_manager import (
-    get_audiobookshelf_service,
-    get_audible_service,
     get_config_service,
     get_database_service,
+    get_audiobookshelf_service,
+    get_audible_service,
     get_metadata_update_service,
-    service_manager,
+    service_manager
 )
+import os
+import json
+import psutil
+import time
+from datetime import datetime, timedelta
+from typing import Dict, List, Any, Optional
+import sqlite3
 
 from utils.logger import get_module_logger
 

@@ -1,16 +1,9 @@
 """
-Audiobook Settings API - AuralArchive
-
-Centralizes config CRUD for indexers, download clients, coordination, and file
-processing modules so the UI can manage automation settings through Flask.
-
-Author: AuralArchive Development Team
-Updated: December 4, 2025
+Audiobook Services Settings API Routes
+Handles configuration management for audiobook services
 """
-
-from functools import wraps
-
 from flask import Blueprint, jsonify, request
+from functools import wraps
 
 from utils.logger import get_module_logger
 

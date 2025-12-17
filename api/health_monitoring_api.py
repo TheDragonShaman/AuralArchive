@@ -1,24 +1,14 @@
 """
-Health Monitoring API - AuralArchive
-
-Legacy interface for the retired health monitor service so the UI can report
-availability and capture metrics when the monitor is wired up again.
-
-Author: AuralArchive Development Team
-Updated: December 4, 2025
+Health Monitoring API Routes
+Provides endpoints for service health monitoring and system metrics
 """
-
-from datetime import datetime
-from functools import wraps
-
 from flask import Blueprint, jsonify, request
-
-from utils.logger import get_module_logger
+import logging
+from functools import wraps
+from datetime import datetime
 
 # Create blueprint
 health_monitoring_bp = Blueprint('health_monitoring', __name__)
-logger = get_module_logger("API.HealthMonitoring")
-health_monitor = None  # Populated by app/bootstrap when monitor service is available
 
 def handle_errors(f):
     """Decorator to handle API errors"""
@@ -27,7 +17,7 @@ def handle_errors(f):
         try:
             return f(*args, **kwargs)
         except Exception as e:
-            logger.error("Health monitoring API error in %s: %s", f.__name__, e)
+            logging.error(f"API Error in {f.__name__}: {e}")
             return jsonify({'error': str(e), 'success': False}), 500
     return decorated_function
 

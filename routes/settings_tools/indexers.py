@@ -1,7 +1,7 @@
 """
 Indexer Settings Routes - AuralArchive
 
-Exposes CRUD, toggle, and validation APIs for Jackett/Prowlarr/NZBHydra
+Exposes CRUD, toggle, and validation APIs for Jackett/Prowlarr
 indexers in the settings UI.
 
 Author: AuralArchive Development Team
@@ -37,8 +37,6 @@ def _infer_indexer_type(indexer_key: str, feed_url: str = '', protocol: str = ''
         return 'direct'
     if 'direct' in lower_key:
         return 'direct'
-    if 'nzbhydra' in lower_key or lower_protocol == 'newznab' or 'newznab' in lower_url:
-        return 'nzbhydra2'
     if 'prowlarr' in lower_key:
         return 'prowlarr'
     return 'jackett'
@@ -47,11 +45,13 @@ def _infer_indexer_type(indexer_key: str, feed_url: str = '', protocol: str = ''
 def _resolve_protocol(indexer_type: str, requested_protocol: str = '') -> str:
     """Determine protocol based on indexer type when not explicitly supplied."""
     if requested_protocol:
-        return requested_protocol.lower()
+        requested = requested_protocol.lower()
+        if requested == 'direct':
+            return 'direct'
+        # Force torznab for all other cases; alternative protocols are disabled
+        return 'torznab'
     if (indexer_type or '').lower() == 'direct':
         return 'direct'
-    if (indexer_type or '').lower() == 'nzbhydra2':
-        return 'newznab'
     return 'torznab'
 
 

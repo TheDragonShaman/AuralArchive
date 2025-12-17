@@ -201,21 +201,6 @@ def _build_client_config_from_payload(client_key: str, payload: dict) -> dict:
             'transmission_username': payload.get('username') or payload.get('transmission_username') or '',
             'transmission_password': payload.get('password') or payload.get('transmission_password') or ''
         })
-    elif client_key == 'sabnzbd':
-        normalized.update({
-            'host': payload.get('host') or '127.0.0.1',
-            'port': int(payload.get('port', 8080) or 8080),
-            'username': payload.get('username') or '',
-            'password': payload.get('password') or '',
-            'api_key': payload.get('api_key') or ''
-        })
-    elif client_key == 'nzbget':
-        normalized.update({
-            'host': payload.get('host') or '127.0.0.1',
-            'port': int(payload.get('port', 6789) or 6789),
-            'username': payload.get('username') or '',
-            'password': payload.get('password') or ''
-        })
 
     return normalized
 
@@ -733,8 +718,8 @@ def get_audiobookshelf_tab_data():
                 'jackett_configured': bool(jackett_config.get('jackett_url') and jackett_config.get('jackett_api_key')),
                 'enabled': jackett_config.get('enabled', False)
             },
-            'available_providers': ['qbittorrent', 'transmission', 'deluge', 'sabnzbd', 'nzbget'],
-            'available_clients': ['qbittorrent', 'transmission', 'deluge', 'sabnzbd', 'nzbget'],
+            'available_providers': ['qbittorrent', 'transmission', 'deluge'],
+            'available_clients': ['qbittorrent', 'transmission', 'deluge'],
             'last_updated': datetime.now().isoformat()
         }
     
@@ -1147,32 +1132,6 @@ def get_clients():
                 'auto_download': config_service.get_config_bool('rtorrent', 'auto_download', False)
             }
         
-        # Check SABnzbd
-        sabnzbd_config = config_data.get('sabnzbd', {})
-        if sabnzbd_config.get('host') and sabnzbd_config.get('username'):
-            clients['sabnzbd'] = {
-                'name': 'SABnzbd',
-                'type': 'sabnzbd',
-                'configured': True,
-                'host': sabnzbd_config.get('host', ''),
-                'port': sabnzbd_config.get('port', '8080'),
-                'username': sabnzbd_config.get('username', ''),
-                'auto_download': config_service.get_config_bool('sabnzbd', 'auto_download', False)
-            }
-        
-        # Check NZBGet
-        nzbget_config = config_data.get('nzbget', {})
-        if nzbget_config.get('host') and nzbget_config.get('username'):
-            clients['nzbget'] = {
-                'name': 'NZBGet',
-                'type': 'nzbget',
-                'configured': True,
-                'host': nzbget_config.get('host', ''),
-                'port': nzbget_config.get('port', '6789'),
-                'username': nzbget_config.get('username', ''),
-                'auto_download': config_service.get_config_bool('nzbget', 'auto_download', False)
-            }
-        
         return jsonify({
             'success': True,
             'clients': clients
@@ -1240,7 +1199,7 @@ def test_all_clients():
             }), 500
         
         # Test all enabled clients from config
-        client_types = ['qbittorrent', 'transmission', 'deluge', 'sabnzbd', 'nzbget']
+        client_types = ['qbittorrent', 'transmission', 'deluge']
         test_results = {
             'overall_status': 'unknown',
             'providers': {},
@@ -1290,7 +1249,7 @@ def update_client(client_key):
         data = request.get_json() or {}
 
         # Valid client types
-        valid_clients = ['qbittorrent', 'deluge', 'transmission', 'sabnzbd', 'nzbget']
+        valid_clients = ['qbittorrent', 'deluge', 'transmission']
         if client_key not in valid_clients:
             return jsonify({
                 'success': False,
@@ -1362,7 +1321,7 @@ def toggle_client(client_key):
     """Toggle a download client's auto_download setting"""
     try:
         # Valid client types
-        valid_clients = ['qbittorrent', 'deluge', 'transmission', 'sabnzbd', 'nzbget']
+        valid_clients = ['qbittorrent', 'deluge', 'transmission']
         if client_key not in valid_clients:
             return jsonify({
                 'success': False,
@@ -1402,7 +1361,7 @@ def delete_client(client_key):
     """Delete a download client configuration"""
     try:
         # Valid client types
-        valid_clients = ['qbittorrent', 'deluge', 'transmission', 'sabnzbd', 'nzbget']
+        valid_clients = ['qbittorrent', 'deluge', 'transmission']
         if client_key not in valid_clients:
             return jsonify({
                 'success': False,

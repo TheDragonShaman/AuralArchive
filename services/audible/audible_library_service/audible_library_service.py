@@ -877,24 +877,27 @@ class AudibleLibraryService:
                         download_type='audible',
                         title=title,
                         author=author,
-                        audible_format=format_preference,
-                        audible_quality=quality,
-                        audible_entry_override=audible_entry_override
+                        audible_format=format_pref,
+                        audible_quality=quality_pref,
+                        search_result_id=None,
+                        ownership_details={
+                            'ownership_status': ownership_status,
+                            'source': 'audible_library',
+                            'timestamp': datetime.utcnow().isoformat()
+                        }
                     )
-                except Exception as exc:
-                    error_message = str(exc)
-                    skipped_entries.append({'asin': asin, 'title': title, 'error': error_message})
-                    self._emit_progress(bulk_id, 'error', f"{title}: {error_message}", percent, title)
-                    continue
 
-                if queue_result.get('success'):
-                    download_id = queue_result.get('download_id')
-                    queued_ids.append(download_id)
-                    self._emit_progress(bulk_id, 'queuing', f"{queue_message} - queued", percent, title)
-                else:
-                    error_message = queue_result.get('message', 'Failed to queue download')
-                    skipped_entries.append({'asin': asin, 'title': title, 'error': error_message})
-                    self._emit_progress(bulk_id, 'error', f"{title}: {error_message}", percent, title)
+                    if queue_result.get('success'):
+                        download_id = queue_result.get('download_id')
+                        queued_ids.append(download_id)
+                        self._emit_progress(bulk_id, 'queuing', f"{queue_message} - queued", percent, title)
+                    else:
+                        error_message = queue_result.get('message', 'Failed to queue download')
+                        skipped_entries.append({'asin': asin, 'title': title, 'error': error_message})
+                        self._emit_progress(bulk_id, 'error', f"{title}: {error_message}", percent, title)
+                except Exception as exc:
+                    skipped_entries.append({'asin': asin, 'title': title, 'error': str(exc)})
+                    self._emit_progress(bulk_id, 'error', f"{title}: {exc}", percent, title)
 
             queued_count = len(queued_ids)
             skipped_count = len(skipped_entries)

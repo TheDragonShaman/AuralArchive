@@ -3,7 +3,7 @@
 {% block title %}Author: {{ author_data.name if author_data else author_name }} - AuralArchive{% endblock %}
 
 {% block content %}
-<div class="max-w-[1400px] mx-auto px-6 py-8">
+<div class="max-w-[1800px] mx-auto px-4 md:px-8 py-8">
     <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
         <a href="/authors" class="btn btn-soft btn-sm">
             <i class="fas fa-arrow-left"></i> Back to Authors
@@ -31,7 +31,7 @@
         <span>{{ error }}</span>
     </div>
     {% else %}
-    <div class="grid gap-6 lg:grid-cols-[380px_minmax(0,1fr)] xl:grid-cols-[420px_minmax(0,1fr)]">
+    <div class="grid gap-6 lg:grid-cols-[780px_minmax(0,1fr)] xl:grid-cols-[840px_minmax(0,1fr)]">
         <!-- Sidebar -->
         <div class="card bg-base-200 border border-base-300">
             <div class="card-body gap-4">
@@ -50,6 +50,11 @@
                     <h1 class="text-2xl font-semibold">{{ author_data.name }}</h1>
                     <p class="text-sm text-base-content/60 mt-1">{{ author_data.book_count }} books tracked</p>
                 </div>
+                {% if author_data.author_bio %}
+                <div class="text-sm text-base-content/70 leading-relaxed border-t border-base-300 pt-3">
+                    {{ author_data.author_bio }}
+                </div>
+                {% endif %}
                 <div class="space-y-3 text-sm">
                     <div class="flex items-center justify-between">
                         <span>Total hours</span>

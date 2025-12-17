@@ -1,11 +1,10 @@
 """
-Status Service - AuralArchive
+Status Service
+==============
 
-Lightweight in-memory activity feed for surfacing user-facing operations such as
-searches, downloads, conversions, and imports.
-
-Author: AuralArchive Development Team
-Updated: December 4, 2025
+Provides an in-memory activity feed describing user-facing operations such as
+searches, downloads, conversions, and imports. Designed for lightweight,
+short-lived status updates that can be surfaced in the UI.
 """
 from __future__ import annotations
 
@@ -14,11 +13,6 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime, timedelta
 from threading import Lock
 from typing import Any, Deque, Dict, List, Optional
-
-from utils.logger import get_module_logger
-
-
-LOGGER = get_module_logger("StatusService")
 
 
 @dataclass
@@ -126,7 +120,6 @@ class StatusService:
             self._events.append(event)
             self._index[event_id] = event
 
-        LOGGER.debug("Started status event %s (%s - %s)", event_id, category, state)
         return event.to_dict()
 
     def update_event(self, event_id: int, **updates) -> Optional[Dict[str, Any]]:
@@ -136,7 +129,6 @@ class StatusService:
         with self._events_lock:
             event = self._index.get(event_id)
             if not event:
-                LOGGER.warning("Attempted to update missing status event %s", event_id)
                 return None
 
             for key, value in updates.items():
@@ -148,12 +140,6 @@ class StatusService:
                     event.metadata[key] = value
 
             self._touch_event(event)
-            LOGGER.debug(
-                "Updated status event %s (state=%s, progress=%s)",
-                event_id,
-                event.state,
-                event.progress,
-            )
             return event.to_dict()
 
     def complete_event(

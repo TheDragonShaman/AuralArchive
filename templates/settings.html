@@ -292,7 +292,7 @@
         <div role="tabpanel" class="tab-content border border-base-300 bg-base-100 p-6 space-y-6">
             <div class="space-y-2">
                 <h2 class="text-lg font-semibold">Download Clients</h2>
-                <p class="text-sm text-base-content/60">Manage multiple torrent and usenet clients. Add a client to make it available to download workflows.</p>
+                <p class="text-sm text-base-content/60">Manage multiple torrent clients. Add a client to make it available to download workflows.</p>
             </div>
             <div class="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
                 <aside class="space-y-4">
@@ -340,8 +340,6 @@
                                     <option value="qbittorrent">qBittorrent</option>
                                     <option value="deluge">Deluge</option>
                                     <option value="transmission">Transmission</option>
-                                    <option value="sabnzbd">SABnzbd</option>
-                                    <option value="nzbget">NZBGet</option>
                                 </select>
                                 <label class="label">
                                     <span id="downloadClientTypeHelper" class="label-text-alt text-base-content/60">Choose the client protocol you want to configure.</span>
@@ -455,65 +453,7 @@
                             </div>
                         </div>
 
-                        <div data-client-panel="sabnzbd" class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden">
-                            <div class="form-control">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Host</span>
-                                </label>
-                                <input id="sabnzbd_host" type="text" class="input input-bordered w-full" placeholder="127.0.0.1" />
-                            </div>
-                            <div class="form-control">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Port</span>
-                                </label>
-                                <input id="sabnzbd_port" type="number" min="1" step="1" class="input input-bordered w-full" placeholder="8080" />
-                            </div>
-                            <div class="form-control">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Username</span>
-                                </label>
-                                <input id="sabnzbd_username" type="text" class="input input-bordered w-full" />
-                            </div>
-                            <div class="form-control">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Password</span>
-                                </label>
-                                <input id="sabnzbd_password" type="password" class="input input-bordered w-full" autocomplete="off" />
-                            </div>
-                            <div class="form-control md:col-span-2">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">API key</span>
-                                </label>
-                                <input id="sabnzbd_api_key" type="text" class="input input-bordered w-full" autocomplete="off" />
-                            </div>
-                        </div>
-
-                        <div data-client-panel="nzbget" class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden">
-                            <div class="form-control">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Host</span>
-                                </label>
-                                <input id="nzbget_host" type="text" class="input input-bordered w-full" placeholder="127.0.0.1" />
-                            </div>
-                            <div class="form-control">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Port</span>
-                                </label>
-                                <input id="nzbget_port" type="number" min="1" step="1" class="input input-bordered w-full" placeholder="6789" />
-                            </div>
-                            <div class="form-control">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Username</span>
-                                </label>
-                                <input id="nzbget_username" type="text" class="input input-bordered w-full" />
-                            </div>
-                            <div class="form-control">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Password</span>
-                                </label>
-                                <input id="nzbget_password" type="password" class="input input-bordered w-full" autocomplete="off" />
-                            </div>
-                        </div>
+                        
 
                         <div id="downloadClientStatus" class="text-xs text-base-content/60 h-4"></div>
                         <div class="flex justify-end">
@@ -531,7 +471,7 @@
         <div role="tabpanel" class="tab-content border border-base-300 bg-base-100 p-6 space-y-6">
             <div class="space-y-2">
                 <h2 class="text-lg font-semibold">Indexers</h2>
-                <p class="text-sm text-base-content/60">Connect multiple torznab or newznab sources and set the order they are queried.</p>
+                <p class="text-sm text-base-content/60">Connect multiple torznab sources and set the order they are queried.</p>
             </div>
             <div class="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
                 <aside class="space-y-4">
@@ -597,7 +537,6 @@
                                 <select id="indexer_type" class="select select-bordered w-full">
                                     <option value="jackett">Jackett</option>
                                     <option value="prowlarr">Prowlarr</option>
-                                    <option value="nzbhydra2">NZBHydra2</option>
                                     <option value="direct">Direct</option>
                                 </select>
                             </div>
@@ -656,7 +595,7 @@
                                 </label>
                                 <input id="indexer_categories" type="text" class="input input-bordered w-full" placeholder="3030, 3031" />
                                 <label class="label">
-                                    <span class="label-text-alt">Comma separated torznab/newznab category IDs.</span>
+                                    <span class="label-text-alt">Comma separated torznab category IDs.</span>
                                 </label>
                             </div>
                         </div>

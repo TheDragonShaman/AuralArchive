@@ -1,24 +1,14 @@
 """
-System Validation API - AuralArchive
-
-Exposes diagnostics endpoints for integration testing, service health, and
-status reporting so operators can verify the install.
-
-Author: AuralArchive Development Team
-Updated: December 4, 2025
+System Validation API Endpoint
+Provides endpoints to validate system integration and run tests
 """
-
-import asyncio
-import logging
-from functools import wraps
-
 from flask import Blueprint, jsonify, request
-
-from utils.logger import get_module_logger
+import logging
+import asyncio
+from functools import wraps
 
 # Create blueprint
 system_validation_bp = Blueprint('system_validation', __name__)
-logger = get_module_logger("API.SystemValidation")
 
 def handle_errors(f):
     """Decorator to handle API errors"""
@@ -27,7 +17,7 @@ def handle_errors(f):
         try:
             return f(*args, **kwargs)
         except Exception as e:
-            logger.error("API error in %s: %s", f.__name__, e)
+            logging.error(f"API Error in {f.__name__}: {e}")
             return jsonify({'error': str(e), 'success': False}), 500
     return decorated_function
 

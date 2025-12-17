@@ -17,7 +17,7 @@ Features:
 
 Download Clients:
 - Currently supported: qBittorrent (torrents/magnets)
-- Coming soon: Deluge, Transmission, SABnzbd, NZBGet
+- Coming soon: Deluge, Transmission
 """
 
 import asyncio

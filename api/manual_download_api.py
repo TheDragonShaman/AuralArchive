@@ -600,7 +600,7 @@ def initiate_manual_download():
             }
 
             download_result = dm_service.add_to_queue(
-                book_asin=asin_override,
+                asin_override,
                 search_result_id=None,
                 priority=priority,
                 **queue_kwargs
@@ -608,7 +608,7 @@ def initiate_manual_download():
 
             if download_result.get('success'):
                 logger.info(
-                    "Audible download queued successfully via manual download: asin=%s, queue_id=%s",
+                    "Queued Audible download via manual download: asin=%s queue_id=%s",
                     asin_override,
                     download_result.get('download_id')
                 )
@@ -618,7 +618,7 @@ def initiate_manual_download():
                     'download_id': download_result.get('download_id'),
                     'audible_download': True,
                     'ownership_details': ownership_details
-                })
+                }), 200
 
             error_message = download_result.get('message', 'Failed to queue Audible download')
             logger.error(
@@ -653,37 +653,22 @@ def initiate_manual_download():
         logger.debug(f"Queue kwargs: {queue_kwargs}")
         
         download_result = dm_service.add_to_queue(
-            book_asin=book_asin,
+            book_asin,
             search_result_id=result.get('id'),
             priority=priority,
             **queue_kwargs
         )
-        
-        logger.info(f"Download queue result: {download_result}")
-        
+
         if download_result.get('success'):
+            logger.info(f"Download queued via manual download: asin={book_asin}, id={download_result.get('download_id')}")
             return jsonify({
                 'success': True,
                 'message': f"Download queued for {book.get('Title', 'Unknown')}",
                 'download_id': download_result.get('download_id')
             })
         else:
-            error_message = download_result.get('message', 'Failed to queue download')
-            
-            # Handle duplicate download case with better message
-            if 'already in queue' in error_message.lower():
-                logger.warning(f"Duplicate download attempt for {book_asin}: {error_message}")
-                return jsonify({
-                    'success': False,
-                    'error': f"This book is already in the download queue. Check the Downloads page to view its progress.",
-                    'duplicate': True
-                }), 409  # 409 Conflict
-            
-            logger.error(f"Failed to queue download: {error_message}")
-            return jsonify({
-                'success': False,
-                'error': error_message
-            }), 400
+            logger.error(f"Failed to queue download for {book_asin}: {download_result.get('message')}")
+            return jsonify({'success': False, 'error': download_result.get('message', 'Failed to queue download')}), 400
         
     except Exception as e:
         logger.error(f"Error initiating manual download: {e}")

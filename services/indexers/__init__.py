@@ -2,8 +2,8 @@
 Indexers Module
 ===============
 
-Real indexer implementations for searching torrent trackers and usenet indexers.
-Supports Torznab and Newznab protocols for unified audiobook searching.
+Real indexer implementations for searching torrent trackers.
+Supports Torznab for unified audiobook searching.
 """
 
 from .base_indexer import BaseIndexer, IndexerProtocol, IndexerType

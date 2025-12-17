@@ -16,7 +16,7 @@ from utils.logger import get_module_logger
 download_progress_api = Blueprint('download_progress_api', __name__)
 
 # Initialize logger
-logger = get_module_logger("API.DownloadProgress")
+logger = get_module_logger("Route.DownloadProgress")
 
 
 @download_progress_api.route('/api/download-progress/<download_id>', methods=['GET'])

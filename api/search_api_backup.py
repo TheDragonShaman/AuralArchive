@@ -1,25 +1,19 @@
 """
-Legacy Search API - AuralArchive
+Search API Routes
+File: routes/search_api.py
 
-Historic version of the search endpoints retained for reference. Provides the
-old automatic/fuzzy/manual search controls that have since been replaced.
-
-Author: AuralArchive Development Team
-Updated: December 4, 2025
+API endpoints for automatic and manual search functionality.
 """
 
-import asyncio
+from flask import Blueprint, request, jsonify
 from datetime import datetime
 from typing import Dict, List
-
-from flask import Blueprint, jsonify, request
-
+import logging
+import asyncio
 from services.service_manager import get_database_service
-from utils.logger import get_module_logger
 
 # Create blueprint
 search_api_bp = Blueprint('search_api', __name__, url_prefix='/api/search')
-logger = get_module_logger("API.SearchLegacy")
 
 # Global service instances (will be initialized in app.py)
 automatic_search_service = None
@@ -44,7 +38,7 @@ def get_automatic_search_status():
         return jsonify(status)
         
     except Exception as e:
-        logger.error(f"Error getting automatic search status: {e}")
+        logging.error(f"Error getting automatic search status: {e}")
         return jsonify({'error': str(e)}), 500
 
 @search_api_bp.route('/automatic/start', methods=['POST'])
@@ -61,7 +55,7 @@ def start_automatic_search():
             return jsonify({'message': 'Failed to start automatic search service', 'success': False}), 500
             
     except Exception as e:
-        logger.error(f"Error starting automatic search: {e}")
+        logging.error(f"Error starting automatic search: {e}")
         return jsonify({'error': str(e)}), 500
 
 @search_api_bp.route('/automatic/stop', methods=['POST'])
@@ -78,7 +72,7 @@ def stop_automatic_search():
             return jsonify({'message': 'Failed to stop automatic search service', 'success': False}), 500
             
     except Exception as e:
-        logger.error(f"Error stopping automatic search: {e}")
+        logging.error(f"Error stopping automatic search: {e}")
         return jsonify({'error': str(e)}), 500
 
 @search_api_bp.route('/automatic/pause', methods=['POST'])
@@ -92,7 +86,7 @@ def pause_automatic_search():
         return jsonify({'message': 'Automatic search service paused', 'success': True})
         
     except Exception as e:
-        logger.error(f"Error pausing automatic search: {e}")
+        logging.error(f"Error pausing automatic search: {e}")
         return jsonify({'error': str(e)}), 500
 
 @search_api_bp.route('/automatic/resume', methods=['POST'])
@@ -106,7 +100,7 @@ def resume_automatic_search():
         return jsonify({'message': 'Automatic search service resumed', 'success': True})
         
     except Exception as e:
-        logger.error(f"Error resuming automatic search: {e}")
+        logging.error(f"Error resuming automatic search: {e}")
         return jsonify({'error': str(e)}), 500
 
 @search_api_bp.route('/automatic/queue', methods=['GET'])
@@ -120,7 +114,7 @@ def get_search_queue():
         return jsonify({'queue': queue, 'count': len(queue)})
         
     except Exception as e:
-        logger.error(f"Error getting search queue: {e}")
+        logging.error(f"Error getting search queue: {e}")
         return jsonify({'error': str(e)}), 500
 
 @search_api_bp.route('/automatic/force/<int:book_id>', methods=['POST'])
@@ -137,7 +131,7 @@ def force_search_book(book_id):
             return jsonify({'message': f'Failed to queue search for book {book_id}', 'success': False}), 404
             
     except Exception as e:
-        logger.error(f"Error forcing search for book {book_id}: {e}")
+        logging.error(f"Error forcing search for book {book_id}: {e}")
         return jsonify({'error': str(e)}), 500
 
 @search_api_bp.route('/automatic/config', methods=['GET'])
@@ -151,7 +145,7 @@ def get_automatic_search_config():
         return jsonify(status.get('configuration', {}))
         
     except Exception as e:
-        logger.error(f"Error getting automatic search config: {e}")
+        logging.error(f"Error getting automatic search config: {e}")
         return jsonify({'error': str(e)}), 500
 
 @search_api_bp.route('/automatic/config', methods=['POST'])
@@ -172,7 +166,7 @@ def update_automatic_search_config():
             return jsonify({'message': 'Failed to update configuration', 'success': False}), 500
             
     except Exception as e:
-        logger.error(f"Error updating automatic search config: {e}")
+        logging.error(f"Error updating automatic search config: {e}")
         return jsonify({'error': str(e)}), 500
 
 # Fuzzy Search API Endpoints
@@ -206,7 +200,7 @@ def fuzzy_search():
         return jsonify(results)
         
     except Exception as e:
-        logger.error(f"Error performing fuzzy search: {e}")
+        logging.error(f"Error performing fuzzy search: {e}")
         return jsonify({'error': str(e)}), 500
 
 @search_api_bp.route('/fuzzy/suggestions', methods=['POST'])
@@ -242,7 +236,7 @@ def fuzzy_suggestions():
         })
         
     except Exception as e:
-        logger.error(f"Error getting fuzzy suggestions: {e}")
+        logging.error(f"Error getting fuzzy suggestions: {e}")
         return jsonify({'error': str(e)}), 500
 
 # Manual Search API Endpoints
@@ -298,7 +292,7 @@ def manual_search():
         return jsonify(results)
         
     except Exception as e:
-        logger.error(f"Error performing manual search: {e}")
+        logging.error(f"Error performing manual search: {e}")
         return jsonify({'error': str(e)}), 500
 
 @search_api_bp.route('/manual/book/<int:book_id>', methods=['POST'])
@@ -348,7 +342,7 @@ def interactive_search_book(book_id):
             'sequence': sequence
         }
         
-        logger.info(f"Interactive search for book {book_id}: '{search_query}'")
+        logging.info(f"Interactive search for book {book_id}: '{search_query}'")
         
         # Perform search
         import asyncio
@@ -375,7 +369,7 @@ def interactive_search_book(book_id):
         return jsonify(results)
         
     except Exception as e:
-        logger.error(f"Error performing interactive search for book {book_id}: {e}")
+        logging.error(f"Error performing interactive search for book {book_id}: {e}")
         return jsonify({'error': str(e)}), 500
 
 @search_api_bp.route('/manual/preview', methods=['POST'])
@@ -393,7 +387,7 @@ def preview_download():
         return jsonify(preview)
         
     except Exception as e:
-        logger.error(f"Error previewing download: {e}")
+        logging.error(f"Error previewing download: {e}")
         return jsonify({'error': str(e)}), 500
 
 @search_api_bp.route('/manual/download', methods=['POST'])
@@ -430,7 +424,7 @@ def initiate_manual_download():
                     'narrator': book_info.get('narrator', ''),
                     'expected_duration_sec': book_info.get('expected_duration_sec')
                 })
-                logger.info(f"Manual download with provided book metadata - ASIN: {intent_data.get('asin')}")
+                logging.info(f"Manual download with provided book metadata - ASIN: {intent_data.get('asin')}")
             # If book_info has database ID, try to look up full data
             elif 'id' in book_info:
                 database_service = get_database_service()
@@ -444,7 +438,7 @@ def initiate_manual_download():
                             'narrator': book.get('Narrator', ''),
                             'expected_duration_sec': book.get('Duration_sec')
                         })
-                        logger.info(f"Manual download with database book metadata - ASIN: {intent_data.get('asin')}")
+                        logging.info(f"Manual download with database book metadata - ASIN: {intent_data.get('asin')}")
         
         # Add torrent information
         if 'magnetUrl' in result:
@@ -475,7 +469,7 @@ def initiate_manual_download():
         })
         
     except Exception as e:
-        logger.error(f"Error initiating manual download: {e}")
+        logging.error(f"Error initiating manual download: {e}")
         return jsonify({'error': str(e)}), 500
 
 @search_api_bp.route('/manual/suggestions', methods=['GET'])
@@ -493,7 +487,7 @@ def get_search_suggestions():
         return jsonify({'suggestions': suggestions})
         
     except Exception as e:
-        logger.error(f"Error getting search suggestions: {e}")
+        logging.error(f"Error getting search suggestions: {e}")
         return jsonify({'error': str(e)}), 500
 
 # General Search API Endpoints
@@ -507,7 +501,7 @@ def get_available_providers():
         return jsonify({'providers': providers})
         
     except Exception as e:
-        logger.error(f"Error getting available providers: {e}")
+        logging.error(f"Error getting available providers: {e}")
         return jsonify({'error': str(e)}), 500
 
 @search_api_bp.route('/books/wanted', methods=['GET'])
@@ -524,7 +518,7 @@ def get_wanted_books():
         })
         
     except Exception as e:
-        logger.error(f"Error getting wanted books: {e}")
+        logging.error(f"Error getting wanted books: {e}")
         return jsonify({'error': str(e)}), 500
 
 @search_api_bp.route('/books/<int:book_id>/status', methods=['PUT'])
@@ -555,7 +549,7 @@ def update_book_status(book_id):
             }), 404
             
     except Exception as e:
-        logger.error(f"Error updating book status: {e}")
+        logging.error(f"Error updating book status: {e}")
         return jsonify({'error': str(e)}), 500
 
 @search_api_bp.route('/test', methods=['GET'])
@@ -581,5 +575,5 @@ def test_search_api():
         return jsonify(status)
         
     except Exception as e:
-        logger.error(f"Error in search API test: {e}")
+        logging.error(f"Error in search API test: {e}")
         return jsonify({'error': str(e)}), 500

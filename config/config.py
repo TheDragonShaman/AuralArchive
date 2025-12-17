@@ -62,29 +62,6 @@ class Config:
             'password': '',
             'use_ssl': False,
             'verify_cert': True
-        },
-        'sabnzbd': {
-            'enabled': False,
-            'priority': 4,
-            'type': 'usenet',
-            'host': 'localhost',
-            'port': 8080,
-            'api_key': '',  # SABnzbd uses API key instead of username/password
-            'use_ssl': False,
-            'verify_cert': True,
-            'category': 'audiobooks'
-        },
-        'nzbget': {
-            'enabled': False,
-            'priority': 5,
-            'type': 'usenet',
-            'host': 'localhost',
-            'port': 6789,
-            'username': 'nzbget',
-            'password': 'tegbzn6789',
-            'use_ssl': False,
-            'verify_cert': True,
-            'category': 'audiobooks'
         }
     }
     
@@ -101,7 +78,7 @@ class Config:
     
     # Indexer Configuration
     # Multiple indexers can be configured with priority (1-10, lower = higher priority)
-    # Supports Jackett, Prowlarr (Torznab), and NZBHydra2 (Newznab)
+    # Supports Jackett and Prowlarr (Torznab)
     # Simply copy/paste the full Torznab feed URL from your indexer
     INDEXERS = {
         'jackett_audiobookbay': {
@@ -134,17 +111,6 @@ class Config:
             'feed_url': 'http://localhost:9696/api/v2.0/indexers/all/results/torznab',  # Prowlarr Torznab URL
             'api_key': '',     # Get from Prowlarr settings
             'categories': ['3030'],
-            'timeout': 30,
-            'verify_ssl': True
-        },
-        'nzbhydra2': {
-            'enabled': False,
-            'priority': 4,
-            'type': 'nzbhydra2',
-            'protocol': 'newznab',
-            'feed_url': 'http://localhost:5076/api',  # NZBHydra2 Newznab URL
-            'api_key': '',     # Get from NZBHydra2 config
-            'categories': ['3030', '7020'],  # Multiple categories for usenet
             'timeout': 30,
             'verify_ssl': True
         }
