@@ -11,6 +11,7 @@ Location:
 """
 from collections import Counter
 from flask import Blueprint, render_template, jsonify, request
+from flask_login import login_required
 from services.service_manager import get_database_service
 from services.audible.audible_service_manager import get_audible_manager
 from utils.logger import get_module_logger
@@ -44,6 +45,7 @@ def _analyze_series_authors(books):
         return None, []
 
 @series_bp.route('/')
+@login_required
 def series_list():
     """Display all series in the library"""
     try:

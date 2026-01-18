@@ -1,5 +1,6 @@
 Flask==2.3.3
 Flask-SocketIO==5.3.6
+Flask-Login==0.6.3
 python-dotenv==1.0.0
 mutagen==1.47.0
 markdownify==0.11.6

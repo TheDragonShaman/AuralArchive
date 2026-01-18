@@ -14,13 +14,15 @@ Location:
 """
 
 import logging
-from flask import Flask, jsonify, request  # type: ignore
+from flask import Flask, jsonify, request, redirect, url_for  # type: ignore
 from flask_socketio import SocketIO  # type: ignore
+from flask_login import LoginManager  # type: ignore
 
 from config.config import Config
 from utils.logger import get_module_logger, setup_logger
 
 # Import blueprints
+from routes.auth import auth_bp
 from routes.main import main_bp
 from routes.search import search_bp
 from routes.library import library_bp
@@ -75,7 +77,45 @@ def create_app(config_class=Config):
         engineio_logger=app.config.get('ENGINEIO_LOGGER', False)
     )
 
+    # Initialize Flask-Login
+    login_manager = LoginManager()
+    login_manager.init_app(app)
+    login_manager.login_view = 'auth.login'
+    login_manager.login_message = 'Please log in to access this page.'
+    login_manager.login_message_category = 'info'
+    
+    @login_manager.user_loader
+    def load_user(user_id):
+        """Load user by ID for Flask-Login"""
+        try:
+            from auth.auth import get_user
+            return get_user(user_id)
+        except Exception as e:
+            logger.error(f"Error loading user: {e}")
+            return None
+    
+    @login_manager.unauthorized_handler
+    def unauthorized():
+        """Redirect to setup if no users, otherwise to login"""
+        try:
+            from auth.auth import has_users
+            
+            # For API requests, return JSON
+            if request.path.startswith('/api/'):
+                return jsonify({'error': 'Authentication required'}), 401
+            
+            # For regular requests, redirect to setup or login
+            if not has_users():
+                return redirect(url_for('auth.setup'))
+            
+            next_page = request.path if request.path != '/' else None
+            return redirect(url_for('auth.login', next=next_page))
+        except Exception as e:
+            logger.error(f"Error in unauthorized handler: {e}")
+            return redirect('/auth/login')
+
     # Register blueprints
+    app.register_blueprint(auth_bp, url_prefix='/auth')
     app.register_blueprint(main_bp, url_prefix='/')
     app.register_blueprint(library_bp, url_prefix='/library')
     app.register_blueprint(search_bp, url_prefix='/search')  # Book search/discovery
@@ -335,7 +375,11 @@ def register_error_handlers(app):
     
     @app.errorhandler(Exception)
     def handle_exception(e):
-        logger.error("Unhandled exception", extra={"error": str(e)})
+        import traceback
+        logger.error(
+            "Unhandled exception",
+            extra={"error": str(e), "type": type(e).__name__, "traceback": traceback.format_exc()}
+        )
         return jsonify({'error': 'An unexpected error occurred'}), 500
 
 # Create app instance

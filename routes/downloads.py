@@ -11,6 +11,7 @@ Location:
 """
 
 from flask import Blueprint, render_template
+from flask_login import login_required
 
 from services.service_manager import get_download_management_service
 from utils.logger import get_module_logger
@@ -22,6 +23,7 @@ logger = get_module_logger("Routes.Downloads")
 
 @downloads_bp.route('')
 @downloads_bp.route('/')
+@login_required
 def downloads_page():
     """Render the downloads dashboard with pipeline and streaming activity."""
     dm_service = get_download_management_service()

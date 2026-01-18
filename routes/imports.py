@@ -11,6 +11,7 @@ Location:
 """
 
 from flask import Blueprint, render_template  # type: ignore
+from flask_login import login_required
 
 from services.service_manager import get_config_service
 from utils.logger import get_module_logger
@@ -22,6 +23,7 @@ import_bp = Blueprint('import_page', __name__)
 
 @import_bp.route('')
 @import_bp.route('/')
+@login_required
 def import_dashboard():
     """Render the manual import UI."""
     default_library_path = '/mnt/audiobooks'

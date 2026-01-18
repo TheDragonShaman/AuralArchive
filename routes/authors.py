@@ -10,6 +10,7 @@ Location:
 
 """
 from flask import Blueprint, render_template, request, jsonify
+from flask_login import login_required
 from services.service_manager import (
     get_database_service,
     get_audible_service,
@@ -704,6 +705,7 @@ def calculate_author_similarity(author1_data: Dict, author2_data: Dict) -> float
 # ============================================================================
 
 @authors_bp.route('/')
+@login_required
 def authors_page():
     """Enhanced authors page with MediaVault design and advanced analytics."""
     try:

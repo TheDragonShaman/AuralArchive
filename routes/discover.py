@@ -16,6 +16,7 @@ from collections import Counter
 from typing import List, Dict, Any
 
 from flask import Blueprint, render_template, request, jsonify, url_for
+from flask_login import login_required
 
 from services.image_cache import get_cached_book_cover_url
 from services.service_manager import get_database_service, get_config_service
@@ -65,6 +66,7 @@ def _format_recent_books(books: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 @discover_bp.route('/discover')
+@login_required
 def discover_page():
     """Render the discover dashboard with library insights and discovery tools."""
     try:

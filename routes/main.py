@@ -14,6 +14,7 @@ import os
 from typing import Any, Dict, List
 
 from flask import Blueprint, jsonify, render_template, send_file
+from flask_login import login_required
 
 from services.service_manager import get_config_service, get_database_service
 from utils.logger import get_module_logger
@@ -68,11 +69,13 @@ def _get_download_snapshot(limit: int = 3) -> Dict[str, Any]:
 
 
 @main_bp.route('/')
+@login_required
 def index():
     """Dashboard landing page."""
     return dashboard()
 
 @main_bp.route('/api/library/stats')
+@login_required
 def api_library_stats():
     """API endpoint for library statistics used by MediaVault JS."""
     try:
@@ -112,6 +115,7 @@ def api_library_stats():
         })
 
 @main_bp.route('/dashboard')
+@login_required
 def dashboard():
     """Render the dashboard with recent activity."""
     library_stats: Dict[str, Any] = {}
@@ -138,6 +142,7 @@ def dashboard():
     )
 
 @main_bp.route('/debug_refresh_test.html')
+@login_required
 def debug_refresh_test():
     """Serve the debug refresh test page."""
     debug_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'debug_refresh_test.html')

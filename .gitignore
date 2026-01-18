@@ -77,4 +77,4 @@ ROADMAP.md
 # Docker and environment files
 docker-compose.yml
 Dockerfile.dev
-.dockerignore
+.dockerignoreconfig/users.json

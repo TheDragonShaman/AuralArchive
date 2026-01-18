@@ -48,6 +48,14 @@ class Config:
     # Monitor settings
     MONITOR_ENABLED = os.environ.get('MONITOR_ENABLED', 'true').lower() == 'true'
     
+    # Authentication settings
+    # User credentials are stored in config/config.txt as hashed passwords
+    # Session lifetime: remember me = 30 days, otherwise session-only
+    REMEMBER_COOKIE_DURATION = 30 * 24 * 60 * 60  # 30 days in seconds
+    SESSION_COOKIE_SECURE = False  # Set to True if using HTTPS
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = 'Lax'
+    
     # Download Client Configuration
     # Multiple clients can be configured with priority (1-10, lower = higher priority)
     # The system will try clients in priority order and failover to next if one fails

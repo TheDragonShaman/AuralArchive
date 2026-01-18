@@ -20,6 +20,7 @@ from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 import requests
 from flask import Blueprint, jsonify, render_template, request, send_file
+from flask_login import login_required
 
 from services.service_manager import (
     get_audiobookshelf_service,
@@ -245,6 +246,7 @@ settings_bp = Blueprint('settings', __name__)
 # ============================================================================
 
 @settings_bp.route('/')
+@login_required
 def settings_page():
     """Display the modern professional settings page."""
     try:

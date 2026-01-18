@@ -13,6 +13,7 @@ Location:
 from typing import Any, Dict, List, Optional
 
 from flask import Blueprint, flash, jsonify, redirect, render_template, request, session, url_for
+from flask_login import login_required
 
 from services.image_cache import cache_book_cover, get_cached_book_cover_url
 from services.service_manager import (
@@ -119,6 +120,7 @@ def get_genre_from_summary(summary):
         return 'non-fiction'
 
 @library_bp.route('/')
+@login_required
 def library_page():
     """Display the library page with MediaVault design."""
     try:

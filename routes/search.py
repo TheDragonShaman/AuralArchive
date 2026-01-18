@@ -10,6 +10,7 @@ Location:
 
 """
 from flask import Blueprint, render_template, request, jsonify, flash
+from flask_login import login_required
 from services.service_manager import (
     get_audible_service,
     get_database_service,
@@ -199,6 +200,7 @@ def determine_library_status(
 # ============================================================================
 
 @search_bp.route('/')
+@login_required
 def search_page():
     """Enhanced search page with MediaVault design and advanced features."""
     query = request.args.get('q', '').strip()
