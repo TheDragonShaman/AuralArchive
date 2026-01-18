@@ -1,10 +1,13 @@
 """
-System Resources Route - AuralArchive
+Module Name: get_system_resources.py
+Author: TheDragonShaman
+Created: August 1, 2025
+Last Modified: December 23, 2025
+Description:
+    Settings helper returning CPU, memory, disk, and runtime metadata.
+Location:
+    /routes/settings_tools/get_system_resources.py
 
-Reports CPU, memory, disk, and runtime metadata to the settings dashboard.
-
-Author: AuralArchive Development Team
-Updated: December 2, 2025
 """
 
 import platform
@@ -14,7 +17,7 @@ from flask import jsonify
 
 from utils.logger import get_module_logger
 
-logger = get_module_logger("Route.Settings.SystemResources")
+logger = get_module_logger("Routes.Settings.SystemResources")
 
 def handle_get_system_resources():
     """Get system resource usage information."""

@@ -1,11 +1,26 @@
 """
-Audible Authentication API - AuralArchive
+Module Name: audible_auth_api.py
+Author: TheDragonShaman
+Created: June 24, 2025
+Last Modified: December 23, 2025
+Description:
+    REST API endpoints for Audible authentication. Handles login initiation,
+    OTP verification, status checks, and revocation for the modal-based flow
+    without persisting user credentials in the UI.
 
-Implements the modal-based login flow (username/password + OTP) used to refresh
-the Audible auth file without storing long-term credentials in the UI.
+Location:
+    /api/audible_auth_api.py
 
-Author: AuralArchive Development Team
-Updated: December 3, 2025
+Audible Authentication API
+==========================
+
+REST API endpoints for Audible login and token lifecycle.
+
+Endpoints:
+- POST   /api/audible/auth/start        - Start authentication (username/password)
+- POST   /api/audible/auth/submit-otp   - Submit OTP for pending session
+- GET    /api/audible/auth/status       - Check current auth status
+- POST   /api/audible/auth/revoke       - Revoke authentication and clear state
 """
 
 import os
@@ -18,7 +33,7 @@ from flask import Blueprint, jsonify, request
 from utils.logger import get_module_logger
 
 audible_auth_api = Blueprint('audible_auth_api', __name__)
-logger = get_module_logger("API.AudibleAuth")
+logger = get_module_logger("API.Audible.Auth")
 
 # Store pending authentication sessions (in-memory only)
 # Session expires when OTP is submitted or authentication completes

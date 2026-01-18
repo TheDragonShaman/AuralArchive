@@ -1,11 +1,16 @@
 """
-Indexer Service Manager
-=======================
+Module Name: indexer_service_manager.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Coordinates all indexer instances with priority-based selection and
+    parallel search execution. Implements singleton pattern and integrates
+    with search engine workflows.
 
-Main coordinator for all indexer operations.
-Manages multiple indexers with priority-based selection and parallel search execution.
+Location:
+    /services/indexers/indexer_service_manager.py
 
-Follows the singleton pattern and integrates with the search engine service.
 """
 
 import threading
@@ -19,9 +24,8 @@ from .direct_indexer import DirectIndexer
 from services.config.management import ConfigService
 from utils.logger import get_module_logger
 
-logger = get_module_logger("Indexer.ServiceManager")
-import logging
-_log = logging.getLogger("Indexer.ServiceManager")
+
+_LOGGER = get_module_logger("Service.Indexers.Manager")
 
 
 class IndexerServiceManager:
@@ -48,11 +52,12 @@ class IndexerServiceManager:
                     cls._instance._initialized = False
         return cls._instance
     
-    def __init__(self, config_service=None):
+    def __init__(self, config_service=None, *, logger=None):
         """Initialize the indexer service manager."""
         if self._initialized:
             return
 
+        self.logger = logger or _LOGGER
         self.config_service = config_service or ConfigService()
         self.indexers = {}  # name -> indexer instance
         self.indexer_configs = {}  # name -> config dict
@@ -61,7 +66,7 @@ class IndexerServiceManager:
         self._load_indexers()
         
         self._initialized = True
-        logger.debug("IndexerServiceManager initialized with %d indexer(s)", len(self.indexers))
+        self.logger.debug("IndexerServiceManager initialized with %d indexer(s)", len(self.indexers))
     
     def _load_indexers(self):
         """Load and initialize indexers from configuration."""
@@ -70,15 +75,15 @@ class IndexerServiceManager:
         try:
             indexer_configs = self.config_service.list_indexers_config()
             if indexer_configs:
-                logger.debug("Loaded indexer configuration from config.txt")
+                self.logger.debug("Loaded indexer configuration from config.txt")
         except Exception as exc:
-            logger.error("Failed to load indexers from config service: %s", exc)
+            self.logger.error("Failed to load indexers from config service: %s", exc)
 
         if not indexer_configs:
             indexer_configs = self._load_from_config_py()
         
         if not indexer_configs:
-            logger.warning("No indexers configured")
+            self.logger.warning("No indexers configured")
             return
         
         # Sort by priority (lower number = higher priority)
@@ -90,7 +95,7 @@ class IndexerServiceManager:
         for name, config in sorted_configs:
             # Skip disabled indexers
             if not config.get('enabled', False):
-                logger.debug(f"Skipping disabled indexer: {name}")
+                self.logger.debug("Skipping disabled indexer", extra={"indexer": name})
                 continue
             
             try:
@@ -108,33 +113,35 @@ class IndexerServiceManager:
                     indexer = JackettIndexer(config)
                 elif indexer_type == 'nzbhydra2':
                     # Future: NZBHydra2Indexer
-                    logger.warning(f"NZBHydra2 indexer not yet implemented, skipping {name}")
+                    self.logger.warning("NZBHydra2 indexer not yet implemented, skipping", extra={"indexer": name})
                     continue
                 elif indexer_type == 'direct':
                     indexer = DirectIndexer(config)
                 else:
-                    logger.error(f"Unknown indexer type '{indexer_type}' for {name}")
+                    self.logger.error("Unknown indexer type", extra={"indexer": name, "indexer_type": indexer_type})
                     continue
                 
                 # Store indexer
                 self.indexers[name] = indexer
                 self.indexer_configs[name] = config
                 
-                logger.debug(
-                    "Loaded indexer: %s (priority=%s, protocol=%s)",
-                    name,
-                    config.get('priority'),
-                    config.get('protocol'),
+                self.logger.debug(
+                    "Loaded indexer",
+                    extra={
+                        "indexer": name,
+                        "priority": config.get('priority'),
+                        "protocol": config.get('protocol'),
+                    },
                 )
                 
             except Exception as e:
-                logger.error(f"Failed to load indexer {name}: {str(e)}")
+                self.logger.error("Failed to load indexer", extra={"indexer": name, "error": str(e)})
                 continue
     
     def _load_from_config_py(self):
         """Load indexer config from config.py"""
         if not self.config_service:
-            logger.debug("Loading indexers from config.py")
+            self.logger.debug("Loading indexers from config.py")
             from config.config import Config
             return getattr(Config, 'INDEXERS', {})
         else:
@@ -150,14 +157,14 @@ class IndexerServiceManager:
         results = {}
         
         for name, indexer in self.indexers.items():
-            logger.debug("Testing connection to %s...", name)
+            self.logger.debug("Testing connection to %s...", name)
             result = indexer.test_connection()
             results[name] = result
             
             if result['success']:
-                logger.info("%s connection successful", name)
+                self.logger.info("%s connection successful", name)
             else:
-                logger.error("%s connection failed: %s", name, result.get('error'))
+                self.logger.error("%s connection failed: %s", name, result.get('error'))
         
         return results
     
@@ -183,7 +190,7 @@ class IndexerServiceManager:
             Aggregated list of results from all indexers
         """
         if not self.indexers:
-            logger.warning("No indexers available for search")
+            self.logger.warning("No indexers available for search")
             return []
         
         # Get available indexers
@@ -193,10 +200,10 @@ class IndexerServiceManager:
         ]
         
         if not available_indexers:
-            logger.warning("No available indexers for search")
+            self.logger.warning("No available indexers for search")
             return []
         
-        logger.info(
+        self.logger.info(
             "Searching %d indexer(s) for query='%s' author='%s' title='%s'",
             len(available_indexers),
             query,
@@ -221,13 +228,16 @@ class IndexerServiceManager:
                         title=title,
                         limit=limit_per_indexer
                     )
-                    _log.debug("%s returned %d results (sequential)", name, len(results) if results is not None else 0)
+                    self.logger.debug(
+                        "Indexer returned results (sequential)",
+                        extra={"indexer": name, "result_count": len(results) if results is not None else 0},
+                    )
                     all_results.extend(results)
                 except Exception as e:
-                    logger.error(f"Error searching {name}: {str(e)}")
+                    self.logger.error("Error searching indexer", extra={"indexer": name, "error": str(e)})
                     continue
         
-        logger.info("Total results from all indexers: %d", len(all_results))
+        self.logger.info("Total results from all indexers", extra={"result_count": len(all_results)})
         return all_results
     
     def _search_parallel(
@@ -272,9 +282,12 @@ class IndexerServiceManager:
                 try:
                     results = future.result(timeout=60)  # 60 second timeout per indexer
                     all_results.extend(results)
-                    logger.debug(f"{indexer_name} returned {len(results)} results")
+                    self.logger.debug(
+                        "Indexer returned results (parallel)",
+                        extra={"indexer": indexer_name, "result_count": len(results)},
+                    )
                 except Exception as e:
-                    logger.error(f"Error in parallel search for {indexer_name}: {str(e)}")
+                    self.logger.error("Error in parallel search", extra={"indexer": indexer_name, "error": str(e)})
         
         return all_results
     
@@ -331,7 +344,7 @@ class IndexerServiceManager:
         Reload indexers from configuration.
         Useful for applying config changes without restarting.
         """
-        logger.info("Reloading indexers from configuration...")
+        self.logger.info("Reloading indexers from configuration...")
         
         # Clear existing
         self.indexers.clear()
@@ -340,7 +353,7 @@ class IndexerServiceManager:
         # Reload
         self._load_indexers()
         
-        logger.info("Reloaded %d indexer(s)", len(self.indexers))
+        self.logger.info("Reloaded %d indexer(s)", len(self.indexers))
     
     def get_service_status(self) -> Dict[str, Any]:
         """

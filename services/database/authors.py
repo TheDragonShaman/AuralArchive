@@ -1,8 +1,21 @@
-import logging
+"""
+Module Name: authors.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Database operations for authors, including overrides and statistics.
+
+Location:
+    /services/database/authors.py
+
+"""
+
 import re
 from collections import defaultdict
 from typing import List, Dict, TYPE_CHECKING, Set, DefaultDict
 from .error_handling import error_handler
+from utils.logger import get_module_logger
 
 if TYPE_CHECKING:
     from .connection import DatabaseConnection
@@ -21,10 +34,10 @@ BOOK_COLUMN_ORDER = [
 
 class AuthorOperations:
     """Handles all author-related database operations"""
-    
-    def __init__(self, connection_manager, author_override_operations=None):
+
+    def __init__(self, connection_manager, author_override_operations=None, *, logger=None):
         self.connection_manager = connection_manager
-        self.logger = logging.getLogger("DatabaseService.Authors")
+        self.logger = logger or get_module_logger("Service.Database.Authors")
         self.author_override_operations = author_override_operations
 
     def _normalize_author_name(self, name: str) -> str:
@@ -118,11 +131,15 @@ class AuthorOperations:
                     unique_authors.add(name)
 
             authors_list = sorted(unique_authors, key=lambda value: value.lower())
-            self.logger.debug(f"Retrieved {len(authors_list)} unique authors after splitting joint credits")
+            self.logger.debug("Retrieved unique authors", extra={
+                "author_count": len(authors_list)
+            })
             return authors_list
         
         except Exception as e:
-            self.logger.error(f"Error getting all authors: {e}")
+            self.logger.exception("Error getting all authors", extra={
+                "error": str(e)
+            })
             return []
         
         finally:
@@ -156,11 +173,18 @@ class AuthorOperations:
                         books.append(book)
                         seen_ids.add(book_id)
 
-            self.logger.debug(f"Retrieved {len(books)} books for author '{author}' after splitting joint credits")
+            self.logger.debug("Retrieved books for author", extra={
+                "author": author,
+                "book_count": len(books),
+                "search_terms": search_terms
+            })
             return books
         
         except Exception as e:
-            self.logger.error(f"Error getting books for author '{author}': {e}")
+            self.logger.exception("Error getting books for author", extra={
+                "author": author,
+                "error": str(e)
+            })
             return []
         
         finally:
@@ -240,11 +264,17 @@ class AuthorOperations:
             stats['languages'] = list(stats['languages'])
             stats['publishers'] = list(stats['publishers'])
 
-            self.logger.debug(f"Calculated stats for author '{author}': {stats['total_books']} books")
+            self.logger.debug("Calculated author stats", extra={
+                "author": author,
+                "book_count": stats.get('total_books', 0)
+            })
             return stats
 
         except Exception as e:
-            self.logger.error(f"Error getting author stats for '{author}': {e}")
+            self.logger.exception("Error getting author stats", extra={
+                "author": author,
+                "error": str(e)
+            })
             return {'error': str(e)}
     
     def search_authors(self, query: str) -> List[str]:
@@ -257,11 +287,17 @@ class AuthorOperations:
             all_authors = self.get_all_authors()
             matched = [name for name in all_authors if normalized_query in name.lower()]
             matched.sort(key=lambda value: value.lower())
-            self.logger.debug(f"Author search for '{query}' returned {len(matched)} results after splitting joint credits")
+            self.logger.debug("Author search completed", extra={
+                "query": query,
+                "result_count": len(matched)
+            })
             return matched
 
         except Exception as e:
-            self.logger.error(f"Error searching authors with query '{query}': {e}")
+            self.logger.exception("Error searching authors", extra={
+                "query": query,
+                "error": str(e)
+            })
             return []
     
     def get_top_authors_by_book_count(self, limit: int = 10) -> List[Dict]:
@@ -288,11 +324,17 @@ class AuthorOperations:
             )[:limit]
 
             results = [{'author': name, 'book_count': count} for name, count in sorted_authors]
-            self.logger.debug(f"Retrieved top {len(results)} authors by book count after splitting joint credits")
+            self.logger.debug("Retrieved top authors by book count", extra={
+                "limit": limit,
+                "result_count": len(results)
+            })
             return results
 
         except Exception as e:
-            self.logger.error(f"Error getting top authors by book count: {e}")
+            self.logger.exception("Error getting top authors by book count", extra={
+                "limit": limit,
+                "error": str(e)
+            })
             return []
 
         finally:
@@ -332,11 +374,15 @@ class AuthorOperations:
             ]
 
             author_entries.sort(key=lambda item: (item['series_count'], item['total_books']), reverse=True)
-            self.logger.debug(f"Retrieved {len(author_entries)} authors with series after splitting joint credits")
+            self.logger.debug("Retrieved authors with series", extra={
+                "result_count": len(author_entries)
+            })
             return author_entries
         
         except Exception as e:
-            self.logger.error(f"Error getting authors with series: {e}")
+            self.logger.exception("Error getting authors with series", extra={
+                "error": str(e)
+            })
             return []
         
         finally:
@@ -361,14 +407,21 @@ class AuthorOperations:
                           "audible_books_count", "last_fetched_at", "created_at", "updated_at"]
                 
                 metadata = dict(zip(columns, row))
-                self.logger.debug(f"Retrieved metadata for author '{author_name}'")
+                self.logger.debug("Retrieved author metadata", extra={
+                    "author": author_name
+                })
                 return metadata
             else:
-                self.logger.debug(f"No metadata found for author '{author_name}'")
+                self.logger.debug("No author metadata found", extra={
+                    "author": author_name
+                })
                 return {}
         
         except Exception as e:
-            self.logger.error(f"Error getting author metadata for '{author_name}': {e}")
+            self.logger.exception("Error getting author metadata", extra={
+                "author": author_name,
+                "error": str(e)
+            })
             return {}
         
         finally:
@@ -406,7 +459,9 @@ class AuthorOperations:
                     author_data.get('audible_books_count', 0),
                     author_data['name']
                 ))
-                self.logger.debug(f"Updated metadata for author '{author_data['name']}'")
+                self.logger.debug("Updated author metadata", extra={
+                    "author": author_data.get('name')
+                })
             else:
                 # Insert new author
                 cursor.execute("""
@@ -424,13 +479,18 @@ class AuthorOperations:
                     author_data.get('total_books_count', 0),
                     author_data.get('audible_books_count', 0)
                 ))
-                self.logger.debug(f"Inserted new metadata for author '{author_data['name']}'")
+                self.logger.debug("Inserted new author metadata", extra={
+                    "author": author_data.get('name')
+                })
             
             conn.commit()
             return True
         
         except Exception as e:
-            self.logger.error(f"Error upserting author metadata for '{author_data.get('name')}': {e}")
+            self.logger.exception("Error upserting author metadata", extra={
+                "author": author_data.get('name'),
+                "error": str(e)
+            })
             if conn:
                 conn.rollback()
             return False
@@ -461,11 +521,17 @@ class AuthorOperations:
                     pending_authors.add(name)
 
             author_list = sorted(pending_authors, key=lambda value: value.lower())
-            self.logger.debug(f"Found {len(author_list)} authors needing metadata refresh after splitting joint credits")
+            self.logger.debug("Found authors needing metadata refresh", extra={
+                "result_count": len(author_list),
+                "hours_threshold": hours_threshold
+            })
             return author_list
         
         except Exception as e:
-            self.logger.error(f"Error getting authors needing refresh: {e}")
+            self.logger.exception("Error getting authors needing refresh", extra={
+                "hours_threshold": hours_threshold,
+                "error": str(e)
+            })
             return []
         
         finally:

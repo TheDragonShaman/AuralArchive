@@ -1,6 +1,29 @@
 """
-Search API - Audiobook search endpoints using SearchEngineService and IndexerServiceManager
-Location: api/search_api.py
+Module Name: search_api.py
+Author: TheDragonShaman
+Created: July 9, 2025
+Last Modified: December 23, 2025
+Description:
+    Audiobook Search REST API powered by SearchEngineService and IndexerServiceManager.
+    Supports manual and direct provider searches plus legacy endpoints used by
+    download automation flows.
+
+Location:
+    /api/search_api.py
+
+Search API
+==========
+
+Endpoints (selected):
+- POST /api/search/manual                  - Manual search
+- POST /api/search/direct                  - Direct provider search
+- GET  /api/search/automatic/status        - Automatic search status (stub)
+- POST /api/search/automatic/start|stop    - Automatic search control (stub)
+- POST /api/search/automatic/pause|resume  - Automatic search control (stub)
+- GET  /api/search/automatic/queue         - Automatic queue (stub)
+- GET/POST /api/search/automatic/config    - Automatic config (stub)
+- POST /api/search/manual/search           - Legacy manual search
+- POST /api/search/manual/download         - Legacy manual download to client
 """
 
 from flask import Blueprint, request, jsonify
@@ -8,11 +31,13 @@ from datetime import datetime
 import logging
 from typing import Any, Dict, List
 
+from utils.logger import get_module_logger
+
 from services.service_manager import get_config_service, get_status_service
 from utils.search_normalization import normalize_search_terms
 
 search_api_bp = Blueprint('search_api', __name__, url_prefix='/api/search')
-logger = logging.getLogger("SearchAPI")
+logger = get_module_logger("API.Search")
 
 search_engine_service = None
 indexer_manager_service = None
@@ -63,7 +88,7 @@ def manual_search():
         if not title:
             return jsonify({'success': False, 'error': 'Title is required'}), 400
         
-        logger.info(f"Manual search requested: {title} by {author}")
+        logger.info("Manual search requested: %s by %s", title, author)
         tracker = _status_tracker()
         status_id = None
         if tracker:
@@ -87,7 +112,7 @@ def manual_search():
             raise
         
     except Exception as e:
-        logger.error(f"Error in manual search: {e}", exc_info=True)
+        logger.error("Error in manual search: %s", e, exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
@@ -116,6 +141,18 @@ def direct_provider_search():
         search_title = normalized_title or title or normalized_query
         search_author = normalized_author or author
 
+        tracker = _status_tracker()
+        status_id = None
+        if tracker:
+            event = tracker.start_event(
+                category='search',
+                title=f"Searching providers for {search_title or query or 'title'}",
+                message=search_author or 'Direct providers',
+                source='Direct Search',
+                metadata={'query': query, 'author': search_author, 'title': search_title}
+            )
+            status_id = event['id']
+
         direct_indexers = [
             (name, indexer)
             for name, indexer in indexer_manager_service.indexers.items()
@@ -142,6 +179,9 @@ def direct_provider_search():
                 logger.error("Direct provider %s search failed: %s", name, exc)
                 provider_stats[name] = 0
 
+        if status_id:
+            tracker.complete_event(status_id, message=f"{len(aggregated)} results ready")
+
         return jsonify({
             'success': True,
             'results': aggregated,
@@ -150,7 +190,10 @@ def direct_provider_search():
             'provider_breakdown': provider_stats
         })
     except Exception as exc:
-        logger.error(f"Error searching direct providers: {exc}", exc_info=True)
+        tracker = _status_tracker()
+        if tracker and 'status_id' in locals() and status_id:
+            tracker.fail_event(status_id, message='Search failed', error=str(exc))
+        logger.error("Error searching direct providers: %s", exc, exc_info=True)
         return jsonify({'success': False, 'error': str(exc)}), 500
 
 
@@ -170,7 +213,7 @@ def get_automatic_status():
             'message': 'Automatic search service not yet implemented - Phase 2'
         })
     except Exception as e:
-        logger.error(f"Error getting automatic status: {e}", exc_info=True)
+        logger.error("Error getting automatic status: %s", e, exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 
@@ -183,7 +226,7 @@ def start_automatic_search():
             'message': 'Automatic search service not yet implemented - Phase 2'
         })
     except Exception as e:
-        logger.error(f"Error starting automatic search: {e}", exc_info=True)
+        logger.error("Error starting automatic search: %s", e, exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 
@@ -196,7 +239,7 @@ def stop_automatic_search():
             'message': 'Automatic search service not yet implemented - Phase 2'
         })
     except Exception as e:
-        logger.error(f"Error stopping automatic search: {e}", exc_info=True)
+        logger.error("Error stopping automatic search: %s", e, exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 
@@ -209,7 +252,7 @@ def pause_automatic_search():
             'message': 'Automatic search service not yet implemented - Phase 2'
         })
     except Exception as e:
-        logger.error(f"Error pausing automatic search: {e}", exc_info=True)
+        logger.error("Error pausing automatic search: %s", e, exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 
@@ -222,7 +265,7 @@ def resume_automatic_search():
             'message': 'Automatic search service not yet implemented - Phase 2'
         })
     except Exception as e:
-        logger.error(f"Error resuming automatic search: {e}", exc_info=True)
+        logger.error("Error resuming automatic search: %s", e, exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 
@@ -236,7 +279,7 @@ def get_automatic_queue():
             'count': 0
         })
     except Exception as e:
-        logger.error(f"Error getting automatic queue: {e}", exc_info=True)
+        logger.error("Error getting automatic queue: %s", e, exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 
@@ -249,7 +292,7 @@ def get_automatic_config():
             'config': {}
         })
     except Exception as e:
-        logger.error(f"Error getting automatic config: {e}", exc_info=True)
+        logger.error("Error getting automatic config: %s", e, exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 
@@ -262,7 +305,7 @@ def update_automatic_config():
             'message': 'Automatic search service not yet implemented - Phase 2'
         })
     except Exception as e:
-        logger.error(f"Error updating automatic config: {e}", exc_info=True)
+        logger.error("Error updating automatic config: %s", e, exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 
@@ -304,7 +347,7 @@ def manual_search_legacy():
             if not title:
                 return jsonify({'success': False, 'error': 'Title is required'}), 400
         
-        logger.info(f"Manual search requested: {title} by {author}")
+        logger.info("Manual search requested: %s by %s", title, author)
         tracker = _status_tracker()
         status_id = None
         if tracker:
@@ -328,7 +371,7 @@ def manual_search_legacy():
             raise
         
     except Exception as e:
-        logger.error(f"Error in manual search: {e}", exc_info=True)
+        logger.error("Error in manual search: %s", e, exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
@@ -378,9 +421,9 @@ def manual_download():
         if 'localhost' in download_link or '127.0.0.1' in download_link:
             download_link = download_link.replace('localhost', qb_host)
             download_link = download_link.replace('127.0.0.1', qb_host)
-            logger.info(f"Replaced localhost with host IP {qb_host}")
+            logger.info("Replaced localhost with host IP %s", qb_host)
         
-        logger.info(f"Manual download: {result.get('title', 'Unknown')}")
+        logger.info("Manual download: %s", result.get('title', 'Unknown'))
         
         # Get qBittorrent settings from config
         qb_port = config_service.get_config_value('qbittorrent', 'qb_port', fallback='8080')
@@ -419,13 +462,13 @@ def manual_download():
         
         if not add_result.get('success'):
             error_msg = add_result.get('error', 'Failed to add torrent')
-            logger.error(f"qBittorrent error: {error_msg}")
+            logger.error("qBittorrent error: %s", error_msg)
             return jsonify({
                 'success': False,
                 'error': error_msg
             }), 500
         
-        logger.info(f"Successfully sent to qBittorrent: {result.get('title')}")
+        logger.info("Successfully sent to qBittorrent: %s", result.get('title'))
         
         return jsonify({
             'success': True,
@@ -434,7 +477,7 @@ def manual_download():
         })
         
     except Exception as e:
-        logger.error(f"Error in manual download: {e}", exc_info=True)
+        logger.error("Error in manual download: %s", e, exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)
@@ -450,7 +493,7 @@ def preview_download():
             'message': 'Download preview not yet implemented - Phase 2'
         })
     except Exception as e:
-        logger.error(f"Error in download preview: {e}", exc_info=True)
+        logger.error("Error in download preview: %s", e, exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 
@@ -469,7 +512,7 @@ def test_search_functionality():
         return jsonify(result)
         
     except Exception as e:
-        logger.error(f"Error in search test: {e}", exc_info=True)
+        logger.error("Error in search test: %s", e, exc_info=True)
         return jsonify({'success': False, 'error': str(e), 'test_timestamp': datetime.now().isoformat()}), 500
 
 
@@ -492,5 +535,5 @@ def health_check():
         return jsonify(health)
         
     except Exception as e:
-        logger.error(f"Error in health check: {e}", exc_info=True)
+        logger.error("Error in health check: %s", e, exc_info=True)
         return jsonify({'status': 'unhealthy', 'error': str(e), 'timestamp': datetime.now().isoformat()}), 500

@@ -1,17 +1,24 @@
 """
-AudioBookShelf Server Information
-File: services/audiobookshelf/serverinfo.py
-Handles server status and information retrieval
+Module Name: serverinfo.py
+Author: TheDragonShaman
+Created: August 26, 2025
+Last Modified: December 24, 2025
+Description:
+    Retrieve AudioBookShelf server information and status.
+Location:
+    /services/audiobookshelf/serverinfo.py
+
 """
-import logging
 from typing import Dict, Tuple
+
+from utils.logger import get_module_logger
 
 class AudioBookShelfServerInfo:
     """Handles AudioBookShelf server information and status."""
-    
-    def __init__(self, connection):
+
+    def __init__(self, connection, logger=None):
         self.connection = connection
-        self.logger = logging.getLogger("AudioBookShelfServerInfo")
+        self.logger = logger or get_module_logger("Service.AudioBookShelf.ServerInfo")
     
     def get_server_info(self) -> Tuple[bool, Dict, str]:
         """Get AudioBookShelf server information."""
@@ -43,9 +50,12 @@ class AudioBookShelfServerInfo:
             else:
                 return False, {}, f"Failed to get server info: HTTP {response.status_code}"
         
-        except Exception as e:
-            self.logger.error(f"Error getting server info: {e}")
-            return False, {}, f"Error: {str(e)}"
+        except Exception as exc:
+            self.logger.error(
+                "Error getting server info",
+                extra={"error": str(exc)},
+            )
+            return False, {}, f"Error: {str(exc)}"
     
     def get_server_status(self) -> Tuple[bool, Dict, str]:
         """Get basic server status information."""
@@ -69,6 +79,9 @@ class AudioBookShelfServerInfo:
                 }
                 return False, status, message
         
-        except Exception as e:
-            self.logger.error(f"Error getting server status: {e}")
-            return False, {'online': False}, f"Error: {str(e)}"
+        except Exception as exc:
+            self.logger.error(
+                "Error getting server status",
+                extra={"error": str(exc)},
+            )
+            return False, {'online': False}, f"Error: {str(exc)}"

@@ -183,7 +183,7 @@ function displayCompactView(list) {
                                 <span><i class="fas fa-layer-group mr-1"></i>${author.series_count || 0} series</span>
                                 <span><i class="fas fa-headphones mr-1"></i>${totalHours} hrs</span>
                                 <span class="text-success"><i class="fas fa-check mr-1"></i>${owned} owned</span>
-                                ${missing > 0 ? `<span class="text-warning"><i class="fas fa-exclamation mr-1"></i>${missing} missing</span>` : ''}
+                                ${missing > 0 ? `<span class="text-warning">${missing} missing</span>` : ''}
                             </div>
                         </div>
                     </div>

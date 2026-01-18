@@ -13,7 +13,7 @@
     const timestampEl = document.getElementById('statusBarTimestamp');
 
     const POLL_INTERVAL = 2000;
-    const DISPLAY_INTERVAL = 5000;
+    const DISPLAY_INTERVAL = 5000; // unused when cycling is disabled
     const STATUS_ENDPOINT = '/api/status/feed';
     const LEVEL_CONFIG = {
         success: { alert: 'alert-success', badge: 'badge-success' },
@@ -25,7 +25,6 @@
 
     let currentEvents = [];
     let currentIndex = 0;
-    let cycleHandle = null;
     let lastSignature = '';
 
     function updateLevel(level) {
@@ -89,17 +88,11 @@
     }
 
     function scheduleCycle() {
-        if (cycleHandle) {
-            clearInterval(cycleHandle);
-            cycleHandle = null;
+        // Cycling disabled: always show the most recent event
+        if (currentEvents.length > 0) {
+            currentIndex = 0;
+            updateContent(currentEvents[0]);
         }
-        if (currentEvents.length <= 1) {
-            return;
-        }
-        cycleHandle = setInterval(() => {
-            currentIndex = (currentIndex + 1) % currentEvents.length;
-            updateContent(currentEvents[currentIndex]);
-        }, DISPLAY_INTERVAL);
     }
 
     async function poll() {

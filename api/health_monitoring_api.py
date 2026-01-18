@@ -1,14 +1,39 @@
 """
-Health Monitoring API Routes
-Provides endpoints for service health monitoring and system metrics
+Module Name: health_monitoring_api.py
+Author: TheDragonShaman
+Created: July 2, 2025
+Last Modified: December 23, 2025
+Description:
+    REST endpoints for service health monitoring and system metrics. Interfaces
+    with the health monitor to fetch status, histories, alerts, and to start or
+    stop monitoring routines.
+
+Location:
+    /api/health_monitoring_api.py
+
+Health Monitoring API
+=====================
+
+Endpoints:
+- GET    /api/health/status                 - Overall health status
+- GET    /api/health/services               - Health of all services
+- GET    /api/health/services/<name>        - Health history for a service
+- GET    /api/health/system                 - System performance metrics
+- POST   /api/health/monitoring/start       - Start monitoring
+- POST   /api/health/monitoring/stop        - Stop monitoring
+- GET    /api/health/monitoring/status      - Monitoring status
+- POST   /api/health/check/<name>           - Trigger immediate health check
+- GET    /api/health/alerts                 - Recent health alerts
 """
 from flask import Blueprint, jsonify, request
 import logging
 from functools import wraps
 from datetime import datetime
+from utils.logger import get_module_logger
 
 # Create blueprint
 health_monitoring_bp = Blueprint('health_monitoring', __name__)
+logger = get_module_logger("API.Health.Monitoring")
 
 def handle_errors(f):
     """Decorator to handle API errors"""
@@ -17,7 +42,7 @@ def handle_errors(f):
         try:
             return f(*args, **kwargs)
         except Exception as e:
-            logging.error(f"API Error in {f.__name__}: {e}")
+            logger.error(f"API Error in {f.__name__}: {e}")
             return jsonify({'error': str(e), 'success': False}), 500
     return decorated_function
 

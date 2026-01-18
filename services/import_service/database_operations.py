@@ -1,14 +1,25 @@
 """
-Database Operations - Handles import-related database operations
-Manages import tracking in the books table
+Module Name: database_operations.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Database helpers for import tracking. Updates book records with library
+    paths, formats, quality, and import timestamps, and queries existing
+    import state when needed by the import service.
 
-Location: services/import/database_operations.py
-Purpose: Database operations for import tracking
+Location:
+    /services/import_service/database_operations.py
+
 """
 
-import logging
 from typing import Dict, Optional
 from datetime import datetime
+
+from utils.logger import get_module_logger
+
+
+_LOGGER = get_module_logger("Service.Import.DatabaseOperations")
 
 
 class ImportDatabaseOperations:
@@ -21,8 +32,8 @@ class ImportDatabaseOperations:
     - Clear import records
     """
     
-    def __init__(self):
-        self.logger = logging.getLogger("ImportService.DatabaseOperations")
+    def __init__(self, *, logger=None):
+        self.logger = logger or _LOGGER
     
     def update_book_import_info(self, asin: str, file_path: str, file_size: int,
                                 file_format: str, file_quality: str, naming_template: str,
@@ -42,6 +53,7 @@ class ImportDatabaseOperations:
         Returns:
             True if successful, False otherwise
         """
+        conn = None
         try:
             conn, cursor = database_service.connection_manager.connect_db()
             
@@ -115,6 +127,7 @@ class ImportDatabaseOperations:
         Returns:
             Dictionary with import info or None if not found
         """
+        conn = None
         try:
             conn, cursor = database_service.connection_manager.connect_db()
             
@@ -165,6 +178,7 @@ class ImportDatabaseOperations:
         Returns:
             True if successful, False otherwise
         """
+        conn = None
         try:
             conn, cursor = database_service.connection_manager.connect_db()
             
@@ -210,6 +224,7 @@ class ImportDatabaseOperations:
         Returns:
             List of dictionaries with book and import information
         """
+        conn = None
         try:
             conn, cursor = database_service.connection_manager.connect_db()
             

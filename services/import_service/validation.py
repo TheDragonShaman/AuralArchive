@@ -1,16 +1,27 @@
 """
-Import Validator - Validates import requests and file integrity
-Checks file validity, metadata, and quality detection
+Module Name: validation.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Validation logic for import operations, including filesystem checks,
+    supported format validation, and audio quality detection via ffprobe
+    when available.
 
-Location: services/import/validation.py
-Purpose: Validation logic for import operations
+Location:
+    /services/import_service/validation.py
+
 """
 
-import logging
 import os
 from typing import Dict, Tuple
 from pathlib import Path
 import subprocess
+
+from utils.logger import get_module_logger
+
+
+_LOGGER = get_module_logger("Service.Import.Validator")
 
 
 class ImportValidator:
@@ -29,8 +40,8 @@ class ImportValidator:
         'm4b', 'm4a', 'mp3', 'mp4', 'flac', 'ogg', 'opus', 'aac'
     }
     
-    def __init__(self):
-        self.logger = logging.getLogger("ImportService.Validator")
+    def __init__(self, *, logger=None):
+        self.logger = logger or _LOGGER
     
     def validate_import_request(self, source_file_path: str, book_data: Dict) -> Tuple[bool, str]:
         """

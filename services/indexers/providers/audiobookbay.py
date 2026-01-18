@@ -1,8 +1,19 @@
-"""AudiobookBay provider adapter (HTML scraper)."""
+"""
+Module Name: audiobookbay.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Direct provider adapter that scrapes AudiobookBay search and detail pages
+    to produce normalized torrent results.
+
+Location:
+    /services/indexers/providers/audiobookbay.py
+
+"""
 
 from __future__ import annotations
 
-import logging
 import re
 from typing import Any, Dict, List, Optional, Sequence
 from urllib.parse import quote_plus, urljoin
@@ -12,6 +23,7 @@ from bs4 import BeautifulSoup
 
 from . import register_provider
 from .base import DirectProviderAdapter, ProviderRequestSpec
+from utils.logger import get_module_logger
 
 
 @register_provider
@@ -30,11 +42,11 @@ class AudiobookBayAdapter(DirectProviderAdapter):
 
     SEARCH_PATH = "/"
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], *, logger=None):
         super().__init__(config)
         self.timeout = config.get("timeout", 20)
         self.verify_ssl = config.get("verify_ssl", True)
-        self.logger = logging.getLogger("Indexer.AudiobookBayAdapter")
+        self.logger = logger or get_module_logger("Service.Indexers.AudiobookBay")
         self._last_query_params: Dict[str, str] = {}
 
     def build_health_request(self) -> ProviderRequestSpec:

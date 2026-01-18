@@ -1,12 +1,24 @@
 """
-Service Manager - Centralized service initialization and management
-This implements a singleton pattern for all services to avoid redundant initial                            # self._services['download'] = DownloadService(config_service, database_service)
-                            self._services['download'] = None  # Placeholder until DownloadService is implementedzation
-UPDATED: Fixed imports for new modular service structure
+Module Name: service_manager.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Centralized service initialization and access point for backend services.
+
+Location:
+    /services/service_manager.py
+
 """
+
 import threading
-import logging
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
+
+from utils.logger import get_module_logger
+
+
+_LOGGER = get_module_logger("Service.Manager")
+
 
 class ServiceManager:
     """
@@ -24,18 +36,23 @@ class ServiceManager:
                     cls._instance = super().__new__(cls)
         return cls._instance
     
-    def __init__(self):
+    def __init__(self, *, logger=None):
         if not self._initialized:
             with self._lock:
                 if not self._initialized:
                     self._services: Dict[str, Any] = {}
-                    self._logger = self._setup_logger()
+                    self.logger = logger or _LOGGER
                     ServiceManager._initialized = True
-    
-    def _setup_logger(self):
-        """Setup logger using standardized configuration"""
-        from utils.logger import get_module_logger
-        return get_module_logger("ServiceManager")
+
+    def _log_initialized(self, service_name: str):
+        self.logger.success("Service initialized", extra={"service": service_name})
+
+    def _log_failed(self, service_name: str, error: Optional[Exception] = None):
+        log_extra = {"service": service_name, "error": str(error) if error else None}
+        if error:
+            self.logger.exception("Service initialization failed", extra=log_extra)
+        else:
+            self.logger.error("Service initialization failed", extra=log_extra)
 
     def get_database_service(self):
         """Get or create DatabaseService instance"""
@@ -45,7 +62,7 @@ class ServiceManager:
                     # Import here to avoid circular imports
                     from services.database import DatabaseService
                     self._services['database'] = DatabaseService()
-                    self._logger.debug("DatabaseService initialized")
+                    self._log_initialized("database")
         return self._services['database']
     
     def get_audible_service(self):
@@ -56,7 +73,7 @@ class ServiceManager:
                     # Import here to avoid circular imports
                     from services.audible.audible_catalog_service.audible_catalog_service import AudibleService
                     self._services['audible'] = AudibleService()
-                    self._logger.debug("AudibleService initialized")
+                    self._log_initialized("audible")
         return self._services['audible']
     
     def get_audible_wishlist_service(self):
@@ -76,7 +93,7 @@ class ServiceManager:
                         sync_interval_minutes=15,
                         auto_start=False  # Don't auto-start, let app.py control startup
                     )
-                    self._logger.debug("AudibleWishlistService initialized")
+                    self._log_initialized("audible_wishlist")
         return self._services['audible_wishlist']
     
     def get_audible_metadata_sync_service(self):
@@ -89,10 +106,10 @@ class ServiceManager:
                     
                     # Initialize with logger
                     from utils.logger import get_module_logger
-                    logger = get_module_logger("AudibleMetadataSync")
+                    logger = get_module_logger("Service.Audible.MetadataSync")
                     
                     self._services['audible_metadata_sync'] = AudibleMetadataSyncService(logger=logger)
-                    self._logger.debug("AudibleMetadataSyncService initialized")
+                    self._log_initialized("audible_metadata_sync")
         return self._services['audible_metadata_sync']
     
     def get_audible_service_manager(self):
@@ -114,9 +131,15 @@ class ServiceManager:
                     success = manager.initialize_series_service(db_service)
                     
                     if success:
-                        self._logger.debug("AudibleServiceManager initialized with series service")
+                        self.logger.debug(
+                            "AudibleServiceManager initialized with series service",
+                            extra={"service": "audible_service_manager", "series_initialized": True},
+                        )
                     else:
-                        self._logger.warning("AudibleServiceManager created but series service not initialized (auth may be needed)")
+                        self.logger.warning(
+                            "AudibleServiceManager created but series service not initialized",
+                            extra={"service": "audible_service_manager", "series_initialized": False},
+                        )
                     
                     self._services['audible_service_manager'] = manager
         return self._services['audible_service_manager']
@@ -129,7 +152,7 @@ class ServiceManager:
                     # Import here to avoid circular imports
                     from services.audiobookshelf import AudioBookShelfService
                     self._services['audiobookshelf'] = AudioBookShelfService()
-                    self._logger.debug("AudioBookShelfService initialized")
+                    self._log_initialized("audiobookshelf")
         return self._services['audiobookshelf']
     
     def get_config_service(self):
@@ -140,7 +163,7 @@ class ServiceManager:
                     # Import from modular directory
                     from services.config import ConfigService
                     self._services['config'] = ConfigService()
-                    self._logger.debug("ConfigService initialized")
+                    self._log_initialized("config")
         return self._services['config']
     
     def get_audiobook_config_manager(self):
@@ -156,7 +179,7 @@ class ServiceManager:
                     # Import here to avoid circular imports
                     from services.metadata import MetadataUpdateService
                     self._services['metadata'] = MetadataUpdateService()
-                    self._logger.debug("MetadataService initialized")
+                    self._log_initialized("metadata")
         return self._services['metadata']
     
     def get_metadata_update_service(self):
@@ -167,7 +190,7 @@ class ServiceManager:
                     # Import from single file (separate from modular metadata service)
                     from services.metadata import MetadataUpdateService
                     self._services['metadata_update'] = MetadataUpdateService()
-                    self._logger.debug("MetadataUpdateService initialized")
+                    self._log_initialized("metadata_update")
         return self._services['metadata_update']
     
 
@@ -191,9 +214,9 @@ class ServiceManager:
                     try:
                         from services.audnexus import AudnexusService
                         self._services['audnexus'] = AudnexusService()
-                        self._logger.debug("AudnexusService initialized")
-                    except Exception as e:
-                        self._logger.error(f"Failed to initialize AudnexusService: {e}")
+                        self._log_initialized("audnexus")
+                    except Exception as exc:
+                        self._log_failed("audnexus", exc)
                         return None
         return self._services.get('audnexus')
     
@@ -205,9 +228,9 @@ class ServiceManager:
                     try:
                         from services.conversion_service import ConversionService
                         self._services['conversion'] = ConversionService()
-                        self._logger.debug("ConversionService initialized")
-                    except Exception as e:
-                        self._logger.error(f"Failed to initialize ConversionService: {e}")
+                        self._log_initialized("conversion")
+                    except Exception as exc:
+                        self._log_failed("conversion", exc)
                         return None
         return self._services.get('conversion')
     
@@ -219,9 +242,9 @@ class ServiceManager:
                     try:
                         from services.audnexus.hybrid_service import HybridAudiobookService
                         self._services['hybrid_audiobook'] = HybridAudiobookService()
-                        self._logger.debug("HybridAudiobookService initialized")
-                    except Exception as e:
-                        self._logger.error(f"Failed to initialize HybridAudiobookService: {e}")
+                        self._log_initialized("hybrid_audiobook")
+                    except Exception as exc:
+                        self._log_failed("hybrid_audiobook", exc)
                         return None
         return self._services.get('hybrid_audiobook')
     
@@ -233,9 +256,9 @@ class ServiceManager:
                     try:
                         from services.search_engine.search_engine_service import SearchEngineService
                         self._services['search_engine'] = SearchEngineService()
-                        self._logger.debug("SearchEngineService initialized")
-                    except Exception as e:
-                        self._logger.error(f"Failed to initialize SearchEngineService: {e}")
+                        self._log_initialized("search_engine")
+                    except Exception as exc:
+                        self._log_failed("search_engine", exc)
                         return None
         return self._services.get('search_engine')
     
@@ -247,9 +270,9 @@ class ServiceManager:
                     try:
                         from services.indexers import get_indexer_service_manager
                         self._services['indexer_manager'] = get_indexer_service_manager()
-                        self._logger.debug("IndexerServiceManager initialized")
-                    except Exception as e:
-                        self._logger.error(f"Failed to initialize IndexerServiceManager: {e}")
+                        self._log_initialized("indexer_manager")
+                    except Exception as exc:
+                        self._log_failed("indexer_manager", exc)
                         return None
         return self._services.get('indexer_manager')
     
@@ -261,9 +284,9 @@ class ServiceManager:
                     try:
                         from services.file_naming import FileNamingService
                         self._services['file_naming'] = FileNamingService()
-                        self._logger.debug("FileNamingService initialized")
-                    except Exception as e:
-                        self._logger.error(f"Failed to initialize FileNamingService: {e}")
+                        self._log_initialized("file_naming")
+                    except Exception as exc:
+                        self._log_failed("file_naming", exc)
                         return None
         return self._services.get('file_naming')
     
@@ -275,9 +298,9 @@ class ServiceManager:
                     try:
                         from services.import_service import ImportService
                         self._services['import'] = ImportService()
-                        self._logger.debug("ImportService initialized")
-                    except Exception as e:
-                        self._logger.error(f"Failed to initialize ImportService: {e}")
+                        self._log_initialized("import")
+                    except Exception as exc:
+                        self._log_failed("import", exc)
                         return None
         return self._services.get('import')
     
@@ -292,9 +315,9 @@ class ServiceManager:
                         # Start automatically so it can react to config toggles immediately
                         service.start()
                         self._services['automatic_download'] = service
-                        self._logger.debug("AutomaticDownloadService initialized")
-                    except Exception as e:
-                        self._logger.error(f"Failed to initialize AutomaticDownloadService: {e}")
+                        self._log_initialized("automatic_download")
+                    except Exception as exc:
+                        self._log_failed("automatic_download", exc)
                         return None
         return self._services.get('automatic_download')
 
@@ -306,9 +329,9 @@ class ServiceManager:
                     try:
                         from services.download_management import DownloadManagementService
                         self._services['download_management'] = DownloadManagementService()
-                        self._logger.debug("DownloadManagementService initialized")
-                    except Exception as e:
-                        self._logger.error(f"Failed to initialize DownloadManagementService: {e}")
+                        self._log_initialized("download_management")
+                    except Exception as exc:
+                        self._log_failed("download_management", exc)
                         return None
         return self._services.get('download_management')
 
@@ -320,9 +343,9 @@ class ServiceManager:
                     try:
                         from services.status_service import StatusService
                         self._services['status'] = StatusService()
-                        self._logger.debug("StatusService initialized")
-                    except Exception as e:
-                        self._logger.error(f"Failed to initialize StatusService: {e}")
+                        self._log_initialized("status")
+                    except Exception as exc:
+                        self._log_failed("status", exc)
                         return None
         return self._services.get('status')
 
@@ -333,13 +356,13 @@ class ServiceManager:
             with self._lock:
                 if service_name in self._services:
                     del self._services[service_name]
-                    self._logger.info(f"Reset {service_name} service")
+                    self.logger.info("Reset service", extra={"service": service_name})
     
     def reset_all_services(self):
         """Reset all services"""
         with self._lock:
             self._services.clear()
-            self._logger.info("Reset all services")
+            self.logger.info("Reset all services", extra={"service": "all"})
     
     def get_service_status(self) -> Dict[str, bool]:
         """Get status of all services"""
@@ -360,22 +383,21 @@ class ServiceManager:
         """Start all services that support async startup"""
         try:
             # Event bus and coordinator services removed
-            self._logger.debug("All async services started successfully")
+            self.logger.success("Async services started", extra={"services_started": []})
             
         except Exception as e:
-            self._logger.error(f"Error starting services: {e}")
+            self.logger.error("Error starting services", extra={"error": str(e)})
             raise
 
     async def stop_all_services(self):
         """Stop all services that support async shutdown"""
         try:
             # Event bus services removed - no services to stop
-            self._logger.debug("All async services stopped successfully")
+            self.logger.success("Async services stopped", extra={"services_stopped": []})
             
         except Exception as e:
-            self._logger.error(f"Error stopping services: {e}")
+            self.logger.error("Error stopping services", extra={"error": str(e)})
             raise
-
 
 
 # Global service manager instance

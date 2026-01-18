@@ -1,34 +1,34 @@
 """
-Audible Recommendations Service
-===============================
+Module Name: audible_recommendations_service.py
+Author: TheDragonShaman
+Created: August 26, 2025
+Last Modified: December 23, 2025
+Description:
+    Fetch personalized recommendations and similar books via Audible API with cached results.
+Location:
+    /services/audible/audible_recommendations_service/audible_recommendations_service.py
 
-Handles fetching personalized recommendations from Audible API
-and integrating them into the AuralArchive discover page.
-Uses the shared AudibleManager for authentication and API calls.
 """
 
-import logging
 import os
-import json
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 from datetime import datetime, timedelta
 import threading
-import time
 
+from utils.logger import get_module_logger
 from ..audible_service_manager import get_audible_manager
-
-logger = logging.getLogger("AuralArchiveLogger")
 
 class AudibleRecommendationsService:
     """Service for managing Audible recommendations integration."""
     
-    def __init__(self, config_service=None):
+    def __init__(self, config_service=None, logger=None):
         """
         Initialize the recommendations service.
         
         Args:
             config_service: Configuration service instance
         """
+        self.logger = logger or get_module_logger("Service.Audible.Recommendations")
         self.config_service = config_service
         self.audible_manager = get_audible_manager(config_service)
         self._last_recommendations = []
@@ -64,10 +64,16 @@ class AudibleRecommendationsService:
         with self._lock:
             # Check cache first
             if not force_refresh and self._is_cache_valid():
-                logger.info("Returning cached recommendations")
+                self.logger.info(
+                    "Returning cached recommendations",
+                    extra={"cache_size": len(self._last_recommendations), "requested": num_results},
+                )
                 return self._last_recommendations[:num_results]
             
-            logger.info(f"Fetching library-based recommendations")
+            self.logger.info(
+                "Fetching library-based recommendations",
+                extra={"requested": num_results, "force_refresh": force_refresh},
+            )
             
             try:
                 recommendations = self._get_catalog_fallback(num_results)
@@ -76,11 +82,18 @@ class AudibleRecommendationsService:
                 self._last_recommendations = recommendations
                 self._last_fetch_time = datetime.now()
                 
-                logger.info(f"Successfully fetched {len(recommendations)} recommendations")
+                self.logger.info(
+                    "Successfully fetched recommendations",
+                    extra={"count": len(recommendations)},
+                )
                 return recommendations
                 
             except Exception as e:
-                logger.error(f"Error getting recommendations: {e}")
+                self.logger.error(
+                    "Error getting recommendations",
+                    extra={"error": str(e)},
+                    exc_info=True,
+                )
                 return self._last_recommendations[:num_results] if self._last_recommendations else []
     
     def _get_catalog_fallback(self, num_results: int) -> List[Dict[str, Any]]:
@@ -106,7 +119,10 @@ class AudibleRecommendationsService:
                         all_books.extend([self._format_book_data(book) for book in books])
                         
                 except Exception as e:
-                    logger.debug(f"Author search for '{author}' failed: {e}")
+                    self.logger.debug(
+                        "Author search failed",
+                        extra={"author": author, "error": str(e)},
+                    )
                     continue
             
             # Search for series continuations
@@ -125,7 +141,10 @@ class AudibleRecommendationsService:
                         all_books.extend([self._format_book_data(book) for book in books])
                         
                 except Exception as e:
-                    logger.debug(f"Series search for '{series}' failed: {e}")
+                    self.logger.debug(
+                        "Series search failed",
+                        extra={"series": series, "error": str(e)},
+                    )
                     continue
             
             # Search for genre-based recommendations
@@ -144,7 +163,10 @@ class AudibleRecommendationsService:
                         all_books.extend([self._format_book_data(book) for book in books])
                         
                 except Exception as e:
-                    logger.debug(f"Genre search for '{genre}' failed: {e}")
+                    self.logger.debug(
+                        "Genre search failed",
+                        extra={"genre": genre, "error": str(e)},
+                    )
                     continue
             
             # Filter out books already in library and remove duplicates
@@ -169,12 +191,46 @@ class AudibleRecommendationsService:
                 
                 if len(unique_books) >= num_results:
                     break
+
+            # If we didn't gather enough unique books, backfill with generic picks
+            if len(unique_books) < num_results:
+                try:
+                    fallback_needed = num_results - len(unique_books)
+                    fallback_books = self._get_generic_fallback(fallback_needed)
+
+                    for book in fallback_books:
+                        asin = book.get('asin')
+                        title = book.get('title', '').lower()
+
+                        if asin in owned_books or asin in seen_asins:
+                            continue
+
+                        if any(title in owned_title.lower() for owned_title in preferences.get('owned_titles', [])):
+                            continue
+
+                        seen_asins.add(asin)
+                        unique_books.append(book)
+
+                        if len(unique_books) >= num_results:
+                            break
+                except Exception as e:
+                    self.logger.debug(
+                        "Fallback padding failed",
+                        extra={"error": str(e)},
+                    )
             
-            logger.info(f"Library-based recommendations: {len(unique_books)} unique books found")
+            self.logger.info(
+                "Library-based recommendations computed",
+                extra={"unique_books": len(unique_books), "requested": num_results},
+            )
             return unique_books
             
         except Exception as e:
-            logger.error(f"Library-based recommendations failed: {e}")
+            self.logger.error(
+                "Library-based recommendations failed",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
             return self._get_generic_fallback(num_results)
     
     def _analyze_library_preferences(self) -> Dict[str, Any]:
@@ -186,7 +242,10 @@ class AudibleRecommendationsService:
             # Connect to database
             db_path = "database/auralarchive_database.db"
             if not os.path.exists(db_path):
-                logger.warning("Database not found, using generic recommendations")
+                self.logger.warning(
+                    "Database not found, using generic recommendations",
+                    extra={"db_path": db_path},
+                )
                 return {}
                 
             conn = sqlite3.connect(db_path)
@@ -203,7 +262,10 @@ class AudibleRecommendationsService:
             conn.close()
             
             if not books:
-                logger.warning("No books found in library")
+                self.logger.warning(
+                    "No books found in library",
+                    extra={"db_path": db_path},
+                )
                 return {}
             
             # Analyze patterns
@@ -278,11 +340,23 @@ class AudibleRecommendationsService:
                 'total_books': total_books
             }
             
-            logger.info(f"Library analysis: {len(top_authors)} authors, {len(active_series)} series, {len(preferred_genres)} genres")
+            self.logger.info(
+                "Library analysis completed",
+                extra={
+                    "authors": len(top_authors),
+                    "series": len(active_series),
+                    "genres": len(preferred_genres),
+                    "total_books": total_books,
+                },
+            )
             return preferences
             
         except Exception as e:
-            logger.error(f"Library analysis failed: {e}")
+            self.logger.error(
+                "Library analysis failed",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
             return {}
     
     def _get_generic_fallback(self, num_results: int) -> List[Dict[str, Any]]:
@@ -310,7 +384,10 @@ class AudibleRecommendationsService:
                             break
                             
                 except Exception as e:
-                    logger.debug(f"Search term '{term}' failed: {e}")
+                    self.logger.debug(
+                        "Search term failed",
+                        extra={"term": term, "error": str(e)},
+                    )
                     continue
             
             # Remove duplicates and limit results
@@ -327,7 +404,11 @@ class AudibleRecommendationsService:
             return unique_books
             
         except Exception as e:
-            logger.error(f"Generic fallback failed: {e}")
+            self.logger.error(
+                "Generic fallback failed",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
             return []
     
     def get_similar_books(self, asin: str, num_results: int = 10) -> List[Dict[str, Any]]:
@@ -347,7 +428,11 @@ class AudibleRecommendationsService:
             return []
             
         except Exception as e:
-            logger.error(f"Error getting similar books for {asin}: {e}")
+            self.logger.error(
+                "Error getting similar books",
+                extra={"asin": asin, "error": str(e)},
+                exc_info=True,
+            )
             return []
     
     def _format_book_data(self, book: Dict[str, Any]) -> Dict[str, Any]:
@@ -369,7 +454,7 @@ class AudibleRecommendationsService:
         with self._lock:
             self._last_recommendations = []
             self._last_fetch_time = None
-            logger.info("Recommendations cache cleared")
+            self.logger.info("Recommendations cache cleared", extra={"event": "manual_clear"})
     
     def get_service_status(self) -> Dict[str, Any]:
         """Get current service status information."""
@@ -389,7 +474,11 @@ class AudibleRecommendationsService:
             }
             
         except Exception as e:
-            logger.error(f"Error getting service status: {e}")
+            self.logger.error(
+                "Error getting service status",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
             return {
                 'configured': False,
                 'connected': False,

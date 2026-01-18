@@ -1,16 +1,34 @@
-import logging
+"""
+Module Name: error_handling.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Error handling utilities for metadata updates, including retry helpers
+    and validation/sanitization routines.
+
+Location:
+    /services/metadata/error_handling.py
+
+"""
+
 import time
 from functools import wraps
 from typing import Callable, Any, Tuple
 
+from utils.logger import get_module_logger
+
+
+_LOGGER = get_module_logger("Service.Metadata.ErrorHandling")
+
 class MetadataErrorHandler:
     """Handles errors and retry logic for metadata update operations"""
     
-    def __init__(self):
-        self.logger = logging.getLogger("MetadataUpdateService.ErrorHandling")
+    def __init__(self, *, logger=None):
+        self.logger = logger or _LOGGER
     
     def with_retry(self, max_retries: int = 2, retry_delay: float = 1.0):
-        """Decorator for metadata operations with retry logic"""
+        """Decorator for metadata operations with retry logic."""
         def decorator(func: Callable) -> Callable:
             @wraps(func)
             def wrapper(*args, **kwargs) -> Tuple[bool, str]:
@@ -25,15 +43,32 @@ class MetadataErrorHandler:
                         
                         # Don't retry certain types of errors
                         if self._is_permanent_error(e):
-                            self.logger.error(f"Permanent error in {func.__name__}: {e}")
+                            self.logger.error(
+                                "Permanent error in operation",
+                                extra={"operation": func.__name__, "error": str(e)},
+                                exc_info=True,
+                            )
                             return False, f"Permanent error: {str(e)}"
                         
                         if attempt < max_retries - 1:
                             delay = retry_delay * (attempt + 1)
-                            self.logger.warning(f"Retrying {func.__name__} in {delay}s due to: {e}")
+                            self.logger.warning(
+                                "Retrying operation",
+                                extra={
+                                    "operation": func.__name__,
+                                    "delay_seconds": delay,
+                                    "attempt": attempt + 1,
+                                    "max_retries": max_retries,
+                                    "error": str(e),
+                                },
+                            )
                             time.sleep(delay)
                         else:
-                            self.logger.error(f"Final retry failed for {func.__name__}: {e}")
+                            self.logger.error(
+                                "Final retry failed",
+                                extra={"operation": func.__name__, "error": str(e), "attempt": attempt + 1},
+                                exc_info=True,
+                            )
                 
                 return False, f"Failed after {max_retries} attempts: {str(last_error)}"
             
@@ -79,7 +114,11 @@ class MetadataErrorHandler:
             return True, "Validation passed"
         
         except Exception as e:
-            self.logger.error(f"Error validating book data: {e}")
+            self.logger.error(
+                "Error validating book data",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
             return False, f"Validation error: {str(e)}"
     
     def _is_valid_asin(self, asin: str) -> bool:
@@ -111,7 +150,11 @@ class MetadataErrorHandler:
             return True, f"Validated {len(results)} search results"
         
         except Exception as e:
-            self.logger.error(f"Error validating search results: {e}")
+            self.logger.error(
+                "Error validating search results",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
             return False, f"Search results validation error: {str(e)}"
     
     def sanitize_metadata(self, metadata: dict) -> dict:
@@ -150,8 +193,12 @@ class MetadataErrorHandler:
                 # Truncate if too long
                 max_length = rules.get('max_length', 1000)
                 if len(value) > max_length:
+                    original_length = len(metadata.get(field, ''))
                     value = value[:max_length-3] + "..."
-                    self.logger.warning(f"Truncated {field} field (was {len(metadata.get(field, ''))} chars)")
+                    self.logger.warning(
+                        "Truncated field during sanitization",
+                        extra={"field": field, "original_length": original_length, "max_length": max_length},
+                    )
                 
                 # Strip whitespace
                 value = value.strip()
@@ -173,23 +220,33 @@ class MetadataErrorHandler:
             return sanitized
         
         except Exception as e:
-            self.logger.error(f"Error sanitizing metadata: {e}")
+            self.logger.error(
+                "Error sanitizing metadata",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
             # Return original metadata if sanitization fails
             return metadata
     
     def log_update_attempt(self, book_id: int, operation: str, details: str = ""):
         """Log metadata update attempts for debugging"""
+        payload = {"book_id": book_id, "operation": operation}
         if details:
-            self.logger.info(f"Book {book_id} - {operation}: {details}")
-        else:
-            self.logger.info(f"Book {book_id} - {operation}")
+            payload["details"] = details
+        self.logger.info("Metadata update attempt", extra=payload)
     
     def log_update_result(self, book_id: int, success: bool, message: str):
         """Log the result of metadata update operations"""
         if success:
-            self.logger.info(f"Book {book_id} update successful: {message}")
+            self.logger.info(
+                "Metadata update successful",
+                extra={"book_id": book_id, "message": message},
+            )
         else:
-            self.logger.warning(f"Book {book_id} update failed: {message}")
+            self.logger.warning(
+                "Metadata update failed",
+                extra={"book_id": book_id, "message": message},
+            )
 
 # Global instance for easy access
 error_handler = MetadataErrorHandler()

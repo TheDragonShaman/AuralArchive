@@ -1,6 +1,23 @@
-import logging
+"""
+Module Name: metadata_lookup_strategies.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Search strategies for finding book metadata via Audible service, including
+    ASIN, title/author, title-only, author-only, and series-based queries.
+
+Location:
+    /services/metadata/metadata_lookup_strategies.py
+
+"""
+
 from typing import List, Dict, Optional, TYPE_CHECKING
 from .matching import matcher
+from utils.logger import get_module_logger
+
+
+_LOGGER = get_module_logger("Service.Metadata.LookupStrategies")
 
 if TYPE_CHECKING:
     from .metadata_service import CancellationContext
@@ -8,15 +25,18 @@ if TYPE_CHECKING:
 class MetadataSearchStrategies:
     """Handles different search strategies for finding book metadata"""
     
-    def __init__(self, audible_service):
+    def __init__(self, audible_service, *, logger=None):
         self.audible_service = audible_service
-        self.logger = logging.getLogger("MetadataUpdateService.SearchStrategies")
+        self.logger = logger or _LOGGER
     
     def search_for_book_metadata(self, title: str, author: str, asin: str, 
                                 cancellation_context: Optional['CancellationContext'] = None) -> Optional[Dict]:
         """Search for book metadata using multiple strategies"""
         try:
-            self.logger.info(f"Searching for metadata: '{title}' by '{author}' (ASIN: {asin})")
+            self.logger.info(
+                "Searching for metadata",
+                extra={"title": title, "author": author, "asin": asin},
+            )
             
             # Check for cancellation before starting search
             if cancellation_context:
@@ -46,20 +66,27 @@ class MetadataSearchStrategies:
                 if result:
                     return result
             
-            self.logger.warning(f"No suitable matches found for: '{title}' by '{author}'")
+            self.logger.warning(
+                "No suitable metadata matches found",
+                extra={"title": title, "author": author, "asin": asin},
+            )
             return None
             
         except Exception as e:
             # Re-raise cancellation exceptions
             if "cancelled" in str(e).lower():
                 raise
-            self.logger.error(f"Error searching for book metadata: {e}")
+            self.logger.error(
+                "Error searching for book metadata",
+                extra={"error": str(e), "title": title, "author": author, "asin": asin},
+                exc_info=True,
+            )
             return None
     
     def _search_by_asin_strategy(self, asin: str, cancellation_context: Optional['CancellationContext'] = None) -> Optional[Dict]:
         """Strategy 1: Search by ASIN"""
         try:
-            self.logger.info(f"Strategy 1: Searching by ASIN: {asin}")
+            self.logger.info("Strategy 1: searching by ASIN", extra={"asin": asin})
             
             # Check for cancellation before making API call
             if cancellation_context:
@@ -72,27 +99,40 @@ class MetadataSearchStrategies:
                 cancellation_context.raise_if_cancelled()
             
             if not search_results:
-                self.logger.info(f"No results found for ASIN: {asin}")
+                self.logger.info("No results found for ASIN search", extra={"asin": asin})
                 return None
             
             # Look for exact ASIN match first
             exact_match = matcher.find_exact_asin_match(search_results, asin)
             if exact_match:
-                self.logger.info(f"Found exact ASIN match: {exact_match.get('Title')}")
+                self.logger.info(
+                    "Found exact ASIN match",
+                    extra={"asin": asin, "title": exact_match.get('Title')},
+                )
                 return exact_match
             
             # If no exact match, check if any result is close enough
             for result in search_results:
                 result_asin = result.get('ASIN', '')
                 if result_asin and result_asin == asin:
-                    self.logger.info(f"Found ASIN match in results: {result.get('Title')}")
+                    self.logger.info(
+                        "Found ASIN match in results",
+                        extra={"asin": asin, "title": result.get('Title')},
+                    )
                     return result
             
-            self.logger.info(f"No exact ASIN match found in {len(search_results)} results")
+            self.logger.info(
+                "No exact ASIN match found",
+                extra={"asin": asin, "result_count": len(search_results)},
+            )
             return None
             
         except Exception as e:
-            self.logger.error(f"Error in ASIN search strategy: {e}")
+            self.logger.error(
+                "Error in ASIN search strategy",
+                extra={"asin": asin, "error": str(e)},
+                exc_info=True,
+            )
             return None
     
     def _search_by_title_author_strategy(self, title: str, author: str, asin: str, 
@@ -100,7 +140,10 @@ class MetadataSearchStrategies:
         """Strategy 2: Search by title + author"""
         try:
             search_query = f"{title} {author}"
-            self.logger.info(f"Strategy 2: Searching by title + author: {search_query}")
+            self.logger.info(
+                "Strategy 2: searching by title and author",
+                extra={"title": title, "author": author, "asin": asin},
+            )
             
             # Check for cancellation before API call
             if cancellation_context:
@@ -113,33 +156,43 @@ class MetadataSearchStrategies:
                 cancellation_context.raise_if_cancelled()
             
             if not search_results:
-                self.logger.info(f"No results found for title + author search")
+                self.logger.info("No results found for title + author search")
                 return None
             
             # If we have an ASIN, try to find exact match first
             if asin and asin not in ['N/A', '']:
                 exact_match = matcher.find_exact_asin_match(search_results, asin)
                 if exact_match:
-                    self.logger.info(f"Found exact ASIN match in title/author search: {exact_match.get('Title')}")
+                    self.logger.info(
+                        "Found exact ASIN match in title/author search",
+                        extra={"asin": asin, "title": exact_match.get('Title')},
+                    )
                     return exact_match
             
             # Look for best title/author match
             best_match = matcher.find_best_match(search_results, title, author)
             if best_match:
-                self.logger.info(f"Found best match in title/author search: {best_match.get('Title')} by {best_match.get('Author')}")
+                self.logger.info(
+                    "Found best title/author match",
+                    extra={"title": best_match.get('Title'), "author": best_match.get('Author')},
+                )
                 return best_match
             
             return None
             
         except Exception as e:
-            self.logger.error(f"Error in title + author search strategy: {e}")
+            self.logger.error(
+                "Error in title + author search strategy",
+                extra={"error": str(e), "title": title, "author": author, "asin": asin},
+                exc_info=True,
+            )
             return None
     
     def _search_by_title_only_strategy(self, title: str, author: str, asin: str, 
                                       cancellation_context: Optional['CancellationContext'] = None) -> Optional[Dict]:
         """Strategy 3: Search by title only"""
         try:
-            self.logger.info(f"Strategy 3: Searching by title only: {title}")
+            self.logger.info("Strategy 3: searching by title only", extra={"title": title, "asin": asin})
             
             # Check for cancellation before API call
             if cancellation_context:
@@ -152,32 +205,42 @@ class MetadataSearchStrategies:
                 cancellation_context.raise_if_cancelled()
             
             if not search_results:
-                self.logger.info(f"No results found for title-only search")
+                self.logger.info("No results found for title-only search", extra={"title": title})
                 return None
             
             # If we have an ASIN, try to find exact match first
             if asin and asin not in ['N/A', '']:
                 exact_match = matcher.find_exact_asin_match(search_results, asin)
                 if exact_match:
-                    self.logger.info(f"Found exact ASIN match in title-only search: {exact_match.get('Title')}")
+                    self.logger.info(
+                        "Found exact ASIN match in title-only search",
+                        extra={"asin": asin, "title": exact_match.get('Title')},
+                    )
                     return exact_match
             
             # Look for best match considering both title and author if available
             best_match = matcher.find_best_match(search_results, title, author)
             if best_match:
-                self.logger.info(f"Found match by title: {best_match.get('Title')} by {best_match.get('Author')}")
+                self.logger.info(
+                    "Found match by title",
+                    extra={"title": best_match.get('Title'), "author": best_match.get('Author')},
+                )
                 return best_match
             
             return None
             
         except Exception as e:
-            self.logger.error(f"Error in title-only search strategy: {e}")
+            self.logger.error(
+                "Error in title-only search strategy",
+                extra={"error": str(e), "title": title, "author": author, "asin": asin},
+                exc_info=True,
+            )
             return None
     
     def search_by_author_only(self, author: str, title_hint: str = "") -> List[Dict]:
         """Additional strategy: Search by author only (for finding related books)"""
         try:
-            self.logger.info(f"Searching by author only: {author}")
+            self.logger.info("Searching by author only", extra={"author": author, "title_hint": title_hint})
             
             if not author or author.lower() in ['unknown author', 'unknown']:
                 return []
@@ -203,17 +266,24 @@ class MetadataSearchStrategies:
                 
                 search_results = prioritized_results + other_results
             
-            self.logger.info(f"Found {len(search_results)} books by author: {author}")
+            self.logger.info(
+                "Author-only search complete",
+                extra={"author": author, "result_count": len(search_results)},
+            )
             return search_results
             
         except Exception as e:
-            self.logger.error(f"Error in author-only search: {e}")
+            self.logger.error(
+                "Error in author-only search",
+                extra={"author": author, "error": str(e)},
+                exc_info=True,
+            )
             return []
     
     def search_by_series(self, series_name: str, sequence: str = "") -> List[Dict]:
         """Additional strategy: Search by series name"""
         try:
-            self.logger.info(f"Searching by series: {series_name}")
+            self.logger.info("Searching by series", extra={"series_name": series_name, "sequence": sequence})
             
             if not series_name or series_name.lower() in ['n/a', 'unknown']:
                 return []
@@ -232,11 +302,18 @@ class MetadataSearchStrategies:
                 except:
                     pass
             
-            self.logger.info(f"Found {len(search_results)} books in series: {series_name}")
+            self.logger.info(
+                "Series search complete",
+                extra={"series_name": series_name, "result_count": len(search_results)},
+            )
             return search_results
             
         except Exception as e:
-            self.logger.error(f"Error in series search: {e}")
+            self.logger.error(
+                "Error in series search",
+                extra={"series_name": series_name, "error": str(e)},
+                exc_info=True,
+            )
             return []
     
     def _parse_sequence(self, sequence_str: str) -> float:
@@ -268,7 +345,11 @@ class MetadataSearchStrategies:
             return True
             
         except Exception as e:
-            self.logger.error(f"Search strategies validation failed: {e}")
+            self.logger.error(
+                "Search strategies validation failed",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
             return False
     
     def get_strategy_stats(self) -> Dict[str, int]:

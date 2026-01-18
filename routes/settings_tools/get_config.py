@@ -1,10 +1,13 @@
 """
-Get Configuration Route - AuralArchive
+Module Name: get_config.py
+Author: TheDragonShaman
+Created: July 30, 2025
+Last Modified: December 23, 2025
+Description:
+    Settings helper that returns structured configuration data for the UI.
+Location:
+    /routes/settings_tools/get_config.py
 
-Serializes the current configuration into sectioned JSON for the settings UI.
-
-Author: AuralArchive Development Team
-Updated: December 2, 2025
 """
 
 from datetime import datetime
@@ -14,7 +17,7 @@ from flask import jsonify
 from services.service_manager import get_config_service
 from utils.logger import get_module_logger
 
-logger = get_module_logger("Route.Settings.GetConfig")
+logger = get_module_logger("Routes.Settings.GetConfig")
 
 def handle_get_config():
     """Get current configuration for AuralArchive settings UI."""

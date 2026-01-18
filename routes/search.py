@@ -1,11 +1,13 @@
 """
-Catalog Browser Routes - AuralArchive
+Module Name: search.py
+Author: TheDragonShaman
+Created: July 24, 2025
+Last Modified: December 23, 2025
+Description:
+    Catalog search routes and supporting APIs for Audible queries and download readiness.
+Location:
+    /routes/search.py
 
-Handles the interactive search UI plus supporting APIs that query Audible,
-augment metadata, and surface download/import readiness statistics.
-
-Author: AuralArchive Development Team
-Updated: December 2, 2025
 """
 from flask import Blueprint, render_template, request, jsonify, flash
 from services.service_manager import (
@@ -19,7 +21,7 @@ from datetime import datetime
 from utils.logger import get_module_logger
 
 search_bp = Blueprint('search', __name__)
-logger = get_module_logger("Route.Search")
+logger = get_module_logger("Routes.Search")
 
 # ============================================================================
 # UTILITY FUNCTIONS - ENHANCED
@@ -59,9 +61,31 @@ def format_search_result(
         'in_library': in_library,
         'library_status': library_status,
         'download_available': download_available,
+        'ownership_status': (
+            (library_record.get('ownership_status') if library_record else None)
+            or book.get('ownership_status')
+            or book.get('Status')
+        ),
         'search_source': book.get('source', book.get('search_source', 'audible')),
         'enhanced_metadata': book.get('enhanced', False)
     }
+
+
+def _is_audible_owned(status_value: Optional[str]) -> bool:
+    """Return True when ownership status indicates the title is owned via Audible."""
+    if not status_value:
+        return False
+    normalized = str(status_value).strip().lower()
+    if not normalized:
+        return False
+    owned_tokens = {
+        'audible_library',
+        'audible_owned',
+        'audible',
+        'owned',
+        'purchased',
+    }
+    return any(token in normalized for token in owned_tokens)
 
 def enhance_search_results(results: List[Dict]) -> List[Dict]:
     """Enhance search results with additional metadata and download availability."""
@@ -69,8 +93,21 @@ def enhance_search_results(results: List[Dict]) -> List[Dict]:
         enhanced_results = []
         
         for book in results:
-            # Download integration is disabled until a new provider is available
-            download_available = False
+            # Mark Audible-owned items as downloadable (user-owned content)
+            download_available = _is_audible_owned(
+                book.get('ownership_status')
+                or book.get('Status')
+            )
+            # Always allow items already in the library to surface a download affordance
+            if not download_available and str(book.get('library_status', '')).lower() == 'in_library':
+                download_available = True
+            # If sourced from Audible and present in the library (even as wanted), allow download
+            if (
+                not download_available
+                and str(book.get('search_source') or book.get('source') or '').lower() == 'audible'
+                and str(book.get('library_status', '')).lower() in {'in_library', 'wanted'}
+            ):
+                download_available = True
             
             # Add enhancement flag
             enhanced_book = book.copy()

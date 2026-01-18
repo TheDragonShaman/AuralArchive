@@ -1,22 +1,23 @@
 """
-Cleanup Manager
-===============
+Module Name: cleanup_manager.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Manages post-download cleanup, seeding handling, and retention for the
+    download pipeline. Supports seeding-aware cleanup, client removal, and
+    temp-directory maintenance for both torrent and Audible workflows.
 
-Manages file cleanup and seeding for completed downloads.
+Location:
+    /services/download_management/cleanup_manager.py
 
-Features:
-- Seeding support (copy vs move)
-- Temp file cleanup
-- Client torrent management
-- Retention policies
 """
 
-import logging
 import os
 import shutil
 from typing import Optional
 
-logger = logging.getLogger("DownloadManagement.CleanupManager")
+from utils.logger import get_module_logger
 
 
 class CleanupManager:
@@ -30,9 +31,9 @@ class CleanupManager:
     - Failed download cleanup
     """
     
-    def __init__(self):
+    def __init__(self, *, logger=None):
         """Initialize cleanup manager."""
-        self.logger = logging.getLogger("DownloadManagement.CleanupManager")
+        self.logger = logger or get_module_logger("Service.DownloadManagement.CleanupManager")
         self._queue_manager = None
         self._client_selector = None
     
@@ -63,6 +64,12 @@ class CleanupManager:
         """
         try:
             download_type = download_data.get('download_type', 'torrent')
+            self.logger.info("Cleanup start", extra={
+                "download_id": download_id,
+                "download_type": download_type,
+                "seeding": seeding,
+                "delete_source": delete_source
+            })
             
             # Type-specific cleanup
             if download_type == 'audible':
@@ -71,7 +78,9 @@ class CleanupManager:
             elif download_type == 'torrent':
                 # Torrent-specific cleanup: handle seeding
                 if seeding:
-                    self.logger.debug(f"Download {download_id} in seeding mode - keeping torrent")
+                    self.logger.debug("Seeding mode, keeping torrent", extra={
+                        "download_id": download_id
+                    })
                     # Only cleanup temp converted files
                     self._cleanup_temp_files(download_id, download_data)
                 else:
@@ -88,8 +97,15 @@ class CleanupManager:
                 # NZB or other types - standard cleanup
                 self._cleanup_temp_files(download_id, download_data)
             
+            self.logger.info("Cleanup finished", extra={
+                "download_id": download_id
+            })
+
         except Exception as e:
-            self.logger.error(f"Error cleaning up download {download_id}: {e}")
+            self.logger.exception("Error cleaning up download", extra={
+                "download_id": download_id,
+                "error": str(e)
+            })
     
     def _cleanup_audible_files(self, download_id: int, download_data: dict):
         """
@@ -110,26 +126,45 @@ class CleanupManager:
             if voucher_path and os.path.exists(voucher_path):
                 try:
                     os.remove(voucher_path)
-                    self.logger.debug(f"Deleted voucher file: {voucher_path}")
+                    self.logger.debug("Deleted voucher file", extra={
+                        "download_id": download_id,
+                        "voucher_path": voucher_path
+                    })
                 except Exception as e:
-                    self.logger.warning(f"Failed to delete voucher {voucher_path}: {e}")
+                    self.logger.warning("Failed to delete voucher", extra={
+                        "download_id": download_id,
+                        "voucher_path": voucher_path,
+                        "error": str(e)
+                    })
             
             # Delete original AAX/AAXC file (no longer needed after conversion)
             temp_file = download_data.get('temp_file_path')
             if temp_file and os.path.exists(temp_file):
                 try:
                     os.remove(temp_file)
-                    self.logger.debug(f"Deleted original Audible file: {temp_file}")
+                    self.logger.debug("Deleted original Audible file", extra={
+                        "download_id": download_id,
+                        "temp_file": temp_file
+                    })
                 except Exception as e:
-                    self.logger.warning(f"Failed to delete temp file {temp_file}: {e}")
+                    self.logger.warning("Failed to delete temp file", extra={
+                        "download_id": download_id,
+                        "temp_file": temp_file,
+                        "error": str(e)
+                    })
             
             # Clean up working directory
             self._cleanup_temp_files(download_id, download_data)
             
-            self.logger.debug(f"Completed Audible-specific cleanup for download {download_id}")
+            self.logger.debug("Completed Audible-specific cleanup", extra={
+                "download_id": download_id
+            })
             
         except Exception as e:
-            self.logger.error(f"Error during Audible cleanup for {download_id}: {e}")
+            self.logger.exception("Error during Audible cleanup", extra={
+                "download_id": download_id,
+                "error": str(e)
+            })
     
     def cleanup_after_import_legacy(self, download_id: int, seeding: bool = False,
                             delete_source: bool = False):
@@ -146,7 +181,9 @@ class CleanupManager:
         download = queue_manager.get_download(download_id)
         
         if not download:
-            self.logger.warning(f"Download {download_id} not found")
+            self.logger.warning("Download not found for legacy cleanup", extra={
+                "download_id": download_id
+            })
             return
         
         self.cleanup_after_import(download_id, download, seeding, delete_source)
@@ -166,22 +203,33 @@ class CleanupManager:
             client = client_selector.get_client(client_name)
             
             if not client:
-                self.logger.error(f"Client {client_name} not available")
+                self.logger.error("Client not available", extra={
+                    "client_name": client_name
+                })
                 return
             
             # Remove from client
             success = client.remove(client_id, delete_files=delete_files)
             
             if success:
-                self.logger.debug(
-                    f"Removed {client_id} from {client_name} "
-                    f"(delete_files={delete_files})"
-                )
+                self.logger.info("Removed download from client", extra={
+                    "client_name": client_name,
+                    "client_id": client_id,
+                    "delete_files": delete_files
+                })
             else:
-                self.logger.warning(f"Failed to remove {client_id} from {client_name}")
+                self.logger.warning("Failed to remove from client", extra={
+                    "client_name": client_name,
+                    "client_id": client_id,
+                    "delete_files": delete_files
+                })
                 
         except Exception as e:
-            self.logger.error(f"Error removing from client: {e}")
+            self.logger.exception("Error removing from client", extra={
+                "client_name": client_name,
+                "client_id": client_id,
+                "error": str(e)
+            })
     
     def cleanup_download_files(self, download_id: int):
         """
@@ -208,10 +256,15 @@ class CleanupManager:
             # Cleanup temp files
             self._cleanup_temp_files(download_id)
             
-            self.logger.debug(f"Cleaned up all files for download {download_id}")
+            self.logger.debug("Cleaned up all files for download", extra={
+                "download_id": download_id
+            })
             
         except Exception as e:
-            self.logger.error(f"Error cleaning up download files: {e}")
+            self.logger.exception("Error cleaning up download files", extra={
+                "download_id": download_id,
+                "error": str(e)
+            })
     
     def _cleanup_temp_files(self, download_id: int, download_data: dict = None):
         """
@@ -232,7 +285,9 @@ class CleanupManager:
                 queue_manager = self._get_queue_manager()
                 download_data = queue_manager.get_download(download_id)
                 if not download_data:
-                    self.logger.warning(f"Download {download_id} not found")
+                    self.logger.warning("Download not found for temp cleanup", extra={
+                        "download_id": download_id
+                    })
                     return
             
             # Clean up download working directory
@@ -240,18 +295,32 @@ class CleanupManager:
             if os.path.exists(download_dir):
                 try:
                     shutil.rmtree(download_dir)
-                    self.logger.debug(f"Deleted download directory: {download_dir}")
+                    self.logger.debug("Deleted download directory", extra={
+                        "download_id": download_id,
+                        "path": download_dir
+                    })
                 except Exception as e:
-                    self.logger.warning(f"Failed to delete download dir {download_dir}: {e}")
+                    self.logger.warning("Failed to delete download directory", extra={
+                        "download_id": download_id,
+                        "path": download_dir,
+                        "error": str(e)
+                    })
             
             # Clean up conversion working directory
             conversion_dir = f"/data/working/converting/{download_id}"
             if os.path.exists(conversion_dir):
                 try:
                     shutil.rmtree(conversion_dir)
-                    self.logger.debug(f"Deleted conversion directory: {conversion_dir}")
+                    self.logger.debug("Deleted conversion directory", extra={
+                        "download_id": download_id,
+                        "path": conversion_dir
+                    })
                 except Exception as e:
-                    self.logger.warning(f"Failed to delete conversion dir {conversion_dir}: {e}")
+                    self.logger.warning("Failed to delete conversion directory", extra={
+                        "download_id": download_id,
+                        "path": conversion_dir,
+                        "error": str(e)
+                    })
             
             # Delete converted file if still in temp location
             converted_file = download_data.get('converted_file_path')
@@ -260,14 +329,26 @@ class CleanupManager:
                 if '/data/working/' in converted_file or '/tmp/' in converted_file:
                     try:
                         os.remove(converted_file)
-                        self.logger.debug(f"Deleted converted temp file: {converted_file}")
+                        self.logger.debug("Deleted converted temp file", extra={
+                            "download_id": download_id,
+                            "path": converted_file
+                        })
                     except Exception as e:
-                        self.logger.warning(f"Failed to delete converted file {converted_file}: {e}")
+                        self.logger.warning("Failed to delete converted file", extra={
+                            "download_id": download_id,
+                            "path": converted_file,
+                            "error": str(e)
+                        })
             
-            self.logger.debug(f"Cleaned up temp files for download {download_id}")
+            self.logger.debug("Cleaned up temp files", extra={
+                "download_id": download_id
+            })
             
         except Exception as e:
-            self.logger.error(f"Error cleaning up temp files for {download_id}: {e}")
+            self.logger.exception("Error cleaning up temp files", extra={
+                "download_id": download_id,
+                "error": str(e)
+            })
     
     def check_seeding_complete(self, download_id: int, download_data: dict,
                               seed_ratio_limit: float = 2.0,
@@ -289,7 +370,9 @@ class CleanupManager:
             client_id = download_data.get('download_client_id')
             
             if not client_name or not client_id:
-                self.logger.warning(f"Download {download_id} missing client info")
+                self.logger.warning("Download missing client info", extra={
+                    "download_id": download_id
+                })
                 return True  # No client info, consider complete
             
             # Get client instance
@@ -297,48 +380,72 @@ class CleanupManager:
             client = client_selector.get_client(client_name)
             
             if not client:
-                self.logger.warning(f"Client {client_name} not available")
+                self.logger.warning("Client not available for seeding check", extra={
+                    "client_name": client_name,
+                    "download_id": download_id
+                })
                 return True  # Client not available, consider complete
             
             # Get torrent info from client
             torrent_info = client.get_torrent_info(client_id)
             
             if not torrent_info:
-                self.logger.warning(f"Torrent {client_id} not found in {client_name}")
+                self.logger.warning("Torrent not found in client", extra={
+                    "client_name": client_name,
+                    "client_id": client_id,
+                    "download_id": download_id
+                })
                 return True  # Not found, consider complete
             
             # Check if torrent is still active
             state = torrent_info.get('state', '').lower()
             if state in ['error', 'missing', 'removed']:
-                self.logger.debug(f"Torrent {client_id} in terminal state: {state}")
+                self.logger.debug("Torrent in terminal state", extra={
+                    "client_id": client_id,
+                    "state": state,
+                    "download_id": download_id
+                })
                 return True
             
             # Check seed ratio
             ratio = torrent_info.get('ratio', 0.0)
             if ratio >= seed_ratio_limit:
-                self.logger.debug(
-                    f"Torrent {client_id} reached seed ratio: {ratio:.2f} >= {seed_ratio_limit}"
-                )
+                self.logger.debug("Seed ratio target met", extra={
+                    "client_id": client_id,
+                    "download_id": download_id,
+                    "ratio": round(ratio, 2),
+                    "seed_ratio_limit": seed_ratio_limit
+                })
                 return True
             
             # Check seeding time
             seeding_time = torrent_info.get('seeding_time', 0)  # in seconds
             seeding_hours = seeding_time / 3600
             if seeding_hours >= seed_time_limit_hours:
-                self.logger.debug(
-                    f"Torrent {client_id} reached seed time: {seeding_hours:.1f}h >= {seed_time_limit_hours}h"
-                )
+                self.logger.debug("Seed time target met", extra={
+                    "client_id": client_id,
+                    "download_id": download_id,
+                    "hours": round(seeding_hours, 1),
+                    "seed_time_limit_hours": seed_time_limit_hours
+                })
                 return True
             
             # Still seeding
-            self.logger.debug(
-                f"Torrent {client_id} still seeding: ratio={ratio:.2f}/{seed_ratio_limit}, "
-                f"time={seeding_hours:.1f}h/{seed_time_limit_hours}h"
-            )
+            self.logger.debug("Torrent still seeding", extra={
+                "client_id": client_id,
+                "download_id": download_id,
+                "ratio": round(ratio, 2),
+                "seed_ratio_limit": seed_ratio_limit,
+                "seeding_hours": round(seeding_hours, 1),
+                "seed_time_limit_hours": seed_time_limit_hours
+            })
             return False
             
         except Exception as e:
-            self.logger.error(f"Error checking seeding status for {download_id}: {e}")
+            self.logger.exception("Error checking seeding status", extra={
+                "download_id": download_id,
+                "error": str(e)
+            })
             return True  # On error, consider complete to avoid getting stuck
     
     def finalize_seeding(self, download_id: int, download_data: dict,
@@ -359,13 +466,21 @@ class CleanupManager:
             
             if client_name and client_id:
                 self.remove_from_client(client_name, client_id, delete_files=delete_files)
-                self.logger.debug(f"Finalized seeding for download {download_id}")
+                self.logger.debug("Finalized seeding", extra={
+                    "download_id": download_id,
+                    "client_name": client_name,
+                    "client_id": client_id,
+                    "delete_files": delete_files
+                })
             
             # Clean up temp files
             self._cleanup_temp_files(download_id, download_data)
             
         except Exception as e:
-            self.logger.error(f"Error finalizing seeding for {download_id}: {e}")
+            self.logger.exception("Error finalizing seeding", extra={
+                "download_id": download_id,
+                "error": str(e)
+            })
     
     def cleanup_old_failed_downloads(self, days: int = 7):
         """

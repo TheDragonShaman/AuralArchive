@@ -1,15 +1,27 @@
+"""
+Module Name: author_scraper.py
+Author: TheDragonShaman
+Created: August 15, 2025
+Last Modified: December 23, 2025
+Description:
+    Scrape Audible author pages when API data is insufficient.
+Location:
+    /services/audible/audible_catalog_service/author_scraper.py
+
+"""
+
 import requests
-import logging
 import re
 from typing import Dict, Optional, List
 from bs4 import BeautifulSoup
-from .error_handling import error_handler
+
+from utils.logger import get_module_logger
 
 class AudibleAuthorScraper:
     """Handles scraping author information from Audible author pages"""
     
     def __init__(self):
-        self.logger = logging.getLogger("AudibleService.AuthorScraper")
+        self.logger = get_module_logger("Service.Audible.Catalog.AuthorScraper")
         self.base_url = "https://www.audible.com"
         self.session = self._setup_session()
     
@@ -29,7 +41,7 @@ class AudibleAuthorScraper:
     def search_author_page(self, author_name: str) -> Optional[Dict]:
         """Search for an author's page on Audible and return author information"""
         try:
-            self.logger.info(f"Searching for author page: {author_name}")
+            self.logger.info("Searching for author page", extra={"author": author_name})
             
             # First, search for the author using Audible's search
             search_url = f"{self.base_url}/search"
@@ -41,7 +53,7 @@ class AudibleAuthorScraper:
             
             response = self.session.get(search_url, params=search_params, timeout=15)
             if response.status_code != 200:
-                self.logger.warning(f"Search failed for author {author_name}: {response.status_code}")
+                self.logger.warning("Search failed for author", extra={"author": author_name, "status_code": response.status_code})
                 return None
             
             soup = BeautifulSoup(response.text, 'html.parser')
@@ -50,7 +62,7 @@ class AudibleAuthorScraper:
             author_link = self._find_author_link(soup, author_name)
             
             if not author_link:
-                self.logger.warning(f"No author page found for: {author_name}")
+                self.logger.warning("No author page found", extra={"author": author_name})
                 return None
             
             # Get the full author page URL
@@ -60,7 +72,7 @@ class AudibleAuthorScraper:
             return self.scrape_author_page(author_url, author_name)
         
         except Exception as e:
-            self.logger.error(f"Error searching for author {author_name}: {e}")
+            self.logger.exception("Error searching for author", extra={"author": author_name, "error": str(e)})
             return None
     
     def _find_author_link(self, soup: BeautifulSoup, author_name: str) -> Optional[str]:
@@ -97,17 +109,17 @@ class AudibleAuthorScraper:
             return None
         
         except Exception as e:
-            self.logger.error(f"Error finding author link: {e}")
+            self.logger.exception("Error finding author link", extra={"author": author_name, "error": str(e)})
             return None
     
     def scrape_author_page(self, author_url: str, author_name: str) -> Optional[Dict]:
         """Scrape detailed information from an author's Audible page"""
         try:
-            self.logger.info(f"Scraping author page: {author_url}")
+            self.logger.info("Scraping author page", extra={"author": author_name, "url": author_url})
             
             response = self.session.get(author_url, timeout=15)
             if response.status_code != 200:
-                self.logger.warning(f"Failed to load author page: {response.status_code}")
+                self.logger.warning("Failed to load author page", extra={"author": author_name, "status_code": response.status_code})
                 return None
             
             soup = BeautifulSoup(response.text, 'html.parser')
@@ -141,11 +153,11 @@ class AudibleAuthorScraper:
             books = self._extract_author_books(soup, author_url)
             author_data['books'] = books
             
-            self.logger.info(f"Successfully scraped author data for {author_name}: {len(books)} books found")
+            self.logger.info("Successfully scraped author data", extra={"author": author_name, "books_found": len(books)})
             return author_data
         
         except Exception as e:
-            self.logger.error(f"Error scraping author page {author_url}: {e}")
+            self.logger.exception("Error scraping author page", extra={"author": author_name, "url": author_url, "error": str(e)})
             return None
     
     def _extract_author_image(self, soup: BeautifulSoup) -> Optional[str]:
@@ -186,7 +198,7 @@ class AudibleAuthorScraper:
             return None
         
         except Exception as e:
-            self.logger.error(f"Error extracting author image: {e}")
+            self.logger.exception("Error extracting author image", extra={"error": str(e)})
             return None
     
     def _extract_author_bio(self, soup: BeautifulSoup) -> Optional[str]:
@@ -220,7 +232,7 @@ class AudibleAuthorScraper:
             return None
         
         except Exception as e:
-            self.logger.error(f"Error extracting author bio: {e}")
+            self.logger.exception("Error extracting author bio", extra={"error": str(e)})
             return None
     
     def _extract_book_count(self, soup: BeautifulSoup) -> int:
@@ -250,7 +262,7 @@ class AudibleAuthorScraper:
             return len(book_elements)
         
         except Exception as e:
-            self.logger.error(f"Error extracting book count: {e}")
+            self.logger.exception("Error extracting book count", extra={"error": str(e)})
             return 0
     
     def _extract_author_books(self, soup: BeautifulSoup, author_url: str) -> List[Dict]:
@@ -275,11 +287,11 @@ class AudibleAuthorScraper:
                             books.append(book_data)
                     break
             
-            self.logger.debug(f"Extracted {len(books)} books from author page")
+            self.logger.debug("Extracted books from author page", extra={"count": len(books), "author": author_name})
             return books
         
         except Exception as e:
-            self.logger.error(f"Error extracting author books: {e}")
+            self.logger.exception("Error extracting author books", extra={"error": str(e)})
             return []
     
     def _extract_single_book(self, element) -> Optional[Dict]:
@@ -332,5 +344,5 @@ class AudibleAuthorScraper:
             return book_data
         
         except Exception as e:
-            self.logger.error(f"Error extracting single book: {e}")
+            self.logger.exception("Error extracting single book", extra={"error": str(e)})
             return None

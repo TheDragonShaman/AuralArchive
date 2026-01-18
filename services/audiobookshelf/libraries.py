@@ -1,22 +1,28 @@
 """
-AudioBookShelf Libraries Management
-File: services/audiobookshelf/libraries.py
-Handles library browsing, item retrieval, and caching
+Module Name: libraries.py
+Author: TheDragonShaman
+Created: August 26, 2025
+Last Modified: December 24, 2025
+Description:
+    Handle AudioBookShelf library browsing, item retrieval, caching, and ASIN extraction helpers.
+Location:
+    /services/audiobookshelf/libraries.py
+
 """
-import logging
 import re
 import time
 from typing import Any, Dict, List, Optional, Tuple
+from utils.logger import get_module_logger
 
 ASIN_PATTERN = re.compile(r"(B[0-9A-Z]{9})", re.IGNORECASE)
 
 
 class AudioBookShelfLibraries:
     """Manages AudioBookShelf library operations and caching."""
-    
-    def __init__(self, connection):
+
+    def __init__(self, connection, logger=None):
         self.connection = connection
-        self.logger = logging.getLogger("AudioBookShelfLibraries")
+        self.logger = logger or get_module_logger("Service.AudioBookShelf.Libraries")
         self._libraries_cache = None
         self._last_library_fetch = 0
     
@@ -38,8 +44,11 @@ class AudioBookShelfLibraries:
             
             return self._libraries_cache or []
         
-        except Exception as e:
-            self.logger.error(f"Error getting libraries: {e}")
+        except Exception as exc:
+            self.logger.error(
+                "Error getting libraries",
+                extra={"error": str(exc)},
+            )
             return []
     
     def _get_libraries_with_credentials(self, host: str, api_key: str) -> List[Dict]:
@@ -83,8 +92,11 @@ class AudioBookShelfLibraries:
                 self.logger.error(f"Failed to get libraries: HTTP {response.status_code}")
                 return []
         
-        except Exception as e:
-            self.logger.error(f"Error getting libraries with credentials: {e}")
+        except Exception as exc:
+            self.logger.error(
+                "Error getting libraries with credentials",
+                extra={"error": str(exc)},
+            )
             return []
     
     def _refresh_libraries_cache(self):
@@ -125,8 +137,11 @@ class AudioBookShelfLibraries:
                 self._libraries_cache = libraries
                 self._last_library_fetch = time.time()
                 
-        except Exception as e:
-            self.logger.error(f"Error refreshing libraries cache: {e}")
+        except Exception as exc:
+            self.logger.error(
+                "Error refreshing libraries cache",
+                extra={"error": str(exc)},
+            )
     
     def _fetch_library_stats(self, library_id, library_info, base_url):
         """Fetch stats for a specific library."""
@@ -180,9 +195,12 @@ class AudioBookShelfLibraries:
             else:
                 return False, [], f"Failed to get library items: HTTP {response.status_code}"
         
-        except Exception as e:
-            self.logger.error(f"Error getting library items: {e}")
-            return False, [], f"Error: {str(e)}"
+        except Exception as exc:
+            self.logger.error(
+                "Error getting library items",
+                extra={"error": str(exc)},
+            )
+            return False, [], f"Error: {str(exc)}"
     
     def search_library_items(self, library_id: str, query: str) -> Tuple[bool, List[Dict], str]:
         """Search for items in a specific library."""
@@ -219,9 +237,12 @@ class AudioBookShelfLibraries:
             else:
                 return False, [], f"Search failed: HTTP {response.status_code}"
         
-        except Exception as e:
-            self.logger.error(f"Error searching library: {e}")
-            return False, [], f"Error: {str(e)}"
+        except Exception as exc:
+            self.logger.error(
+                "Error searching library",
+                extra={"error": str(exc)},
+            )
+            return False, [], f"Error: {str(exc)}"
     
     def _format_library_item(self, item):
         """Format a library item for consistent output."""

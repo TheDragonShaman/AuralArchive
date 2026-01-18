@@ -785,8 +785,53 @@ async function deleteSelectedBooks() {
         return;
     }
 
-    // Implementation for bulk delete
-    showNotification('Bulk delete feature coming soon', 'info');
+    const bookIds = Array.from(LibraryState.selectedBooks).map(id => Number(id));
+    showProgressModal('Deleting Books', bookIds.length);
+
+    try {
+        const response = await fetch('/library/books/bulk-delete', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ book_ids: bookIds })
+        });
+
+        const data = await response.json();
+
+        const deletedCount = data.deleted_ids ? data.deleted_ids.length : 0;
+        const failedCount = data.failed ? data.failed.length : 0;
+
+        updateProgressModal(bookIds.length, bookIds.length, deletedCount, failedCount, data.failed || []);
+        document.getElementById('progressCloseBtn')?.classList.remove('hidden');
+
+        // Remove deleted cards from UI
+        (data.deleted_ids || []).forEach(id => {
+            const card = document.querySelector(`.book-card[data-book-id="${id}"]`);
+            if (card) card.remove();
+            LibraryState.selectedBooks.delete(String(id));
+        });
+
+        updateSelectionCount();
+
+        if (deletedCount > 0 && failedCount === 0) {
+            showNotification(`Deleted ${deletedCount} book(s)`, 'success');
+        } else if (deletedCount > 0) {
+            showNotification(`Deleted ${deletedCount} book(s); ${failedCount} failed`, 'warning');
+        } else {
+            showNotification('Failed to delete selected books', 'error');
+        }
+
+        // Reload to refresh state if anything changed
+        if (deletedCount > 0) {
+            setTimeout(() => location.reload(), 800);
+        }
+
+    } catch (error) {
+        console.error('Bulk delete failed:', error);
+        showNotification('Failed to delete selected books', 'error');
+        document.getElementById('progressCloseBtn')?.classList.remove('hidden');
+    }
 }
 
 // ==============================================

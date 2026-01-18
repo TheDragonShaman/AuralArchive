@@ -1,20 +1,22 @@
 """
-Queue Manager
-=============
+Module Name: queue_manager.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Handles download queue operations, priority, and statistics. Enforces one
+    active download per ASIN and orders the queue by priority with helpers for
+    status-aware filtering.
 
-Handles download queue operations:
-- Add/remove queue items
-- ASIN uniqueness enforcement
-- Priority management
-- Queue statistics
+Location:
+    /services/download_management/queue_manager.py
+
 """
 
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 
 from utils.logger import get_module_logger
-
-logger = get_module_logger("QueueManager")
 
 
 class QueueManager:
@@ -27,9 +29,9 @@ class QueueManager:
     - Queue statistics and filtering
     """
     
-    def __init__(self):
+    def __init__(self, *, logger=None):
         """Initialize queue manager."""
-        self.logger = logger
+        self.logger = logger or get_module_logger("Service.DownloadManagement.QueueManager")
         self._database_service = None
     
     def _get_database_service(self):
@@ -128,7 +130,12 @@ class QueueManager:
             
             download_id = cursor.lastrowid
             download_type = insert_data['download_type']
-            self.logger.debug(f"Added to queue: {book_asin} (ID: {download_id}, type: {download_type}, priority: {priority})")
+            self.logger.debug("Added download to queue", extra={
+                "asin": book_asin,
+                "download_id": download_id,
+                "download_type": download_type,
+                "priority": priority
+            })
             
             return download_id
             
@@ -217,11 +224,19 @@ class QueueManager:
         
         try:
             if status_filter:
-                query = """
-                    SELECT * FROM download_queue 
-                    WHERE status=?
-                    ORDER BY priority DESC, queued_at ASC
-                """
+                normalized_status = str(status_filter).strip().upper()
+                if normalized_status == 'IMPORTED':
+                    query = """
+                        SELECT * FROM download_queue 
+                        WHERE status=?
+                        ORDER BY COALESCE(completed_at, updated_at, queued_at) DESC
+                    """
+                else:
+                    query = """
+                        SELECT * FROM download_queue 
+                        WHERE status=?
+                        ORDER BY priority DESC, queued_at ASC
+                    """
                 cursor.execute(query, (status_filter,))
             else:
                 query = """
@@ -267,7 +282,10 @@ class QueueManager:
             cursor.execute(query, values)
             conn.commit()
             
-            self.logger.debug(f"Updated download {download_id}: {updates}")
+            self.logger.debug("Updated download", extra={
+                "download_id": download_id,
+                "updated_fields": list(updates.keys())
+            })
             
         finally:
             if cursor:
@@ -288,7 +306,9 @@ class QueueManager:
         try:
             cursor.execute("DELETE FROM download_queue WHERE id=?", (download_id,))
             conn.commit()
-            self.logger.debug(f"Deleted download {download_id} from queue")
+            self.logger.debug("Deleted download from queue", extra={
+                "download_id": download_id
+            })
             
         finally:
             if cursor:

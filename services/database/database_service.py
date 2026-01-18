@@ -1,55 +1,83 @@
+"""
+Module Name: database_service.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Singleton coordinator for database connection, migrations, and data access
+    modules.
+
+Location:
+    /services/database/database_service.py
+
+"""
+
 import os
-import logging
 import threading
 from typing import List, Dict, Optional
 
-from .connection import DatabaseConnection
-from .migrations import DatabaseMigrations
-from .books import BookOperations
-from .authors import AuthorOperations
 from .author_overrides import AuthorOverrideOperations
 from .audible_library import AudibleLibraryOperations
-from .stats import DatabaseStats
+from .authors import AuthorOperations
+from .books import BookOperations
+from .connection import DatabaseConnection
+from .migrations import DatabaseMigrations
 from .series import SeriesOperations
+from .stats import DatabaseStats
+from utils.logger import get_module_logger
 
 DEFAULT_DB_FILENAME = "auralarchive_database.db"
 DEFAULT_DB_PATH = os.path.join("database", DEFAULT_DB_FILENAME)
 
 class DatabaseService:
     """Enhanced singleton service for database operations with modular components"""
-    
-    _instance: Optional['DatabaseService'] = None
+
+    _instance: Optional["DatabaseService"] = None
     _lock = threading.Lock()
     _initialized = False
-    
-    def __new__(cls, db_file: str = DEFAULT_DB_PATH):
+
+    def __new__(cls, *args, **kwargs):
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
                     cls._instance = super().__new__(cls)
         return cls._instance
-    
-    def __init__(self, db_file: str = DEFAULT_DB_PATH):
+
+    def __init__(
+        self,
+        db_file: str = DEFAULT_DB_PATH,
+        *,
+        logger=None,
+        connection_manager: Optional[DatabaseConnection] = None,
+        migrations: Optional[DatabaseMigrations] = None,
+        author_overrides: Optional[AuthorOverrideOperations] = None,
+        books: Optional[BookOperations] = None,
+        authors: Optional[AuthorOperations] = None,
+        audible_library: Optional[AudibleLibraryOperations] = None,
+        stats: Optional[DatabaseStats] = None,
+        series: Optional[SeriesOperations] = None,
+        **_kwargs,
+    ):
         if not self._initialized:
             with self._lock:
                 if not self._initialized:
-                    self.logger = logging.getLogger("DatabaseService.Main")
+                    self.logger = logger or get_module_logger("Service.Database.Service")
                     self.db_file = self._normalize_db_file(db_file)
                     os.makedirs(os.path.dirname(self.db_file), exist_ok=True)
-                    
+
                     # Initialize modular components
-                    self.connection_manager = DatabaseConnection(self.db_file)
-                    self.migrations = DatabaseMigrations(self.connection_manager)
-                    self.author_overrides = AuthorOverrideOperations(self.connection_manager)
-                    self.books = BookOperations(self.connection_manager, self.author_overrides)
-                    self.authors = AuthorOperations(self.connection_manager, self.author_overrides)
-                    self.audible_library = AudibleLibraryOperations(self.connection_manager)
-                    self.stats = DatabaseStats(self.connection_manager)
-                    self.series = SeriesOperations(self.connection_manager, self.author_overrides)
-                    
-                    # Initialize database and run migrations
+                    self.connection_manager = connection_manager or DatabaseConnection(self.db_file, logger=self.logger)
+                    self.migrations = migrations or DatabaseMigrations(self.connection_manager, logger=self.logger)
+                    self.author_overrides = author_overrides or AuthorOverrideOperations(self.connection_manager, logger=self.logger)
+                    self.books = books or BookOperations(self.connection_manager, self.author_overrides, logger=self.logger)
+                    self.authors = authors or AuthorOperations(self.connection_manager, self.author_overrides, logger=self.logger)
+                    self.audible_library = audible_library or AudibleLibraryOperations(self.connection_manager, logger=self.logger)
+                    self.stats = stats or DatabaseStats(self.connection_manager, logger=self.logger)
+                    self.series = series or SeriesOperations(self.connection_manager, self.author_overrides, logger=self.logger)
+
+                    # Initialize database (migrations currently frozen)
                     self._initialize_service()
-                    
+
                     DatabaseService._initialized = True
 
     def _normalize_db_file(self, db_file: Optional[str]) -> str:
@@ -62,7 +90,8 @@ class DatabaseService:
             preferred_dir = os.path.dirname(DEFAULT_DB_PATH) or ""
             corrected_path = os.path.normpath(os.path.join(preferred_dir, DEFAULT_DB_FILENAME))
             self.logger.warning(
-                "Ignoring custom database file '%s'; using '%s' instead", normalized, corrected_path
+                "Ignoring custom database file; using default instead",
+                extra={"requested": normalized, "using": corrected_path},
             )
             return corrected_path
 
@@ -72,10 +101,15 @@ class DatabaseService:
         """Initialize database and perform necessary migrations."""
         try:
             self.migrations.initialize_database()
-            self.migrations.migrate_database()
-            self.logger.info(f"DatabaseService initialized successfully: {self.db_file}")
-        except Exception as e:
-            self.logger.error(f"Failed to initialize DatabaseService: {e}")
+            self.logger.success(
+                "Database ready (schema frozen)",
+                extra={"database_file": self.db_file, "migrations": "skipped"},
+            )
+        except Exception as exc:
+            self.logger.exception(
+                "Failed to initialize DatabaseService",
+                extra={"database_file": self.db_file},
+            )
             raise
     
     # Connection methods
@@ -223,9 +257,12 @@ class DatabaseService:
             
             return status
         
-        except Exception as e:
-            self.logger.error(f"Error getting service status: {e}")
-            return {'error': str(e)}
+        except Exception as exc:
+            self.logger.exception(
+                "Error getting database service status",
+                extra={"database_file": self.db_file},
+            )
+            return {'error': str(exc)}
     
     def reset_service(self):
         """Reset the service (for testing or troubleshooting)."""

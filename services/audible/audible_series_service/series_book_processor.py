@@ -1,24 +1,29 @@
 """
-Series Book Processor
-Processes series book data for database storage
+Module Name: series_book_processor.py
+Author: TheDragonShaman
+Created: August 26, 2025
+Last Modified: December 23, 2025
+Description:
+    Process series book metadata, deduplicate editions, and mark library status before database sync.
+Location:
+    /services/audible/audible_series_service/series_book_processor.py
+
 """
 
 from utils.logger import get_module_logger
 
-LOGGER_NAME = "SeriesBookProcessor"
-logger = get_module_logger(LOGGER_NAME)
-
 
 class SeriesBookProcessor:
-    """Processes series book data for storage"""
+    """Processes series book data for storage."""
     
-    def __init__(self, db_service):
+    def __init__(self, db_service, logger=None):
         """
         Initialize with database service
         
         Args:
             db_service: DatabaseService instance
         """
+        self.logger = logger or get_module_logger("Service.Audible.Series.BookProcessor")
         self.db = db_service
     
     def process_series_books(self, series_asin, books_data):
@@ -37,7 +42,10 @@ class SeriesBookProcessor:
             filtered_books = [book for book in books_data if self._is_buyable(book)]
 
             if not filtered_books:
-                logger.info("All series entries filtered out due to unavailable titles")
+                self.logger.info(
+                    "All series entries filtered out due to unavailable titles",
+                    extra={"series_asin": series_asin, "incoming": len(books_data)},
+                )
                 return []
 
             # Deduplicate remaining editions (post-filter) to keep the best candidate per slot
@@ -47,7 +55,10 @@ class SeriesBookProcessor:
             
             for book in books_data:
                 if not self._is_buyable(book):
-                    logger.debug(f"Skipping unbuyable series title: {book.get('title')} ({book.get('asin')})")
+                    self.logger.debug(
+                        "Skipping unbuyable series title",
+                        extra={"title": book.get('title'), "asin": book.get('asin')},
+                    )
                     continue
                 
                 book_asin = book.get('asin')
@@ -79,11 +90,18 @@ class SeriesBookProcessor:
                 
                 processed_books.append(processed_book)
             
-            logger.info(f"Processed {len(processed_books)} books for series {series_asin}")
+            self.logger.info(
+                "Processed books for series",
+                extra={"series_asin": series_asin, "count": len(processed_books)},
+            )
             return processed_books
             
         except Exception as e:
-            logger.error(f"Error processing series books: {e}")
+            self.logger.error(
+                "Error processing series books",
+                extra={"series_asin": series_asin, "error": str(e)},
+                exc_info=True,
+            )
             return []
 
     def _is_buyable(self, book):
@@ -115,7 +133,10 @@ class SeriesBookProcessor:
             return True
 
         except Exception as exc:
-            logger.debug(f"Failed to evaluate buyable state for {book.get('asin')}: {exc}")
+            self.logger.debug(
+                "Failed to evaluate buyable state",
+                extra={"asin": book.get('asin'), "error": str(exc)},
+            )
             return True
     
     def _deduplicate_books(self, books_data):
@@ -165,15 +186,30 @@ class SeriesBookProcessor:
                     
                     # Log duplicates found
                     asins = [b.get('asin') for b in book_group]
-                    logger.debug(f"Deduplicated {len(book_group)} editions of '{key[0]}' (seq {key[1]}): kept {best_book.get('asin')}, skipped {[a for a in asins if a != best_book.get('asin')]}")
+                    self.logger.debug(
+                        "Deduplicated editions",
+                        extra={
+                            "normalized_title": key[0],
+                            "sequence": key[1],
+                            "kept_asin": best_book.get('asin'),
+                            "skipped": [a for a in asins if a != best_book.get('asin')],
+                        },
+                    )
             
             if len(deduplicated) < len(books_data):
-                logger.debug(f"Deduplication reduced {len(books_data)} → {len(deduplicated)} books ({len(books_data) - len(deduplicated)} duplicates removed)")
+                self.logger.debug(
+                    "Deduplication reduced book count",
+                    extra={
+                        "before": len(books_data),
+                        "after": len(deduplicated),
+                        "removed": len(books_data) - len(deduplicated),
+                    },
+                )
             
             return deduplicated
             
         except Exception as e:
-            logger.error(f"Error deduplicating books: {e}")
+            self.logger.error("Error deduplicating books", extra={"error": str(e)}, exc_info=True)
             return books_data  # Return original if deduplication fails
     
     def _normalize_title(self, title):
@@ -292,7 +328,11 @@ class SeriesBookProcessor:
                 return False
             return str(file_path).strip() != ''
         except Exception as e:
-            logger.error(f"Error checking library status for {book_asin}: {e}")
+            self.logger.error(
+                "Error checking library status",
+                extra={"book_asin": book_asin, "error": str(e)},
+                exc_info=True,
+            )
             return False
     
     def _check_in_audiobookshelf(self, book_asin):
@@ -311,7 +351,10 @@ class SeriesBookProcessor:
             # TODO: Add in_audiobookshelf column check when available
             return False
         except Exception as e:
-            logger.debug(f"AudiobookShelf status check skipped for {book_asin}: {e}")
+            self.logger.debug(
+                "AudiobookShelf status check skipped",
+                extra={"book_asin": book_asin, "error": str(e)},
+            )
             return False
     
     def calculate_series_stats(self, processed_books):
@@ -338,7 +381,7 @@ class SeriesBookProcessor:
                 'completion_percentage': (owned / total * 100) if total > 0 else 0
             }
         except Exception as e:
-            logger.error(f"Error calculating series stats: {e}")
+            self.logger.error("Error calculating series stats", extra={"error": str(e)}, exc_info=True)
             return {
                 'total_books': 0,
                 'owned_books': 0,

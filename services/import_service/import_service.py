@@ -1,13 +1,19 @@
 """
-Import Service - Manages audiobook file importing to library
-Handles file moving, database tracking, and library organization
+Module Name: import_service.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Manages audiobook importing into the library, coordinating file moves,
+    database tracking, validation, and ASIN tagging. Follows the singleton
+    service pattern used across the application.
 
-Location: services/import/import_service.py
-Purpose: Singleton service for importing audiobooks to library directory
+Location:
+    /services/import_service/import_service.py
+
 """
 
 from typing import Any, Dict, Optional, Tuple, List
-import logging
 import threading
 import os
 import shutil
@@ -17,6 +23,10 @@ from .file_operations import FileOperations
 from .database_operations import ImportDatabaseOperations
 from .validation import ImportValidator
 from .asin_tag_embedder import AsinTagEmbedder
+from utils.logger import get_module_logger
+
+
+_LOGGER = get_module_logger("Service.Import.Main")
 
 
 class ImportService:
@@ -42,11 +52,11 @@ class ImportService:
                     cls._instance = super().__new__(cls)
         return cls._instance
     
-    def __init__(self):
+    def __init__(self, *, logger=None):
         if not self._initialized:
             with self._lock:
                 if not self._initialized:
-                    self.logger = logging.getLogger("ImportService.Main")
+                    self.logger = logger or _LOGGER
                     
                     # Initialize operation components
                     self.file_ops = FileOperations()
@@ -69,6 +79,7 @@ class ImportService:
                     self.naming_template = 'standard'
                     self.verify_after_import = True
                     self.create_backup_on_error = True
+                    self.overwrite_existing_files = False
                     
                     # Initialize service
                     self._initialize_service()
@@ -83,9 +94,9 @@ class ImportService:
             # Configuration will be loaded lazily when first needed
             # to avoid circular dependency with ServiceManager
             
-            self.logger.info("ImportService initialized successfully")
+            self.logger.success("Import service started successfully")
         except Exception as e:
-            self.logger.error(f"Failed to initialize ImportService: {e}")
+            self.logger.error("Failed to initialize ImportService", extra={"error": str(e)})
             raise
     
     def _load_configuration(self):
@@ -113,11 +124,12 @@ class ImportService:
                 import_config = config_service.get_section('import')
                 self.verify_after_import = import_config.get('verify_after_import', True)
                 self.create_backup_on_error = import_config.get('create_backup_on_error', True)
+                self.overwrite_existing_files = import_config.get('overwrite_existing_files', False)
                 
                 self._config_loaded = True
-                self.logger.debug(f"Loaded import configuration - Library: {self.library_base_path}, Template: {self.naming_template}")
+                self.logger.debug("Loaded import configuration", extra={"library_base_path": self.library_base_path, "naming_template": self.naming_template})
         except Exception as e:
-            self.logger.warning(f"Could not load configuration, using defaults: {e}")
+            self.logger.warning("Could not load configuration, using defaults", extra={"error": str(e)})
             self.library_base_path = '/mnt/audiobooks'
             self.naming_template = 'standard'
             self._config_loaded = True  # Mark as attempted even if failed
@@ -147,6 +159,28 @@ class ImportService:
             except Exception:
                 self._status_service = None
         return self._status_service
+
+    @staticmethod
+    def _normalize_asin(value: Optional[Any]) -> Optional[str]:
+        """Normalize ASIN-like values, handling bytes and stray quoting."""
+        if value is None:
+            return None
+        if isinstance(value, bytes):
+            try:
+                value = value.decode('utf-8', errors='ignore')
+            except Exception:
+                value = value.decode(errors='ignore') if hasattr(value, 'decode') else str(value)
+        value_str = str(value).strip()
+        if not value_str:
+            return None
+        # Strip leading b'xxx' style artifacts or stray quotes
+        if value_str.lower().startswith("b'") and value_str.endswith("'"):
+            value_str = value_str[2:-1]
+        if value_str.startswith("'") and value_str.endswith("'"):
+            value_str = value_str[1:-1]
+        if value_str.startswith('"') and value_str.endswith('"'):
+            value_str = value_str[1:-1]
+        return value_str or None
     
     # Main import methods
     def import_book(self, source_file_path: str, book_data: Dict,
@@ -172,13 +206,25 @@ class ImportService:
             # Lazy load configuration on first use
             self._load_configuration()
 
+            if not isinstance(book_data, dict):
+                self.logger.error("Import request has invalid book_data type: %s", type(book_data).__name__)
+                return False, "Invalid book metadata supplied", None
+
+            # Normalize ASIN early to avoid byte/quote artifacts
+            raw_asin = book_data.get('ASIN') or book_data.get('asin')
+            normalized_asin = self._normalize_asin(raw_asin)
+            if normalized_asin:
+                book_data['ASIN'] = normalized_asin
+                book_data['asin'] = normalized_asin
+
+            nice_title = book_data.get('Title') or book_data.get('title') or 'Unknown Title'
             tracker = self._get_status_service()
             status_id = None
             if tracker:
                 asin = book_data.get('ASIN') or book_data.get('asin')
                 event = tracker.start_event(
                     category='import',
-                    title=f"Importing {book_data.get('Title', 'Unknown')}",
+                    title=f"Importing {nice_title}",
                     message='Preparing files…',
                     source='Import Service',
                     entity_id=asin or source_file_path,
@@ -213,7 +259,7 @@ class ImportService:
             
             # Validate library path exists
             if not os.path.exists(library_path):
-                self.logger.error(f"Library path does not exist: {library_path}")
+                self.logger.error("Library path does not exist", extra={"library_path": library_path})
                 mark_failure(f"Library path does not exist: {library_path}")
                 return False, f"Library path does not exist: {library_path}", None
             
@@ -230,14 +276,30 @@ class ImportService:
             )
             
             operation = "Moving" if move else "Copying"
-            self.logger.info(f"{operation} '{book_data.get('Title', 'Unknown')}' to {destination_path}")
+            self.logger.info("Import file move/copy", extra={"operation": operation, "title": book_data.get('Title', 'Unknown'), "destination": destination_path})
             mark_progress(f"{operation} files…", progress=25.0)
             
             # Check if destination already exists
             if os.path.exists(destination_path):
-                self.logger.warning(f"Destination file already exists: {destination_path}")
-                mark_failure(f"File already exists at destination: {destination_path}")
-                return False, f"File already exists at destination: {destination_path}", None
+                if self.overwrite_existing_files:
+                    self.logger.warning(
+                        "Destination file already exists but will be overwritten (config enabled): %s",
+                        destination_path,
+                    )
+                    try:
+                        os.remove(destination_path)
+                    except Exception as exc:
+                        self.logger.error(
+                            "Failed to remove existing destination file %s: %s",
+                            destination_path,
+                            exc,
+                        )
+                        mark_failure(f"Could not overwrite existing file: {destination_path}")
+                        return False, f"Could not overwrite existing file: {destination_path}", None
+                else:
+                    self.logger.warning("Destination file already exists", extra={"destination": destination_path})
+                    mark_failure(f"File already exists at destination: {destination_path}")
+                    return False, f"File already exists at destination: {destination_path}", None
             
             # Perform the file operation (move or copy)
             if move:
@@ -259,11 +321,11 @@ class ImportService:
                 mark_failure(f"File {operation_name} failed: {message}")
                 return False, f"File {operation_name} failed: {message}", None
             
-            asin = book_data.get('ASIN', book_data.get('asin'))
+            asin = self._normalize_asin(book_data.get('ASIN') or book_data.get('asin'))
             stored_record = self._persist_book_record(book_data)
             if stored_record:
                 book_data = stored_record
-                asin = book_data.get('ASIN', book_data.get('asin'))
+                asin = self._normalize_asin(book_data.get('ASIN') or book_data.get('asin'))
 
             normalized_source = self._determine_import_source(import_source, book_data)
             if normalized_source and book_data.get('source') != normalized_source:
@@ -293,18 +355,80 @@ class ImportService:
                 )
                 
                 if not db_success:
-                    self.logger.warning(f"File imported but database update failed for ASIN: {asin}")
+                    self.logger.warning("File imported but database update failed", extra={"asin": asin})
             
             operation_past = "moved" if move else "copied"
-            self.logger.info(f"Successfully {operation_past} book to {destination_path}")
-            mark_success(f"Import complete → {destination_path}")
+            self.logger.success(
+                "Import completed successfully",
+                extra={"operation": operation_past, "destination": destination_path},
+            )
+            mark_success(f"Successfully imported {nice_title}")
+
+            # Cleanup source directory if file was within a subfolder of the import root
+            try:
+                self._cleanup_source_dir(source_file_path, move=move)
+            except Exception as cleanup_exc:
+                self.logger.warning("Cleanup of source directory failed: %s", cleanup_exc)
+
             return True, f"Import successful ({operation_past})", destination_path
             
         except Exception as e:
-            self.logger.error(f"Error importing book: {e}", exc_info=True)
+            self.logger.error("Error importing book", extra={"error": str(e)}, exc_info=True)
             if 'mark_failure' in locals():
                 mark_failure(f"Import error: {str(e)}")
             return False, f"Import error: {str(e)}", None
+
+    def _cleanup_source_dir(self, source_file_path: str, move: bool = True):
+        """Remove the source directory if not the import root and now empty.
+
+        We only attempt cleanup when the file resides under the configured import root
+        and is inside a subfolder (not directly in the root). Direct root files are left untouched.
+        """
+        # Only clean when the source was moved (or if caller explicitly wants cleanup on copy)
+        if not move:
+            return
+
+        try:
+            self._load_configuration()
+        except Exception:
+            # If config fails, skip cleanup
+            return
+
+        # Determine import root from config if present
+        import_root = None
+        if hasattr(self, 'import_base_path'):
+            import_root = getattr(self, 'import_base_path') or None
+        if not import_root:
+            # Fallback: try config section import_service.import_base_path
+            try:
+                config_service = self._get_config_service()
+                section = config_service.get_section('import_service') if config_service else None
+                if section:
+                    import_root = section.get('import_base_path') or section.get('import_root')
+            except Exception:
+                import_root = None
+
+        if not import_root:
+            return
+
+        import_root = os.path.abspath(import_root)
+        source_abs = os.path.abspath(source_file_path)
+        source_dir = os.path.dirname(source_abs)
+
+        # Only proceed if source lives under import_root and is not the root itself
+        if not source_dir.startswith(import_root):
+            return
+        if os.path.normpath(source_dir) == os.path.normpath(import_root):
+            return
+
+        # Attempt to remove directory if empty after move
+        try:
+            if not os.listdir(source_dir):
+                os.rmdir(source_dir)
+                self.logger.info("Cleaned up empty source directory: %s", source_dir)
+        except OSError:
+            # Directory not empty or cannot remove; ignore
+            pass
     
     def auto_import_file(self, source_file_path: str, 
                         asin: Optional[str] = None,
@@ -330,7 +454,7 @@ class ImportService:
             
             # Extract filename
             filename = os.path.basename(source_file_path)
-            self.logger.info(f"Importing file: {filename}")
+            self.logger.info("Importing file", extra={"filename": filename})
             
             # Get or extract ASIN
             if not asin:
@@ -357,7 +481,7 @@ class ImportService:
             return success, message, dest_path
             
         except Exception as e:
-            self.logger.error(f"Error auto-importing file: {e}", exc_info=True)
+            self.logger.error("Error auto-importing file", extra={"error": str(e)}, exc_info=True)
             return False, f"Auto-import error: {str(e)}", None
     
     def search_books_for_import(self, search_term: str, limit: int = 10) -> List[Dict]:
@@ -378,7 +502,7 @@ class ImportService:
                 limit
             )
         except Exception as e:
-            self.logger.error(f"Error searching books: {e}")
+            self.logger.error("Error searching books", extra={"error": str(e)})
             return []
     
     def import_multiple_books(self, imports: list[Dict]) -> Dict[str, any]:
@@ -465,6 +589,7 @@ class ImportService:
             return None
 
         asin = book_data.get('ASIN') or book_data.get('asin')
+        asin = self._normalize_asin(asin)
         try:
             if asin:
                 existing = database_service.get_book_by_asin(asin)
@@ -572,9 +697,9 @@ class ImportService:
                 if file_path and os.path.exists(file_path):
                     try:
                         os.remove(file_path)
-                        self.logger.info(f"Deleted file: {file_path}")
+                        self.logger.info("Deleted file", extra={"file_path": file_path})
                     except Exception as e:
-                        self.logger.error(f"Failed to delete file {file_path}: {e}")
+                        self.logger.error("Failed to delete file", extra={"file_path": file_path, "error": str(e)})
                         return False, f"Failed to delete file: {str(e)}"
             
             # Remove database record
@@ -586,18 +711,18 @@ class ImportService:
                 return False, "Failed to remove import record from database"
                 
         except Exception as e:
-            self.logger.error(f"Error removing import record: {e}")
+            self.logger.error("Error removing import record", extra={"error": str(e)})
             return False, f"Error: {str(e)}"
     
     def set_library_path(self, path: str):
         """Update the library base path."""
         if os.path.exists(path):
             self.library_base_path = path
-            self.logger.info(f"Updated library path to: {path}")
+            self.logger.info("Updated library path", extra={"library_path": path})
         else:
-            self.logger.error(f"Library path does not exist: {path}")
+            self.logger.error("Library path does not exist", extra={"library_path": path})
     
     def set_naming_template(self, template: str):
         """Update the default naming template."""
         self.naming_template = template
-        self.logger.debug(f"Updated naming template to: {template}")
+        self.logger.debug("Updated naming template", extra={"template": template})

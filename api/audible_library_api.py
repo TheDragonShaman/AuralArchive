@@ -1,11 +1,34 @@
 """
-Audible Library API - AuralArchive
+Module Name: audible_library_api.py
+Author: TheDragonShaman
+Created: August 5, 2025
+Last Modified: December 23, 2025
+Description:
+    Audible Library REST API. Coordinates export, search, statistics, auth
+    validation, bulk downloads, and metadata sync across Audible services.
 
-Coordinates library export, search, stats, auth validation, and metadata sync
-operations around the Audible cache and download services.
+Location:
+    /api/audible_library_api.py
 
-Author: AuralArchive Development Team
-Updated: December 3, 2025
+Audible Library API
+===================
+
+REST API endpoints for Audible library operations.
+
+Endpoints:
+- GET    /api/audible/library/status           - Service status
+- GET    /api/audible/library/test-cli         - audible package availability
+- GET    /api/audible/library/auth-status      - Authentication status
+- GET    /api/audible/library/export           - Export library (json/csv/tsv)
+- GET    /api/audible/library/stats            - Library statistics
+- GET    /api/audible/library/search           - Search library
+- POST   /api/audible/library/refresh          - Refresh library cache
+- POST   /api/audible/library/download/all     - Bulk download library
+- POST   /api/audible/library/sync/quick       - Start quick metadata sync
+- POST   /api/audible/library/sync/full        - Start full metadata sync
+- GET    /api/audible/library/sync/status      - Get sync status
+- GET    /api/audible/library/setup-info       - Auth setup info
+- GET    /api/audible/library/validate-credentials - Validate stored creds
 """
 
 import threading
@@ -26,7 +49,7 @@ from services.audible.audible_metadata_sync_service.audible_metadata_sync_servic
 # Create blueprint
 audible_library_api = Blueprint('audible_library_api', __name__, url_prefix='/api/audible/library')
 
-logger = get_module_logger("API.AudibleLibrary")
+logger = get_module_logger("API.Audible.Library")
 
 
 @audible_library_api.route('/status', methods=['GET'])

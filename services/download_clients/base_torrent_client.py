@@ -1,17 +1,21 @@
 """
-Base Torrent Client
-===================
+Module Name: base_torrent_client.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Abstract base for torrent client implementations and shared interface.
 
-Abstract base class for all torrent download client implementations.
-Defines the interface that all torrent clients must implement.
+Location:
+    /services/download_clients/base_torrent_client.py
+
 """
 
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, List
 from enum import Enum
-import logging
 
-logger = logging.getLogger("AuralArchiveLogger")
+from utils.logger import get_module_logger
 
 
 class TorrentState(Enum):
@@ -34,7 +38,7 @@ class BaseTorrentClient(ABC):
     and implement all abstract methods.
     """
     
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], *, logger=None):
         """
         Initialize the torrent client.
         
@@ -51,8 +55,13 @@ class BaseTorrentClient(ABC):
         self.client_type = self.__class__.__name__
         self.connected = False
         self.last_error = None
+        self.logger = logger or get_module_logger("Service.DownloadClients.BaseTorrentClient")
         
-        logger.debug(f"Initializing {self.client_type} with config: {config.get('host')}:{config.get('port')}")
+        self.logger.debug("Initializing torrent client", extra={
+            "client_type": self.client_type,
+            "host": config.get('host'),
+            "port": config.get('port')
+        })
     
     @abstractmethod
     def connect(self) -> bool:
@@ -247,7 +256,10 @@ class BaseTorrentClient(ABC):
             error: Error message to store
         """
         self.last_error = error
-        logger.error(f"{self.client_type}: {error}")
+        self.logger.error("Torrent client error", extra={
+            "client_type": self.client_type,
+            "error": error
+        })
     
     def _clear_error(self) -> None:
         """Clear the last error message."""
@@ -259,7 +271,9 @@ class BaseTorrentClient(ABC):
         Subclasses should override this if they need cleanup.
         """
         self.connected = False
-        logger.debug(f"{self.client_type} disconnected")
+        self.logger.debug("Torrent client disconnected", extra={
+            "client_type": self.client_type
+        })
     
     def __repr__(self) -> str:
         """String representation of the client."""

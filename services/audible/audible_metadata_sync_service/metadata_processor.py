@@ -1,23 +1,27 @@
 """
-Metadata Processing Helper - AuralArchive
+Module Name: metadata_processor.py
+Author: TheDragonShaman
+Created: August 26, 2025
+Last Modified: December 23, 2025
+Description:
+    Normalize and clean metadata for Audible sync workflows.
+Location:
+    /services/audible/audible_metadata_sync_service/metadata_processor.py
 
-Helper functions for processing and normalizing metadata from various sources.
-
-Author: AuralArchive Development Team
-Created: 2025-09-18
 """
 
 import re
 from datetime import datetime
 from typing import Dict, Any, Optional, List
-import logging
+
+from utils.logger import get_module_logger
 
 
 class MetadataProcessor:
     """Helper class for processing and normalizing metadata"""
     
     def __init__(self, logger=None):
-        self.logger = logger or logging.getLogger("MetadataProcessor")
+        self.logger = logger or get_module_logger("Service.Audible.MetadataSync.Processor")
     
     def normalize_metadata_to_db_format(self, metadata: Dict[str, Any], asin: str) -> Dict[str, Any]:
         """
@@ -140,8 +144,11 @@ class MetadataProcessor:
                 year = year_match.group()
                 return f"{year}-01-01T00:00:00"
             
-        except Exception as e:
-            self.logger.warning(f"Failed to parse date '{date_value}': {e}")
+        except Exception as exc:
+            self.logger.warning(
+                "Failed to parse date",
+                extra={"value": date_value, "exc": exc}
+            )
         
         return None
     
@@ -176,8 +183,11 @@ class MetadataProcessor:
                     elif 0 <= rating <= 10:
                         return rating / 2  # Convert 10-point scale to 5-point
             
-        except (ValueError, TypeError) as e:
-            self.logger.warning(f"Failed to parse rating '{rating_value}': {e}")
+        except (ValueError, TypeError) as exc:
+            self.logger.warning(
+                "Failed to parse rating",
+                extra={"value": rating_value, "exc": exc}
+            )
         
         return None
     
@@ -203,8 +213,11 @@ class MetadataProcessor:
                     num_str = match.group(1).replace(',', '')
                     return int(num_str)
             
-        except (ValueError, TypeError) as e:
-            self.logger.warning(f"Failed to parse num_ratings from '{rating_value}': {e}")
+        except (ValueError, TypeError) as exc:
+            self.logger.warning(
+                "Failed to parse num_ratings",
+                extra={"value": rating_value, "exc": exc}
+            )
         
         return 0
     
@@ -229,8 +242,11 @@ class MetadataProcessor:
                 if match:
                     return match.group(1)
             
-        except (ValueError, TypeError) as e:
-            self.logger.warning(f"Failed to extract series sequence from '{series_value}': {e}")
+        except (ValueError, TypeError) as exc:
+            self.logger.warning(
+                "Failed to extract series sequence",
+                extra={"value": series_value, "exc": exc}
+            )
         
         return None
     
@@ -258,8 +274,11 @@ class MetadataProcessor:
             
             return ', '.join(cleaned_genres) if cleaned_genres else None
             
-        except Exception as e:
-            self.logger.warning(f"Failed to process genres '{genres_value}': {e}")
+        except Exception as exc:
+            self.logger.warning(
+                "Failed to process genres",
+                extra={"value": genres_value, "exc": exc}
+            )
             return None
     
     def _parse_runtime(self, runtime_value: Any) -> Optional[int]:
@@ -291,6 +310,9 @@ class MetadataProcessor:
             
             return total_minutes if total_minutes > 0 else None
             
-        except (ValueError, TypeError) as e:
-            self.logger.warning(f"Failed to parse runtime '{runtime_value}': {e}")
+        except (ValueError, TypeError) as exc:
+            self.logger.warning(
+                "Failed to parse runtime",
+                extra={"value": runtime_value, "exc": exc}
+            )
             return None

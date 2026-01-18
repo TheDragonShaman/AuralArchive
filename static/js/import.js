@@ -379,6 +379,9 @@
             updateSelectAllCardsCheckbox();
             updateImportButtonState();
             showNotification('Files staged. Review the cards below.', 'success');
+
+            // Auto-refresh staged cards to hydrate metadata without manual clicks
+            await refreshAllCardsOnce();
         } catch (error) {
             console.error(error);
             showNotification(error.message || 'Staging failed', 'error');
@@ -924,10 +927,14 @@
             renderCardGrid();
             updateSelectAllCardsCheckbox();
             updateImportButtonState();
-            showNotification('Card metadata updated.', 'success');
+            if (!options.silent) {
+                showNotification('Card metadata updated.', 'success');
+            }
         } catch (error) {
             console.error(error);
-            showNotification(error.message || 'Metadata refresh failed', 'error');
+            if (!options.silent) {
+                showNotification(error.message || 'Metadata refresh failed', 'error');
+            }
         }
     }
 
@@ -1025,6 +1032,23 @@
             setMetadataSearchStatus(error.message || 'Search failed', true);
         } finally {
             setButtonLoading(elements.metadataSearchSubmit, false);
+        }
+    }
+
+    async function refreshAllCardsOnce() {
+        if (!state.batch || !Array.isArray(state.batch.cards) || !state.batch.cards.length) {
+            return;
+        }
+        for (const card of state.batch.cards) {
+            if (!card || !card.card_id) {
+                continue;
+            }
+            try {
+                // Use silent mode to avoid spamming notifications
+                await refreshCard(card.card_id, { silent: true });
+            } catch (err) {
+                console.debug('Card auto-refresh failed', card.card_id, err);
+            }
         }
     }
 

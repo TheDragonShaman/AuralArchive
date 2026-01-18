@@ -1,11 +1,37 @@
 """
-Manual Download API - AuralArchive
+Module Name: manual_download_api.py
+Author: TheDragonShaman
+Created: June 22, 2025
+Last Modified: December 23, 2025
+Description:
+    Manual Download and Search REST API. Provides manual and automatic search
+    controls, queue operations, ownership checks, and metadata normalization to
+    drive the download queue.
 
-Provides manual and automatic search endpoints that drive the download queue,
-including status controls, ownership checks, and metadata normalization.
+Location:
+    /api/manual_download_api.py
 
-Author: AuralArchive Development Team
-Updated: December 3, 2025
+Manual Download API
+===================
+
+Endpoints (high level):
+- GET    /api/search/automatic/status           - Automatic search status
+- POST   /api/search/automatic/start            - Start automatic search
+- POST   /api/search/automatic/stop             - Stop automatic search
+- POST   /api/search/automatic/pause            - Pause automatic search
+- POST   /api/search/automatic/resume           - Resume automatic search
+- GET    /api/search/automatic/queue            - List automatic search queue
+- POST   /api/search/automatic/force/<book_id>  - Force search for a book
+- GET    /api/search/automatic/config           - Get automatic search config
+- POST   /api/search/automatic/config           - Update automatic search config
+- POST   /api/search/manual/search              - Manual search
+- POST   /api/search/manual/book/<book_id>      - Interactive search for a book
+- POST   /api/search/manual/preview             - Preview a download result
+- POST   /api/search/manual/download            - Queue a manual download
+- GET    /api/search/manual/suggestions         - Search suggestions
+- GET    /api/search/books/wanted               - Wanted books list
+- PUT    /api/search/books/<book_id>/status     - Update book status
+- GET    /api/search/test                       - Test endpoint
 """
 
 import re
@@ -23,7 +49,7 @@ from services.service_manager import (
 )
 from services.audible.ownership_validator import assess_audible_ownership, fetch_audible_library_entry
 
-logger = get_module_logger("API.ManualDownload")
+logger = get_module_logger("API.Manual.Download")
 
 # Create blueprint
 manual_search_api_bp = Blueprint('manual_search_api', __name__)
@@ -440,10 +466,10 @@ def interactive_search_book(book_id):
         
         # Debug logging
         if processed_results and len(processed_results) > 0:
-            logger.info(f"First result structure: {processed_results[0]}")
-            logger.info(f"First result has quality_assessment: {'quality_assessment' in processed_results[0]}")
+            logger.debug(f"First result structure: {processed_results[0]}")
+            logger.debug(f"First result has quality_assessment: {'quality_assessment' in processed_results[0]}")
             if 'quality_assessment' in processed_results[0]:
-                logger.info(f"Quality assessment: {processed_results[0]['quality_assessment']}")
+                logger.debug(f"Quality assessment: {processed_results[0]['quality_assessment']}")
         
         # Build response
         response = {

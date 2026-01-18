@@ -1,12 +1,28 @@
-import logging
+"""
+Module Name: metadata_service.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Singleton service orchestrating metadata searches and database updates for
+    books. Coordinates matching, search strategies, and update workflows.
+
+Location:
+    /services/metadata/metadata_service.py
+
+"""
+
 import threading
-import time
 from typing import Tuple, Dict, List, Optional, Callable
 
 from .metadata_lookup_strategies import MetadataSearchStrategies
 from .matching import MetadataMatching
 from .database_updates import MetadataDatabaseUpdates
 from .error_handling import MetadataErrorHandler
+from utils.logger import get_module_logger
+
+
+_LOGGER = get_module_logger("Service.Metadata.Service")
 
 
 class CancellationContext:
@@ -47,11 +63,11 @@ class MetadataUpdateService:
                     cls._instance = super().__new__(cls)
         return cls._instance
     
-    def __init__(self):
+    def __init__(self, *, logger=None):
         if not self._initialized:
             with self._lock:
                 if not self._initialized:
-                    self.logger = logging.getLogger("MetadataUpdateService.Main")
+                    self.logger = logger or _LOGGER
                     
                     # Initialize service references as None - will be lazy loaded
                     self.audible_service = None
@@ -63,7 +79,7 @@ class MetadataUpdateService:
                     self.matching = MetadataMatching()
                     self.error_handler = MetadataErrorHandler()
                     
-                    self.logger.info("MetadataUpdateService initialized successfully (lazy loading)")
+                    self.logger.success("Metadata update service started successfully", extra={"lazy_loading": True})
                     MetadataUpdateService._initialized = True
     
     def _ensure_dependencies(self):
@@ -86,10 +102,20 @@ class MetadataUpdateService:
                     from .database_updates import MetadataDatabaseUpdates
                     self.database_updates = MetadataDatabaseUpdates(self.database_service)
                 
-                self.logger.info("Service dependencies lazy loaded successfully")
+                self.logger.info(
+                    "Service dependencies lazy loaded successfully",
+                    extra={
+                        "audible_service_loaded": bool(self.audible_service),
+                        "database_service_loaded": bool(self.database_service),
+                    },
+                )
                 
             except Exception as e:
-                self.logger.error(f"Failed to lazy load dependencies: {e}")
+                self.logger.error(
+                    "Failed to lazy load dependencies",
+                    extra={"error": str(e)},
+                    exc_info=True,
+                )
                 raise
 
     def _initialize_dependencies(self):
@@ -106,7 +132,10 @@ class MetadataUpdateService:
             # Test database connection
             db_valid, db_message = self.database_updates.validate_database_connection()
             if not db_valid:
-                self.logger.warning(f"Database validation failed: {db_message}")
+                self.logger.warning(
+                    "Database validation failed",
+                    extra={"message": db_message},
+                )
             
             # Test search strategies
             search_valid = self.search_strategies.validate_search_strategy_config()
@@ -116,7 +145,11 @@ class MetadataUpdateService:
             self.logger.info("Service setup validation completed")
             
         except Exception as e:
-            self.logger.error(f"Service validation error: {e}")
+            self.logger.error(
+                "Service validation error",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
     
     @MetadataErrorHandler().with_retry(max_retries=2, retry_delay=1.0)
     def update_single_book(self, book_id: int, cancellation_context: Optional[CancellationContext] = None) -> Tuple[bool, str]:
@@ -155,7 +188,14 @@ class MetadataUpdateService:
             if cancellation_context:
                 cancellation_context.raise_if_cancelled()
             
-            self.logger.info(f"Updating metadata for book {book_id}: '{book_data.get('Title', 'Unknown')}' by '{book_data.get('Author', 'Unknown')}'")
+            self.logger.info(
+                "Updating metadata for book",
+                extra={
+                    "book_id": book_id,
+                    "title": book_data.get('Title', 'Unknown'),
+                    "author": book_data.get('Author', 'Unknown'),
+                },
+            )
             
             # Extract current book information
             current_title = book_data.get('Title', '')
@@ -180,10 +220,20 @@ class MetadataUpdateService:
                 cancellation_context.raise_if_cancelled()
             
             if not fresh_metadata:
-                self.logger.warning(f"No metadata found for book {book_id}: '{current_title}' by '{current_author}'")
+                self.logger.warning(
+                    "No metadata found for book",
+                    extra={"book_id": book_id, "title": current_title, "author": current_author},
+                )
                 return False, "No metadata found for this book"
             
-            self.logger.info(f"Found fresh metadata for book {book_id}: '{fresh_metadata.get('title', 'Unknown')}' by '{fresh_metadata.get('author', 'Unknown')}'")
+            self.logger.info(
+                "Found fresh metadata for book",
+                extra={
+                    "book_id": book_id,
+                    "title": fresh_metadata.get('title', 'Unknown'),
+                    "author": fresh_metadata.get('author', 'Unknown'),
+                },
+            )
             
             # Check for cancellation before database update
             if cancellation_context:
@@ -197,18 +247,25 @@ class MetadataUpdateService:
             )
             
             if update_success:
-                self.logger.info(f"Successfully updated metadata for book {book_id}")
+                self.logger.info("Successfully updated metadata for book", extra={"book_id": book_id})
                 return True, "Metadata updated successfully"
             else:
-                self.logger.error(f"Failed to update book {book_id} in database: {update_message}")
+                self.logger.error(
+                    "Failed to update book in database",
+                    extra={"book_id": book_id, "error": update_message},
+                )
                 return False, f"Database update failed: {update_message}"
                 
         except CancellationException:
             # Re-raise cancellation exceptions
-            self.logger.info(f"Metadata update for book {book_id} was cancelled")
+            self.logger.info("Metadata update was cancelled", extra={"book_id": book_id})
             raise
         except Exception as e:
-            self.logger.error(f"Error updating book {book_id}: {e}")
+            self.logger.error(
+                "Error updating book",
+                extra={"book_id": book_id, "error": str(e)},
+                exc_info=True,
+            )
             return False, str(e)
     
     def update_multiple_books(self, book_ids: List[int]) -> Dict[str, any]:
@@ -217,7 +274,10 @@ class MetadataUpdateService:
             # Ensure dependencies are loaded
             self._ensure_dependencies()
             
-            self.logger.info(f"Starting batch metadata update for {len(book_ids)} books")
+            self.logger.info(
+                "Starting batch metadata update",
+                extra={"total": len(book_ids)},
+            )
             
             results = {
                 'total': len(book_ids),
@@ -251,15 +311,22 @@ class MetadataUpdateService:
                         'error': str(e)
                     })
             
-            summary_message = f"Batch update completed: {results['successful']} successful, {results['failed']} failed"
-            self.logger.info(summary_message)
-            results['summary'] = summary_message
+            summary_message = "Batch update completed"
+            self.logger.info(
+                summary_message,
+                extra={"successful": results['successful'], "failed": results['failed']},
+            )
+            results['summary'] = f"Batch update completed: {results['successful']} successful, {results['failed']} failed"
             
             return results
             
         except Exception as e:
-            error_message = f"Error in batch update: {e}"
-            self.logger.error(error_message)
+            error_message = "Error in batch update"
+            self.logger.error(
+                error_message,
+                extra={"error": str(e)},
+                exc_info=True,
+            )
             return {
                 'total': len(book_ids),
                 'successful': 0,
@@ -273,7 +340,11 @@ class MetadataUpdateService:
         try:
             return self.database_updates.find_books_needing_metadata_updates(limit)
         except Exception as e:
-            self.logger.error(f"Error finding books needing updates: {e}")
+            self.logger.error(
+                "Error finding books needing updates",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
             return []
     
     def search_by_author(self, author: str, title_hint: str = "") -> List[Dict]:
@@ -281,7 +352,11 @@ class MetadataUpdateService:
         try:
             return self.search_strategies.search_by_author_only(author, title_hint)
         except Exception as e:
-            self.logger.error(f"Error searching by author '{author}': {e}")
+            self.logger.error(
+                "Error searching by author",
+                extra={"author": author, "error": str(e)},
+                exc_info=True,
+            )
             return []
     
     def search_by_series(self, series_name: str, sequence: str = "") -> List[Dict]:
@@ -289,7 +364,11 @@ class MetadataUpdateService:
         try:
             return self.search_strategies.search_by_series(series_name, sequence)
         except Exception as e:
-            self.logger.error(f"Error searching by series '{series_name}': {e}")
+            self.logger.error(
+                "Error searching by series",
+                extra={"series_name": series_name, "error": str(e)},
+                exc_info=True,
+            )
             return []
     
     def get_service_status(self) -> Dict[str, any]:
@@ -350,13 +429,17 @@ class MetadataUpdateService:
             return status
             
         except Exception as e:
-            self.logger.error(f"Error getting service status: {e}")
+            self.logger.error(
+                "Error getting service status",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
             return {'error': str(e)}
     
     def test_update_process(self, book_id: int) -> Dict[str, any]:
         """Test the update process without making changes (dry run)"""
         try:
-            self.logger.info(f"Testing update process for book ID: {book_id}")
+            self.logger.info("Testing update process", extra={"book_id": book_id})
             
             # Get book data
             success, book_data, message = self.database_updates.get_book_from_database(book_id)
@@ -393,7 +476,11 @@ class MetadataUpdateService:
             return test_result
             
         except Exception as e:
-            self.logger.error(f"Error testing update process: {e}")
+            self.logger.error(
+                "Error testing update process",
+                extra={"book_id": book_id, "error": str(e)},
+                exc_info=True,
+            )
             return {'success': False, 'error': str(e)}
     
     def reset_service(self):

@@ -1,13 +1,30 @@
-import logging
+"""
+Module Name: database_updates.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Handles database update operations for the metadata service, including
+    validation, sanitization, and persistence of refreshed metadata.
+
+Location:
+    /services/metadata/database_updates.py
+
+"""
+
 from typing import Dict, Tuple, List
 from .error_handling import error_handler
+from utils.logger import get_module_logger
+
+
+_LOGGER = get_module_logger("Service.Metadata.DatabaseUpdates")
 
 class MetadataDatabaseUpdates:
     """Handles database update operations for metadata service"""
     
-    def __init__(self, database_service):
+    def __init__(self, database_service, *, logger=None):
         self.database_service = database_service
-        self.logger = logging.getLogger("MetadataUpdateService.DatabaseUpdates")
+        self.logger = logger or _LOGGER
     
     def update_book_in_database(self, book_id: int, fresh_metadata: Dict, current_status: str) -> Tuple[bool, str]:
         """Update book in database with fresh metadata"""
@@ -80,7 +97,10 @@ class MetadataDatabaseUpdates:
                     book_id
                 )
                 
-                self.logger.debug(f"Executing update with {len(values)} parameters for book ID {book_id}")
+                self.logger.debug(
+                    "Executing book update",
+                    extra={"book_id": book_id, "param_count": len(values)},
+                )
                 cursor.execute(update_query, values)
                 rows_affected = cursor.rowcount
                 
@@ -93,20 +113,23 @@ class MetadataDatabaseUpdates:
                         author_results = process_book_contributors_for_authors(fresh_metadata)
                         if author_results:
                             self.logger.info(
-                                f"Processed {len(author_results)} contributor author(s) during metadata update for book ID {book_id}"
+                                "Processed contributor authors during metadata update",
+                                extra={"book_id": book_id, "authors_processed": len(author_results)},
                             )
                     except Exception as contributor_error:
                         self.logger.warning(
-                            f"Author contributor processing failed for book ID {book_id}: {contributor_error}"
+                            "Author contributor processing failed",
+                            extra={"book_id": book_id, "error": str(contributor_error)},
+                            exc_info=True,
                         )
 
-                    success_message = f"Successfully updated book ID {book_id} in database"
-                    self.logger.info(success_message)
+                    success_message = "Successfully updated book in database"
+                    self.logger.info(success_message, extra={"book_id": book_id, "rows_affected": rows_affected})
                     error_handler.log_update_result(book_id, True, success_message)
                     return True, success_message
                 else:
-                    error_message = f"No rows updated for book ID {book_id}"
-                    self.logger.warning(error_message)
+                    error_message = "No rows updated for book"
+                    self.logger.warning(error_message, extra={"book_id": book_id})
                     error_handler.log_update_result(book_id, False, error_message)
                     return False, error_message
                     
@@ -114,8 +137,12 @@ class MetadataDatabaseUpdates:
                 conn.close()
                 
         except Exception as e:
-            error_message = f"Database update failed for book ID {book_id}: {e}"
-            self.logger.error(error_message)
+            error_message = "Database update failed"
+            self.logger.error(
+                error_message,
+                extra={"book_id": book_id, "error": str(e)},
+                exc_info=True,
+            )
             error_handler.log_update_result(book_id, False, error_message)
             
             # Try to close connection if it exists
@@ -135,24 +162,32 @@ class MetadataDatabaseUpdates:
             book = self.database_service.get_book_by_id(book_id)
             
             if not book:
-                error_message = f"Book with ID {book_id} not found in database"
-                self.logger.warning(error_message)
+                error_message = "Book not found in database"
+                self.logger.warning(error_message, extra={"book_id": book_id})
                 return False, {}, error_message
             
             # Validate essential fields
             title = book.get('Title', '').strip()
             if not title:
-                error_message = f"Book ID {book_id} has no title"
-                self.logger.error(error_message)
+                error_message = "Book missing title"
+                self.logger.error(
+                    error_message,
+                    extra={"book_id": book_id},
+                    exc_info=True,
+                )
                 return False, book, error_message
             
-            success_message = f"Successfully retrieved book: {title}"
-            self.logger.debug(success_message)
+            success_message = "Successfully retrieved book"
+            self.logger.debug(success_message, extra={"book_id": book_id, "title": title})
             return True, book, success_message
             
         except Exception as e:
-            error_message = f"Error retrieving book ID {book_id} from database: {e}"
-            self.logger.error(error_message)
+            error_message = "Error retrieving book from database"
+            self.logger.error(
+                error_message,
+                extra={"book_id": book_id, "error": str(e)},
+                exc_info=True,
+            )
             return False, {}, error_message
     
     def backup_book_data(self, book_id: int, book_data: Dict) -> bool:
@@ -160,7 +195,14 @@ class MetadataDatabaseUpdates:
         try:
             # This could be implemented to store backup data
             # For now, we'll just log the current state
-            self.logger.info(f"Backup for book ID {book_id}: {book_data.get('Title', 'Unknown')} by {book_data.get('Author', 'Unknown')}")
+            self.logger.info(
+                "Backup snapshot created",
+                extra={
+                    "book_id": book_id,
+                    "title": book_data.get('Title', 'Unknown'),
+                    "author": book_data.get('Author', 'Unknown'),
+                },
+            )
             
             # In a full implementation, this might:
             # 1. Store in a backup table
@@ -170,7 +212,11 @@ class MetadataDatabaseUpdates:
             return True
             
         except Exception as e:
-            self.logger.error(f"Error backing up book data for ID {book_id}: {e}")
+            self.logger.error(
+                "Error backing up book data",
+                extra={"book_id": book_id, "error": str(e)},
+                exc_info=True,
+            )
             return False
     
     def validate_database_connection(self) -> Tuple[bool, str]:
@@ -206,7 +252,11 @@ class MetadataDatabaseUpdates:
             }
             
         except Exception as e:
-            self.logger.error(f"Error getting update statistics: {e}")
+            self.logger.error(
+                "Error getting update statistics",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
             return {'error': str(e)}
     
     def find_books_needing_metadata_updates(self, limit: int = 100) -> List[Dict]:
@@ -239,11 +289,18 @@ class MetadataDatabaseUpdates:
                     if len(books_needing_updates) >= limit:
                         break
             
-            self.logger.info(f"Found {len(books_needing_updates)} books that might need metadata updates")
+            self.logger.info(
+                "Found books needing metadata updates",
+                extra={"count": len(books_needing_updates), "limit": limit},
+            )
             return books_needing_updates
             
         except Exception as e:
-            self.logger.error(f"Error finding books needing updates: {e}")
+            self.logger.error(
+                "Error finding books needing updates",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
             return []
     
     def update_multiple_books(self, book_updates: List[Tuple[int, Dict, str]]) -> Dict[str, int]:
@@ -255,7 +312,10 @@ class MetadataDatabaseUpdates:
                 'total': len(book_updates)
             }
             
-            self.logger.info(f"Starting batch update of {results['total']} books")
+            self.logger.info(
+                "Starting batch metadata update",
+                extra={"total": results['total']},
+            )
             
             for book_id, metadata, status in book_updates:
                 try:
@@ -264,17 +324,31 @@ class MetadataDatabaseUpdates:
                         results['successful'] += 1
                     else:
                         results['failed'] += 1
-                        self.logger.warning(f"Batch update failed for book {book_id}: {message}")
+                        self.logger.warning(
+                            "Batch update failed",
+                            extra={"book_id": book_id, "error": message},
+                        )
                         
                 except Exception as e:
                     results['failed'] += 1
-                    self.logger.error(f"Error in batch update for book {book_id}: {e}")
+                    self.logger.error(
+                        "Error in batch update",
+                        extra={"book_id": book_id, "error": str(e)},
+                        exc_info=True,
+                    )
             
-            self.logger.info(f"Batch update completed: {results['successful']} successful, {results['failed']} failed")
+            self.logger.info(
+                "Batch update completed",
+                extra={"successful": results['successful'], "failed": results['failed']},
+            )
             return results
             
         except Exception as e:
-            self.logger.error(f"Error in batch update operation: {e}")
+            self.logger.error(
+                "Error in batch update operation",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
             return {'successful': 0, 'failed': len(book_updates), 'total': len(book_updates), 'error': str(e)}
 
 # This will be instantiated by the main service with dependency injection

@@ -1,11 +1,13 @@
 """
-Get Services Status Route - AuralArchive
+Module Name: get_services_status.py
+Author: TheDragonShaman
+Created: July 31, 2025
+Last Modified: December 23, 2025
+Description:
+    Settings helper summarizing metadata, download, ABS, and database service health.
+Location:
+    /routes/settings_tools/get_services_status.py
 
-Summarizes the health of metadata, download, AudioBookShelf, and database
-services for the settings dashboard.
-
-Author: AuralArchive Development Team
-Updated: December 2, 2025
 """
 
 from datetime import datetime
@@ -20,7 +22,7 @@ from services.service_manager import (
 )
 from utils.logger import get_module_logger
 
-logger = get_module_logger("Route.Settings.ServicesStatus")
+logger = get_module_logger("Routes.Settings.ServicesStatus")
 
 def handle_get_services_status():
     """Get detailed status of all services - FIXED."""

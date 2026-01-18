@@ -24,7 +24,8 @@
 
     const defaultCover = '/static/images/auralarchive_logo.png';
     const VIEW_PREF_KEY = 'aa-discover-view';
-    const recommendationLimit = 18;
+    const recommendationLimit = 40; // over-fetch to account for filtering/dedup
+    const recommendationDisplayLimit = 16;
 
     let currentView = loadViewPreference();
     let isFetching = false;
@@ -76,6 +77,11 @@
             return;
         }
         resultsContainer.dataset.view = currentView;
+        if (currentView === 'grid') {
+            resultsContainer.style.display = 'grid';
+        } else {
+            resultsContainer.style.removeProperty('display');
+        }
         if (gridToggle) {
             gridToggle.classList.toggle('is-active', currentView === 'grid');
         }
@@ -151,12 +157,18 @@
     }
 
     function renderRecommendations(items) {
-        latestRecommendations = Array.isArray(items) ? items : [];
+        const normalized = Array.isArray(items) ? items : [];
+        latestRecommendations = normalized.slice(0, recommendationDisplayLimit);
 
         if (!latestRecommendations.length) {
             clearResults();
             toggleEmptyState(true);
             return;
+        }
+
+        // Default to grid for the refreshed layout when no prior preference exists
+        if (!['grid', 'list', 'table'].includes(currentView)) {
+            currentView = 'grid';
         }
 
         toggleEmptyState(false);
@@ -260,6 +272,26 @@
     function attachCardInteractions(card, item) {
         if (!card) {
             return;
+        }
+
+        const modalTriggers = card.querySelectorAll('[data-action="open-modal"]');
+        modalTriggers.forEach((trigger) => {
+            trigger.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                openRecommendationModal(item);
+            });
+        });
+
+        const addToLibraryBtn = card.querySelector('[data-action="card-add-to-library"]');
+        if (addToLibraryBtn) {
+            addToLibraryBtn.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                const asin = addToLibraryBtn.dataset.asin;
+                const book = asin ? findRecommendationByAsin(asin) : item;
+                addRecommendationToLibrary(book || item, addToLibraryBtn);
+            });
         }
 
         card.addEventListener('click', (event) => {
@@ -583,32 +615,84 @@
         const safeTitle = escapeHtml(rawTitle);
         const author = escapeHtml(resolveAuthor(item));
         const cover = escapeHtml(item.cover_image || item.cover_url || defaultCover);
-    const rawAsin = resolveAsin(item);
-        const summary = escapeHtml(cleanSummary(item.summary || item.Summary));
-        const metaPills = createMetaPills(item);
-        const actions = createActionRow(rawAsin, rawTitle);
-        const overlay = item.download_available ? '<div class="search-card-overlay"><span class="media-chip media-chip--accent"><i class="fas fa-download"></i> Download Ready</span></div>' : '';
+        const asin = escapeHtml(resolveAsin(item));
+        const seriesTitle = item.series || item.Series || '';
+        const sequence = item.sequence || item.Sequence;
+        const seriesLabel = seriesTitle ? `${seriesTitle}${sequence ? ` · Book ${sequence}` : ''}` : '';
+        const runtime = resolveRuntime(item);
+        const ratingValue = parseFloat(item.rating || item['Overall Rating'] || 0);
+        const ratingCount = Number(item.num_ratings || item.numRatings || item.NumRatings || 0);
+        const narrator = getPrimaryNarrator(item.narrator || item.Narrator || '');
+        const status = getLibraryStatus(item);
+        const source = formatSource(item.search_source || item.searchSource || 'Audible');
+        const chipRow = item.download_available
+            ? '<span class="discover-chip discover-chip--accent"><i class="fas fa-download"></i> Ready</span>'
+            : '';
 
-        const coverMarkup = cover
-            ? `<img src="${cover}" alt="${safeTitle} cover" loading="lazy">`
-            : '<div class="placeholder-cover">AUDIO<br>BOOK</div>';
+        const statusLabels = {
+            in_library: 'In Library',
+            wanted: 'Wanted',
+            downloading: 'Downloading',
+            not_in_library: 'Not in Library'
+        };
+
+        const statusClass = status === 'in_library'
+            ? 'discover-status discover-status--success'
+            : status === 'wanted'
+                ? 'discover-status discover-status--warning'
+                : status === 'downloading'
+                    ? 'discover-status discover-status--info'
+                    : 'discover-status';
+
+        const addAction = status === 'not_in_library' && asin
+            ? `<button class="discover-btn discover-btn--primary" type="button" data-action="card-add-to-library" data-asin="${asin}">+ Add to Library</button>`
+            : `<span class="${statusClass}">${statusLabels[status] || 'In Library'}</span>`;
+
+        const ratingMarkup = (!Number.isNaN(ratingValue) && ratingValue > 0)
+            ? `<div class="discover-rating">
+                    <span class="discover-rating__star">★</span>
+                    <span class="discover-rating__value">${ratingValue.toFixed(1)}</span>
+                    ${ratingCount > 0 ? `<span class="discover-rating__count">(${formatRatingsCount(ratingCount)})</span>` : ''}
+               </div>`
+            : '<div class="discover-pill discover-pill--muted">New pick</div>';
+
+        const inspectorHref = `/search?query=${encodeURIComponent(asin || rawTitle)}`;
+        const audibleHref = '';
+
+        const seriesMeta = seriesLabel
+            ? `<div class="discover-meta-item"><i class="fas fa-layer-group"></i><span>${escapeHtml(seriesLabel)}</span></div>`
+            : '';
+
+        const narratorMeta = narrator
+            ? `<div class="discover-meta-item"><i class="fas fa-microphone"></i><span>${escapeHtml(narrator)}</span></div>`
+            : '';
+
+        const runtimeMeta = runtime
+            ? `<div class="discover-meta-item"><i class="fas fa-clock"></i><span>${escapeHtml(runtime)}</span></div>`
+            : '';
 
         return `
-            <div class="search-card-shell card card-side bg-base-100 shadow-sm">
-                <figure class="search-card-media">
-                    ${coverMarkup}
-                    ${overlay}
-                </figure>
-                <div class="card-body search-card-content">
-                    <div class="search-card-top">
-                        <div class="title-group">
-                            <h3 class="search-card-title">${safeTitle}</h3>
-                            <p class="search-card-author">By ${author}</p>
-                        </div>
+            <div class="discover-card">
+                <div class="discover-media">
+                    <div class="discover-cover">
+                        <img src="${cover}" alt="${safeTitle} cover" loading="lazy" class="discover-cover__img">
+                        ${chipRow ? `<div class="discover-chip-row">${chipRow}</div>` : ''}
                     </div>
-                    ${metaPills ? `<div class="search-card-meta">${metaPills}</div>` : ''}
-                    ${summary ? `<div class="search-card-summary">${summary}</div>` : ''}
-                    <div class="card-actions search-card-actions">${actions}</div>
+                </div>
+                <div class="discover-body">
+                    <div class="discover-title">${safeTitle}</div>
+                    <div class="discover-author">${author}</div>
+                    <div class="discover-meta-list">
+                        ${seriesMeta}
+                        ${narratorMeta}
+                        ${runtimeMeta}
+                    </div>
+                    <div class="discover-rating-row">${ratingMarkup}</div>
+                </div>
+                <div class="discover-actions">
+                    <button class="discover-btn" type="button" data-action="open-modal">Details</button>
+                    <a href="${escapeHtml(inspectorHref)}" class="discover-btn discover-btn--ghost">Similar</a>
+                    ${addAction}
                 </div>
             </div>
         `;

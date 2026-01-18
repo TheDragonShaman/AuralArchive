@@ -1,31 +1,38 @@
 """
-State Machine
-=============
+Module Name: state_machine.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Manages download state transitions and validation for the pipeline. Enforces
+    valid transitions across torrent and Audible branches while stamping key
+    timestamps during lifecycle milestones.
 
-Manages download state transitions and validation.
+Location:
+    /services/download_management/state_machine.py
 
 Valid state flow:
-QUEUED → SEARCHING → FOUND → DOWNLOADING → PAUSED → DOWNLOADING
-                                        ↓
-                                    COMPLETE → CONVERTING → CONVERTED → IMPORTING → IMPORTED
-                                        ↓ (torrents/NZBs skip conversion)
-                                    COMPLETE → IMPORTING → IMPORTED
-                                                              ↓
-                                                  (if seeding enabled) SEEDING → SEEDING_COMPLETE
-                                        ↓
-                                    (error states: SEARCH_FAILED, DOWNLOAD_FAILED, etc.)
+    QUEUED → SEARCHING → FOUND → DOWNLOADING → PAUSED → DOWNLOADING
+                                            ↓
+                                        COMPLETE → CONVERTING → CONVERTED → IMPORTING → IMPORTED
+                                            ↓ (torrents/NZBs skip conversion)
+                                        COMPLETE → IMPORTING → IMPORTED
+                                                                  ↓
+                                                      (if seeding enabled) SEEDING → SEEDING_COMPLETE
+                                            ↓
+                                        (error states: SEARCH_FAILED, DOWNLOAD_FAILED, etc.)
 
 Audible-specific branch:
-QUEUED → AUDIBLE_DOWNLOADING → COMPLETE → CONVERTING → …
-                      ↓
-               AUDIBLE_DOWNLOAD_FAILED (retryable)
+    QUEUED → AUDIBLE_DOWNLOADING → COMPLETE → CONVERTING → …
+                          ↓
+                   AUDIBLE_DOWNLOAD_FAILED (retryable)
+
 """
 
-import logging
 from typing import Dict, Set
 from datetime import datetime
 
-logger = logging.getLogger("DownloadManagement.StateMachine")
+from utils.logger import get_module_logger
 
 
 class StateMachine:
@@ -61,9 +68,9 @@ class StateMachine:
     'CANCELLED': set()  # Terminal state
     }
     
-    def __init__(self):
+    def __init__(self, *, logger=None):
         """Initialize state machine."""
-        self.logger = logging.getLogger("DownloadManagement.StateMachine")
+        self.logger = logger or get_module_logger("Service.DownloadManagement.StateMachine")
         self._queue_manager = None
     
     def _get_queue_manager(self):
@@ -88,17 +95,14 @@ class StateMachine:
         download = queue_manager.get_download(download_id)
         
         if not download:
-            self.logger.error(f"Download {download_id} not found")
+            self.logger.error("Download %s not found", download_id)
             return False
         
         current_status = download['status']
         
         # Validate transition
         if not self.is_valid_transition(current_status, new_status):
-            self.logger.error(
-                f"Invalid state transition for download {download_id}: "
-                f"{current_status} → {new_status}"
-            )
+            self.logger.warning("Invalid transition download_id=%s %s→%s", download_id, current_status, new_status)
             return False
         
         # Perform transition
@@ -114,7 +118,7 @@ class StateMachine:
         
         queue_manager.update_download(download_id, updates)
         
-        self.logger.debug(f"Download {download_id}: {current_status} → {new_status}")
+        self.logger.info("Download %s transition %s→%s", download_id, current_status, new_status)
         return True
     
     def is_valid_transition(self, current_status: str, new_status: str) -> bool:
@@ -129,7 +133,7 @@ class StateMachine:
             True if transition is allowed
         """
         if current_status not in self.ALLOWED_TRANSITIONS:
-            self.logger.warning(f"Unknown current status: {current_status}")
+            self.logger.warning("Unknown current status '%s' for transition to '%s'", current_status, new_status)
             return False
         
         allowed = self.ALLOWED_TRANSITIONS[current_status]

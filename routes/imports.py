@@ -1,11 +1,13 @@
 """
-Import Routes - AuralArchive
+Module Name: imports.py
+Author: TheDragonShaman
+Created: July 21, 2025
+Last Modified: December 23, 2025
+Description:
+    Manual import dashboard routes leveraging AudiobookShelf and import settings.
+Location:
+    /routes/imports.py
 
-Renders the manual import dashboard and surfaces default paths/templates based on
-the configured AudiobookShelf + import settings.
-
-Author: AuralArchive Development Team
-Updated: December 2, 2025
 """
 
 from flask import Blueprint, render_template  # type: ignore
@@ -13,7 +15,7 @@ from flask import Blueprint, render_template  # type: ignore
 from services.service_manager import get_config_service
 from utils.logger import get_module_logger
 
-logger = get_module_logger("Route.Import")
+logger = get_module_logger("Routes.Import")
 
 import_bp = Blueprint('import_page', __name__)
 

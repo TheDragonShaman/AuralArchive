@@ -1,14 +1,22 @@
 """
-Template Parser - Parses and validates naming templates
-Handles template variable substitution and validation
+Module Name: template_parser.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Parses and validates naming templates, handling variable substitution and
+    validation for AudioBookShelf-friendly paths.
 
-Location: services/file_naming/template_parser.py
-Purpose: Parse and validate user-configurable naming templates
+Location:
+    /services/file_naming/template_parser.py
+
 """
 
-import logging
 import re
 from typing import Dict, List, Optional, Tuple
+from utils.logger import get_module_logger
+
+_LOGGER = get_module_logger("Service.FileNaming.TemplateParser")
 
 
 class TemplateParser:
@@ -32,8 +40,8 @@ class TemplateParser:
         'narrator', 'asin', 'publisher', 'runtime'
     }
     
-    def __init__(self):
-        self.logger = logging.getLogger("FileNamingService.TemplateParser")
+    def __init__(self, *, logger=None):
+        self.logger = logger or _LOGGER
         self.variable_pattern = re.compile(r'\{(\w+)\}')
     
     def get_template(self, template_name: str, templates: Dict[str, str]) -> str:
@@ -162,18 +170,18 @@ class TemplateParser:
         # Some variables need special handling
         
         if variable == 'author':
-                authors = (
-                    book_data.get('AuthorName')
-                    or book_data.get('author')
-                    or book_data.get('Author')
-                    or book_data.get('authors')
-                )
+            authors = (
+                book_data.get('AuthorName')
+                or book_data.get('author')
+                or book_data.get('Author')
+                or book_data.get('authors')
+            )
 
-                if isinstance(authors, list):
-                    author_name = authors[0] if authors else 'Unknown Author'
-                else:
-                    author_name = authors or 'Unknown Author'
-                return author_name
+            if isinstance(authors, list):
+                author_name = authors[0] if authors else 'Unknown Author'
+            else:
+                author_name = authors or 'Unknown Author'
+            return author_name
         elif variable == 'title':
             value = book_data.get('Title', book_data.get('title'))
             return str(value) if value else 'Unknown Title'
@@ -222,7 +230,7 @@ class TemplateParser:
         """
         Extract and format series number.
         
-        Returns formatted string like "Book 01" or empty string if not in series.
+        Returns a numeric string for use in templates (e.g., "1", "1.5").
         """
         book_number = (book_data.get('book_number') or 
                       book_data.get('BookNumber'))
@@ -231,12 +239,10 @@ class TemplateParser:
             return ''
         
         try:
-            # Format as "Book XX" with zero padding
             number = float(book_number)
             if number == int(number):
-                return f"Book {int(number):02d}"
-            else:
-                return f"Book {number:05.2f}"
+                return str(int(number))
+            return f"{number:g}"
         except (ValueError, TypeError):
             # If it's already a string like "Book 1", return it
             return str(book_number)

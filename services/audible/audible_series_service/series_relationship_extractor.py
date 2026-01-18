@@ -1,16 +1,23 @@
 """
-Series Relationship Extractor
-Extracts series ASIN and metadata from Audible API relationships response group
+Module Name: series_relationship_extractor.py
+Author: TheDragonShaman
+Created: August 26, 2025
+Last Modified: December 23, 2025
+Description:
+    Extract series ASIN and metadata from Audible relationships response groups.
+Location:
+    /services/audible/audible_series_service/series_relationship_extractor.py
+
 """
 
 from utils.logger import get_module_logger
 
-LOGGER_NAME = "SeriesRelationshipExtractor"
-logger = get_module_logger(LOGGER_NAME)
-
 
 class SeriesRelationshipExtractor:
-    """Extracts series information from Audible API book relationships"""
+    """Extracts series information from Audible API book relationships."""
+
+    def __init__(self, logger=None):
+        self.logger = logger or get_module_logger("Service.Audible.Series.RelationshipExtractor")
     
     def extract_series_asin(self, book_metadata):
         """
@@ -32,13 +39,13 @@ class SeriesRelationshipExtractor:
             if series_array and len(series_array) > 0:
                 series_asin = series_array[0].get('asin')
                 if series_asin:
-                    logger.info(f"Found series ASIN from series array: {series_asin}")
+                    self.logger.info("Found series ASIN from series array", extra={"series_asin": series_asin})
                     return series_asin
             
             # Method 2: Check relationships for parent series
             relationships = product.get('relationships', [])
             if not relationships:
-                logger.debug("No relationships or series found in book metadata")
+                self.logger.debug("No relationships or series found in book metadata")
                 return None
             
             # Look for series relationship where relationship_to_product == "parent"
@@ -47,14 +54,17 @@ class SeriesRelationshipExtractor:
                     relationship.get('relationship_to_product') == 'parent'):
                     series_asin = relationship.get('asin')
                     if series_asin:
-                        logger.info(f"Found series ASIN from relationships: {series_asin}")
+                        self.logger.info(
+                            "Found series ASIN from relationships",
+                            extra={"series_asin": series_asin},
+                        )
                         return series_asin
             
-            logger.debug("No series relationship found")
+            self.logger.debug("No series relationship found")
             return None
             
         except Exception as e:
-            logger.error(f"Error extracting series ASIN: {e}")
+            self.logger.error("Error extracting series ASIN", extra={"error": str(e)}, exc_info=True)
             return None
     
     def extract_series_metadata(self, book_metadata):
@@ -81,29 +91,37 @@ class SeriesRelationshipExtractor:
                     'sku': None,  # Not in series array
                     'sequence': first_series.get('sequence')
                 }
-                logger.info(f"Extracted series metadata from series array: {series_data.get('series_title')}")
+                self.logger.info(
+                    "Extracted series metadata from series array",
+                    extra={"series_asin": series_data.get('series_asin'), "series_title": series_data.get('series_title')},
+                )
                 return series_data
             
             # Method 2: Check relationships for parent series (has more details)
             relationships = product.get('relationships', [])
             
             for relationship in relationships:
-                if (relationship.get('relationship_type') == 'series' and 
-                    relationship.get('relationship_to_product') == 'parent'):
+                if (
+                    relationship.get('relationship_type') == 'series'
+                    and relationship.get('relationship_to_product') == 'parent'
+                ):
                     series_data = {
                         'series_asin': relationship.get('asin'),
                         'series_title': relationship.get('title'),
                         'series_url': relationship.get('url'),
                         'sku': relationship.get('sku'),
-                        'sequence': relationship.get('sequence')  # Book's position in series
+                        'sequence': relationship.get('sequence'),  # Book's position in series
                     }
-                    
-                    logger.info(f"Extracted series metadata from relationships: {series_data.get('series_title')}")
+
+                    self.logger.info(
+                        "Extracted series metadata from relationships",
+                        extra={"series_asin": series_data.get('series_asin'), "series_title": series_data.get('series_title')},
+                    )
                     return series_data
-            
-            logger.warning(f"No series information found")
+
+            self.logger.warning("No series information found")
             return None
-            
+
         except Exception as e:
-            logger.error(f"Error extracting series metadata: {e}")
+            self.logger.error("Error extracting series metadata", extra={"error": str(e)}, exc_info=True)
             return None

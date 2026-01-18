@@ -1,10 +1,24 @@
-from typing import Optional, List, Dict, Any
-import logging
+"""
+Module Name: helpers.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Convenience helpers for image caching and URL resolution across author
+    images and book covers.
+
+Location:
+    /services/image_cache/helpers.py
+
+"""
+
+from typing import Optional, Dict, Any
+from utils.logger import get_module_logger
 from .image_cache_service import get_image_cache_service
 
-logger = logging.getLogger("ImageCacheHelpers")
+_LOGGER = get_module_logger("Service.ImageCache.Helpers")
 
-def cache_image(image_url: str) -> Optional[str]:
+def cache_image(image_url: str, *, logger=None) -> Optional[str]:
     """
     Cache any image (author image or book cover) and return the local URL.
     
@@ -22,21 +36,21 @@ def cache_image(image_url: str) -> Optional[str]:
         cached_url = image_cache.get_cached_image_url(image_url)
         
         if cached_url:
-            logger.debug(f"Image cached successfully: {image_url} -> {cached_url}")
+            (logger or _LOGGER).debug(f"Image cached successfully: {image_url} -> {cached_url}")
             return cached_url
         else:
-            logger.warning(f"Failed to cache image: {image_url}")
+            (logger or _LOGGER).warning(f"Failed to cache image: {image_url}")
             # Don't fall back to original URL if it's invalid
             if image_url.startswith('/metadata/items/'):
-                logger.warning(f"Invalid metadata URL, returning None: {image_url}")
+                (logger or _LOGGER).warning(f"Invalid metadata URL, returning None: {image_url}")
                 return None
             return image_url
             
     except Exception as e:
-        logger.error(f"Error caching image {image_url}: {e}")
+        (logger or _LOGGER).error(f"Error caching image {image_url}: {e}")
         # Don't fall back to original URL if it's invalid
         if image_url.startswith('/metadata/items/'):
-            logger.warning(f"Invalid metadata URL, returning None: {image_url}")
+            (logger or _LOGGER).warning(f"Invalid metadata URL, returning None: {image_url}")
             return None
         return image_url
 
@@ -112,12 +126,12 @@ def preload_images_from_database():
         total_count = len(results)
         
         if total_count > 0:
-            logger.info(f"Preloaded {success_count}/{total_count} images successfully")
+            _LOGGER.debug(f"Preloaded {success_count}/{total_count} images successfully")
         
         return results
         
     except Exception as e:
-        logger.error(f"Error preloading images: {e}")
+        _LOGGER.error(f"Error preloading images: {e}")
         return {}
 
 # Backward compatibility

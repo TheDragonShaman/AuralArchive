@@ -1,11 +1,13 @@
 """
-Download Logs Route - AuralArchive
+Module Name: download_logs.py
+Author: TheDragonShaman
+Created: July 29, 2025
+Last Modified: December 23, 2025
+Description:
+    Settings helper to download application logs through the admin interface.
+Location:
+    /routes/settings_tools/download_logs.py
 
-Lets administrators download the primary web log file directly from the
-settings interface.
-
-Author: AuralArchive Development Team
-Updated: December 2, 2025
 """
 
 import os
@@ -15,7 +17,7 @@ from flask import jsonify, send_file
 
 from utils.logger import get_module_logger
 
-logger = get_module_logger("Route.Settings.DownloadLogs")
+logger = get_module_logger("Routes.Settings.DownloadLogs")
 
 def handle_download_logs():
     """Download system logs."""

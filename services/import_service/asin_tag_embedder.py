@@ -1,16 +1,24 @@
-"""Utilities for embedding ASIN metadata into audio files.
+"""
+Module Name: asin_tag_embedder.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Embeds ASIN metadata into supported audio containers so downstream
+    scanners can associate imported files with Audible catalog records.
+    Supports ID3 (MP3) and MP4/M4B atoms via mutagen when available.
 
-Audiobookshelf recognizes the custom metadata keys ``ASIN`` and
-``audible_asin`` in both ID3 (MP3) tags and MP4/M4B atoms. This helper writes
-those tags whenever we import a file so the downstream scanner can link the
-file back to the correct Audible book automatically.
+Location:
+    /services/import_service/asin_tag_embedder.py
+
 """
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from typing import Optional
+
+from utils.logger import get_module_logger
 
 try:  # pragma: no cover - mutagen is optional at runtime
     from mutagen.id3 import ID3, TXXX, ID3NoHeaderError  # type: ignore
@@ -23,14 +31,17 @@ except ImportError:  # pragma: no cover
     MP4FreeForm = None  # type: ignore
 
 
+_LOGGER = get_module_logger("Service.Import.AsinTagEmbedder")
+
+
 class AsinTagEmbedder:
     """Embed Audible ASIN metadata inside supported audio containers."""
 
     MP3_EXTENSIONS = {'.mp3'}
     MP4_EXTENSIONS = {'.m4b', '.m4a', '.mp4'}
 
-    def __init__(self) -> None:
-        self.logger = logging.getLogger("ImportService.AsinTagEmbedder")
+    def __init__(self, *, logger=None) -> None:
+        self.logger = logger or _LOGGER
 
     def embed_asin(self, file_path: str, asin: Optional[str]) -> bool:
         """Write ASIN tags to ``file_path`` if the format supports it."""

@@ -1,33 +1,46 @@
 """
+Module Name: download_management_api.py
+Author: TheDragonShaman
+Created: June 30, 2025
+Last Modified: December 23, 2025
+Description:
+    REST API for download queue management and service control. Supports queue
+    CRUD, pause/resume/retry, bulk operations, statistics, and monitoring
+    controls. Currently supports qBittorrent; additional clients planned.
+
+Location:
+    /api/download_management_api.py
+
 Download Management API
 =======================
 
 REST API endpoints for download queue management and control.
 
-IMPORTANT: Currently only qBittorrent is supported as a download client.
-Additional torrent clients (Deluge, Transmission) will be added soon.
-
 Endpoints:
-- POST   /api/downloads/queue         - Add book to download queue
-- GET    /api/downloads/queue         - Get all queue items
-- GET    /api/downloads/queue/<id>    - Get specific download
-- DELETE /api/downloads/queue/<id>    - Cancel/remove download
+- POST   /api/downloads/queue              - Add book to download queue
+- GET    /api/downloads/queue              - Get all queue items
+- GET    /api/downloads/queue/<id>         - Get specific download
+- DELETE /api/downloads/queue/<id>         - Cancel/remove download
 - POST   /api/downloads/queue/<id>/pause   - Pause download
 - POST   /api/downloads/queue/<id>/resume  - Resume download
 - POST   /api/downloads/queue/<id>/retry   - Retry failed download
-- GET    /api/downloads/status        - Get service status
-- GET    /api/downloads/statistics    - Get queue statistics
-- POST   /api/downloads/service/start - Start monitoring service
-- POST   /api/downloads/service/stop  - Stop monitoring service
+- GET    /api/downloads/status             - Get service status
+- GET    /api/downloads/statistics         - Get queue statistics
+- POST   /api/downloads/service/start      - Start monitoring service
+- POST   /api/downloads/service/stop       - Stop monitoring service
+- POST   /api/downloads/queue/bulk/cancel  - Cancel multiple downloads
+- POST   /api/downloads/queue/bulk/retry   - Retry multiple downloads
+- POST   /api/downloads/queue/clear        - Clear queue entries
+- POST   /api/downloads/queue/cleanup      - Cleanup old downloads
 """
 
 from flask import Blueprint, request, jsonify
-import logging
 from typing import Dict, Any
 
 from services.service_manager import get_download_management_service
+from utils.logger import get_module_logger
 
-logger = logging.getLogger(__name__)
+logger = get_module_logger("API.Download.Management")
 
 # Create blueprint
 download_management_bp = Blueprint('download_management', __name__)

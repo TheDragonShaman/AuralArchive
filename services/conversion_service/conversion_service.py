@@ -1,29 +1,24 @@
 """
-Audiobook Conversion Service - AuralArchive
+Module Name: conversion_service.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    FFmpeg-backed audiobook conversion orchestrator with quality and metadata
+    management.
 
-Provides FFmpeg-based conversion from various audiobook formats (AAX, AAXC, MP3) to M4B format.
-Supports configurable quality settings managed through the config service.
+Location:
+    /services/conversion_service/conversion_service.py
 
-Features:
-- Sequential processing (one book at a time)
-- Metadata preservation and chapter support
-- Activation bytes integration for DRM removal
-- Quality settings configurable via settings menu
-- Shared temp folder management
-- Progress tracking with SocketIO
-
-Author: AuralArchive Development Team
-Created: September 28, 2025
 """
 
 import os
+import shutil
 import subprocess
 import tempfile
-import shutil
-import logging
 import threading
 import time
-from typing import Dict, List, Optional, Any, Tuple, Callable
+from typing import Any, Callable, Dict, List, Optional
 from datetime import datetime
 from pathlib import Path
 
@@ -32,35 +27,46 @@ from utils.logger import get_module_logger
 
 class ConversionService:
     """Main service for audiobook format conversion using FFmpeg"""
-    
-    _instance: Optional['ConversionService'] = None
+
+    _instance: Optional["ConversionService"] = None
     _lock = threading.Lock()
     _initialized = False
-    
-    def __new__(cls):
+
+    def __new__(cls, *args: Any, **kwargs: Any):
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
                     cls._instance = super().__new__(cls)
         return cls._instance
-    
-    def __init__(self):
+
+    def __init__(
+        self,
+        *,
+        logger=None,
+        config_service=None,
+        audible_library_service=None,
+        helpers=None,
+        **_kwargs: Any,
+    ):
         if not self._initialized:
             with self._lock:
                 if not self._initialized:
-                    self.logger = get_module_logger("ConversionService")
-                    self.config_service = None
-                    self.audible_library_service = None
-                    self.helpers = None
-                    
+                    self.logger = logger or get_module_logger("Service.Conversion.Main")
+                    self.config_service = config_service
+                    self.audible_library_service = audible_library_service
+                    self.helpers = helpers
+
                     # Initialize helper modules
                     self._initialize_helpers()
-                    
-                    self.logger.info("ConversionService initialized successfully")
+
+                    self.logger.success("Conversion service started successfully")
                     ConversionService._initialized = True
     
     def _initialize_helpers(self):
         """Initialize helper modules"""
+        if self.helpers:
+            # Helpers already provided (likely injected for testing)
+            return
         try:
             from .ffmpeg_handler import FFmpegHandler
             from .format_detector import FormatDetector
@@ -77,7 +83,7 @@ class ConversionService:
             self.logger.debug("Helper modules initialized")
             
         except ImportError as e:
-            self.logger.error(f"Failed to initialize helper modules: {e}")
+            self.logger.exception("Failed to initialize helper modules", extra={"error": str(e)})
             self.helpers = {}
     
     def _get_config_service(self):
@@ -93,7 +99,7 @@ class ConversionService:
                 from services.audible.audible_library_service.audible_library_service import AudibleLibraryService
                 self.audible_library_service = AudibleLibraryService()
             except ImportError as e:
-                self.logger.error(f"Failed to import audible library service: {e}")
+                self.logger.exception("Failed to import audible library service", extra={"error": str(e)})
         return self.audible_library_service
     
     def _get_shared_temp_dir(self) -> str:
@@ -108,27 +114,26 @@ class ConversionService:
             return temp_dir
             
         except Exception as e:
-            self.logger.error(f"Failed to get shared temp dir: {e}")
+            self.logger.exception("Failed to get shared temp dir", extra={"error": str(e)})
             # Fallback to system temp
             return tempfile.gettempdir()
     
     def get_quality_settings(self) -> Dict[str, Any]:
         """Get current quality settings from config"""
+        default_settings = {
+            'codec': 'aac',  # or 'libfdk_aac' if available for higher quality
+            'bitrate': '64k',  # Good quality for audiobooks (32k-128k range)
+            'sample_rate': '22050',  # Standard for audiobooks (22050 or 44100)
+            'channels': '1',  # Mono for most audiobooks (1 or 2)
+            'profile': '',  # aac_he for very low bitrates (<=32k)
+            'format': 'm4b',  # Target format
+            'preserve_chapters': True,
+            'embed_cover': True,
+            'preserve_metadata': True
+        }
+
         try:
             config = self._get_config_service()
-            
-            # Default quality settings based on m4b-tool best practices
-            default_settings = {
-                'codec': 'aac',  # or 'libfdk_aac' if available for higher quality
-                'bitrate': '64k',  # Good quality for audiobooks (32k-128k range)
-                'sample_rate': '22050',  # Standard for audiobooks (22050 or 44100)
-                'channels': '1',  # Mono for most audiobooks (1 or 2)
-                'profile': '',  # aac_he for very low bitrates (<=32k)
-                'format': 'm4b',  # Target format
-                'preserve_chapters': True,
-                'embed_cover': True,
-                'preserve_metadata': True
-            }
             
             # Get user-configured settings
             user_settings = {
@@ -146,7 +151,7 @@ class ConversionService:
             return user_settings
             
         except Exception as e:
-            self.logger.error(f"Failed to get quality settings: {e}")
+            self.logger.exception("Failed to get quality settings", extra={"error": str(e)})
             return default_settings
     
     def update_quality_settings(self, settings: Dict[str, Any]) -> bool:
@@ -161,11 +166,11 @@ class ConversionService:
                 else:
                     config.set(config_key, str(value))
             
-            self.logger.info(f"Updated quality settings: {settings}")
+            self.logger.info("Updated quality settings", extra={"settings": settings})
             return True
             
         except Exception as e:
-            self.logger.error(f"Failed to update quality settings: {e}")
+            self.logger.exception("Failed to update quality settings", extra={"error": str(e)})
             return False
     
     def convert_audiobook(
@@ -193,6 +198,7 @@ class ConversionService:
             self.logger.info("Conversion started", extra={'input_file': input_file})
             
             if not os.path.exists(input_file):
+                self.logger.warning("Input file does not exist", extra={'input_file': input_file})
                 return {
                     'success': False,
                     'error': 'Input file does not exist',
@@ -201,6 +207,7 @@ class ConversionService:
 
             voucher_path = os.path.abspath(voucher_file) if voucher_file else None
             if voucher_path and not os.path.exists(voucher_path):
+                self.logger.warning("Voucher file not found", extra={'voucher_file': voucher_path, 'input_file': input_file})
                 return {
                     'success': False,
                     'error': f'Voucher file not found: {voucher_path}',
@@ -212,7 +219,7 @@ class ConversionService:
                 progress_callback("Detecting input format...", 5)
             
             input_format = self.helpers['format_detector'].detect_format(input_file)
-            self.logger.debug(f"Detected format: {input_format}")
+            self.logger.debug("Detected format", extra={"input_format": input_format})
             
             # Step 2: Get quality settings
             quality_settings = self.get_quality_settings()
@@ -227,6 +234,7 @@ class ConversionService:
                 if activation_result['success']:
                     activation_bytes = activation_result.get('activation_bytes')
                 else:
+                    self.logger.warning("Activation bytes unavailable", extra={'input_file': input_file, 'reason': activation_result.get('error')})
                     return {
                         'success': False,
                         'error': f'Failed to get activation bytes: {activation_result.get("error")}',
@@ -265,6 +273,7 @@ class ConversionService:
             )
             
             if not conversion_result['success']:
+                self.logger.error("FFmpeg conversion failed", extra={"input_file": input_file, "error": conversion_result.get('error'), "stderr": conversion_result.get('stderr')})
                 return conversion_result
             
             # Step 7: Post-process metadata and chapters
@@ -276,6 +285,9 @@ class ConversionService:
                 quality_settings,
                 metadata
             )
+
+            if not metadata_result.get('success', True):
+                self.logger.warning("Metadata processing reported issues", extra={'input_file': input_file, 'details': metadata_result})
             
             # Step 8: Move to final destination
             if progress_callback:
@@ -303,7 +315,7 @@ class ConversionService:
             }
             
         except Exception as e:
-            self.logger.error(f"Conversion failed for {input_file}: {e}")
+            self.logger.exception("Conversion failed", extra={"input_file": input_file, "error": str(e)})
             
             # Clean up temp file if it exists
             if 'temp_output' in locals() and os.path.exists(temp_output):
@@ -325,11 +337,13 @@ class ConversionService:
             if audible_service:
                 return audible_service.get_activation_bytes()
             else:
+                self.logger.warning("Audible library service unavailable for activation bytes")
                 return {
                     'success': False,
                     'error': 'Audible library service not available'
                 }
         except Exception as e:
+            self.logger.exception("Failed to get activation bytes", extra={"error": str(e)})
             return {
                 'success': False,
                 'error': f'Failed to get activation bytes: {str(e)}'
@@ -350,7 +364,7 @@ class ConversionService:
     ) -> Dict[str, Any]:
         """Execute FFmpeg conversion command with progress tracking"""
         try:
-            self.logger.debug(f"Executing FFmpeg command: {' '.join(ffmpeg_cmd)}")
+            self.logger.debug("Executing FFmpeg command", extra={"command": ' '.join(ffmpeg_cmd)})
             
             # Get input duration for progress calculation
             duration = self.helpers['ffmpeg'].get_audio_duration(input_file)
@@ -388,11 +402,21 @@ class ConversionService:
                         'output_file': output_file
                     }
                 else:
+                    self.logger.error("Conversion completed but output file missing", extra={'output_file': output_file})
                     return {
                         'success': False,
                         'error': 'Conversion completed but output file not found'
                     }
             else:
+                self.logger.error(
+                    "FFmpeg process returned non-zero exit code",
+                    extra={
+                        'input_file': input_file,
+                        'output_file': output_file,
+                        'return_code': process.returncode,
+                        'stderr': stderr
+                    }
+                )
                 return {
                     'success': False,
                     'error': f'FFmpeg conversion failed: {stderr}',
@@ -401,6 +425,10 @@ class ConversionService:
                 }
         
         except Exception as e:
+            self.logger.exception(
+                "Conversion execution failed",
+                extra={'input_file': input_file, 'output_file': output_file, 'error': str(e)}
+            )
             return {
                 'success': False,
                 'error': f'Conversion execution failed: {str(e)}'
@@ -441,6 +469,7 @@ class ConversionService:
             }
             
         except Exception as e:
+            self.logger.exception("Failed to get service status", extra={"error": str(e)})
             return {
                 'service_name': 'ConversionService',
                 'error': str(e)
@@ -467,7 +496,7 @@ class ConversionService:
                         os.remove(file_path)
                         cleaned_files.append(file_name)
                     except Exception as e:
-                        self.logger.warning(f"Could not remove temp file {file_name}: {e}")
+                        self.logger.warning("Could not remove temp file", extra={"file_name": file_name, "error": str(e)})
             
             return {
                 'success': True,
@@ -476,6 +505,7 @@ class ConversionService:
             }
             
         except Exception as e:
+            self.logger.exception("Failed to clean temp directory", extra={"error": str(e)})
             return {
                 'success': False,
                 'error': str(e)

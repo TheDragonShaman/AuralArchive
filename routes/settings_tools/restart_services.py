@@ -1,10 +1,13 @@
 """
-Restart Services Route - AuralArchive
+Module Name: restart_services.py
+Author: TheDragonShaman
+Created: August 7, 2025
+Last Modified: December 23, 2025
+Description:
+    Settings helper to reset all registered services via the service manager.
+Location:
+    /routes/settings_tools/restart_services.py
 
-Resets every registered service via the service manager for a clean restart.
-
-Author: AuralArchive Development Team
-Updated: December 2, 2025
 """
 
 from datetime import datetime
@@ -14,7 +17,7 @@ from flask import jsonify
 from services.service_manager import service_manager
 from utils.logger import get_module_logger
 
-logger = get_module_logger("Route.Settings.RestartAllServices")
+logger = get_module_logger("Routes.Settings.RestartAllServices")
 
 def handle_restart_services():
     """Restart all services by resetting the service manager."""

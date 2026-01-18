@@ -882,7 +882,7 @@
             const timeB = dateB ? dateB.getTime() : 0;
             return timeB - timeA;
         });
-        const html = items.slice(0, 10).map((item) => {
+        const html = items.slice(0, 5).map((item) => {
             const title = escapeHtml(item.book_title || item.title || 'Imported Item');
             const authorText = formatContributors(item.book_author || item.author || '');
             const author = escapeHtml(authorText);
@@ -893,17 +893,14 @@
             const path = escapeHtml(item.final_file_path || item.converted_file_path || '');
             return `
                 <li class="border-b border-base-content/10 pb-1.5 last:border-b-0 last:pb-0">
-                    <div class="flex items-start justify-between gap-3">
-                        <div class="space-y-1">
-                            <div class="font-medium text-sm text-base-content">${title}</div>
-                            ${author ? `<div class="text-xs text-base-content/50">${author}</div>` : ''}
-                            <div class="text-[11px] text-base-content/50" title="${escapeHtml(absolute)}">
-                                Imported ${relative}
-                                ${downloadType ? ` • ${escapeHtml(downloadType)}` : ''}
-                            </div>
-                            ${path ? `<div class="text-[11px] text-base-content/40 break-all">${path}</div>` : ''}
+                    <div class="space-y-1">
+                        <div class="font-medium text-sm text-base-content">${title}</div>
+                        ${author ? `<div class="text-xs text-base-content/50">${author}</div>` : ''}
+                        <div class="text-[11px] text-base-content/50" title="${escapeHtml(absolute)}">
+                            Imported ${relative}
+                            ${downloadType ? ` • ${escapeHtml(downloadType)}` : ''}
                         </div>
-                        <span class="badge badge-outline badge-xs border-base-content/30">ID ${escapeHtml(item.id)}</span>
+                        ${path ? `<div class="text-[11px] text-base-content/40 break-all">${path}</div>` : ''}
                     </div>
                 </li>
             `;

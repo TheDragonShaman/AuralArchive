@@ -1,6 +1,19 @@
-import logging
+"""
+Module Name: hybrid_service.py
+Author: TheDragonShaman
+Created: August 26, 2025
+Last Modified: December 24, 2025
+Description:
+    Combine Audnexus author-centric data with Audible catalog/search capabilities.
+Location:
+    /services/audnexus/hybrid_service.py
+
+"""
+
 import threading
 from typing import List, Dict, Optional, Any, Tuple
+
+from utils.logger import get_module_logger
 
 from ..audible.audible_catalog_service.audible_catalog_service import AudibleService
 from .audnexus_service import AudnexusService
@@ -24,17 +37,17 @@ class HybridAudiobookService:
                     cls._instance = super().__new__(cls)
         return cls._instance
     
-    def __init__(self):
+    def __init__(self, logger=None):
         if not self._initialized:
             with self._lock:
                 if not self._initialized:
-                    self.logger = logging.getLogger("HybridAudiobookService")
+                    self.logger = logger or get_module_logger("Service.Audnexus.Hybrid")
                     
                     # Initialize both services
                     self.audnexus = AudnexusService()
                     self.audible = AudibleService()
                     
-                    self.logger.info("HybridAudiobookService initialized successfully")
+                    self.logger.success("Hybrid audiobook service started successfully")
                     HybridAudiobookService._initialized = True
     
     # ========================================================================
@@ -46,7 +59,7 @@ class HybridAudiobookService:
         Search for author information with Audnexus first, fallback to Audible.
         """
         try:
-            self.logger.info(f"Searching for author: {author_name}")
+            self.logger.info("Searching for author", extra={"author_name": author_name, "region": region})
 
             # Primary: Audnexus
             author_data = self.audnexus.find_author_by_name(author_name, region)
@@ -59,23 +72,26 @@ class HybridAudiobookService:
                 formatted_author['total_books_count'] = 0
                 formatted_author['audible_books_count'] = 0
 
-                self.logger.info(f"Found author via Audnexus: {author_name}")
+                self.logger.info("Found author via Audnexus", extra={"author_name": author_name})
                 return formatted_author
 
             # Fallback: Audible scraping
-            self.logger.info(f"Audnexus failed, trying Audible for: {author_name}")
+            self.logger.info("Audnexus failed, trying Audible", extra={"author_name": author_name})
             audible_data = self.audible.search_author_page(author_name)
 
             if audible_data:
                 audible_data['source'] = 'audible'
-                self.logger.info(f"Found author via Audible: {author_name}")
+                self.logger.info("Found author via Audible", extra={"author_name": author_name})
                 return audible_data
 
-            self.logger.warning(f"Author not found in either service: {author_name}")
+            self.logger.warning("Author not found in either service", extra={"author_name": author_name})
             return None
 
-        except Exception as e:
-            self.logger.error(f"Error searching for author '{author_name}': {e}")
+        except Exception as exc:
+            self.logger.error(
+                "Error searching for author",
+                extra={"author_name": author_name, "exc": exc}
+            )
             return None
     
     def get_author_books_from_audible(
@@ -100,7 +116,7 @@ class HybridAudiobookService:
             List of books by the author
         """
         try:
-            self.logger.info(f"Getting books for author: {author_name}")
+            self.logger.info("Getting books for author", extra={"author_name": author_name, "region": region, "limit": limit, "enrich_with_audnexus": enrich_with_audnexus})
             
             # Use Audible API for book search (primary source)
             audible_books = self.audible.get_author_books_from_audible(
@@ -125,7 +141,10 @@ class HybridAudiobookService:
                 try:
                     enhanced_book = self.audnexus.get_book_details(book['ASIN'], region)
                 except Exception as enhancement_error:
-                    self.logger.debug(f"Audnexus enhancement failed for {book.get('ASIN')}: {enhancement_error}")
+                    self.logger.debug(
+                        "Audnexus enhancement failed",
+                        extra={"book_asin": book.get('ASIN'), "exc": enhancement_error}
+                    )
                     enhanced_book = None
                 
                 if enhanced_book:
@@ -139,7 +158,7 @@ class HybridAudiobookService:
             
             # Fallback: if Audible returned nothing, try limited Audnexus data
             if not books and enrich_with_audnexus:
-                self.logger.info(f"Audible returned no books for {author_name}; attempting Audnexus fallback")
+                self.logger.info("Audible returned no books; attempting Audnexus fallback", extra={"author_name": author_name})
                 author_details = self.audnexus.find_author_by_name(author_name, region)
                 titles = author_details.get('titles', []) if author_details else []
                 for title in titles:
@@ -147,13 +166,16 @@ class HybridAudiobookService:
                     formatted['enhanced_by'] = 'audnexus_only'
                     books.append(formatted)
                 if books:
-                    self.logger.info(f"Audnexus fallback supplied {len(books)} titles for {author_name}")
+                    self.logger.info("Audnexus fallback supplied titles", extra={"author_name": author_name, "count": len(books)})
             
-            self.logger.info(f"Retrieved {len(books)} books for {author_name}")
+            self.logger.info("Retrieved books for author", extra={"author_name": author_name, "count": len(books)})
             return books
             
-        except Exception as e:
-            self.logger.error(f"Error getting books for author '{author_name}': {e}")
+        except Exception as exc:
+            self.logger.error(
+                "Error getting books for author",
+                extra={"author_name": author_name, "exc": exc}
+            )
             return []
 
     def fetch_author_catalog(
@@ -183,7 +205,7 @@ class HybridAudiobookService:
             List of books matching the query
         """
         try:
-            self.logger.info(f"Searching books for: {query}")
+            self.logger.info("Searching books", extra={"query": query, "region": region, "num_results": num_results})
             
             # Use Audible for general search capability
             books = self.audible.search_books(query, region, num_results)
@@ -204,11 +226,14 @@ class HybridAudiobookService:
                 
                 enhanced_books.append(book)
             
-            self.logger.info(f"Enhanced {len(enhanced_books)} books from search")
+            self.logger.info("Enhanced books from search", extra={"query": query, "count": len(enhanced_books)})
             return enhanced_books
             
-        except Exception as e:
-            self.logger.error(f"Error searching books for '{query}': {e}")
+        except Exception as exc:
+            self.logger.error(
+                "Error searching books",
+                extra={"query": query, "exc": exc}
+            )
             return []
     
     def get_book_details(self, asin: str, region: str = "us") -> Optional[Dict]:
@@ -223,7 +248,7 @@ class HybridAudiobookService:
             Detailed book information
         """
         try:
-            self.logger.info(f"Getting book details for ASIN: {asin}")
+            self.logger.info("Getting book details", extra={"book_asin": asin, "region": region})
             
             # Try Audnexus first for better data quality
             audnexus_book = self.audnexus.get_book_details(asin, region, seed_authors=True)
@@ -232,24 +257,27 @@ class HybridAudiobookService:
                 book_data = self.audnexus.format_book_for_compatibility(audnexus_book)
                 book_data['enhanced_by'] = 'audnexus'
                 book_data['source'] = 'audnexus'
-                self.logger.info(f"Retrieved book details from Audnexus: {book_data.get('Title', asin)}")
+                self.logger.info("Retrieved book details from Audnexus", extra={"book_asin": asin, "title": book_data.get('Title', asin)})
                 return book_data
             
             # Fallback to Audible
-            self.logger.info(f"Audnexus failed, trying Audible for: {asin}")
+            self.logger.info("Audnexus failed, trying Audible", extra={"book_asin": asin})
             audible_book = self.audible.get_book_details(asin, region)
             
             if audible_book:
                 audible_book['enhanced_by'] = 'audible_only'
                 audible_book['source'] = 'audible'
-                self.logger.info(f"Retrieved book details from Audible: {audible_book.get('Title', asin)}")
+                self.logger.info("Retrieved book details from Audible", extra={"book_asin": asin, "title": audible_book.get('Title', asin)})
                 return audible_book
             
-            self.logger.warning(f"Book not found in either service: {asin}")
+            self.logger.warning("Book not found in either service", extra={"book_asin": asin})
             return None
             
-        except Exception as e:
-            self.logger.error(f"Error getting book details for '{asin}': {e}")
+        except Exception as exc:
+            self.logger.error(
+                "Error getting book details",
+                extra={"book_asin": asin, "exc": exc}
+            )
             return None
     
     def search_by_author(self, author: str, region: str = "us", num_results: int = 25) -> List[Dict]:
@@ -282,8 +310,11 @@ class HybridAudiobookService:
             
             return enhanced_books
             
-        except Exception as e:
-            self.logger.error(f"Error searching series '{series}': {e}")
+        except Exception as exc:
+            self.logger.error(
+                "Error searching series",
+                extra={"series": series, "exc": exc}
+            )
             return []
     
     # ========================================================================
@@ -305,8 +336,8 @@ class HybridAudiobookService:
             else:
                 return False, f"Both services failed - Audnexus: {audnexus_msg}, Audible: {audible_msg}"
                 
-        except Exception as e:
-            return False, f"Service test error: {str(e)}"
+        except Exception as exc:
+            return False, f"Service test error: {exc}"
     
     def get_service_status(self) -> Dict:
         """Get status of both services"""
@@ -326,8 +357,8 @@ class HybridAudiobookService:
                 }
             }
             
-        except Exception as e:
-            return {'error': str(e)}
+        except Exception as exc:
+            return {'error': str(exc)}
     
     def get_book_chapters(self, asin: str, region: str = "us") -> Optional[Dict]:
         """Get book chapters from Audnexus"""

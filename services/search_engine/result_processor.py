@@ -1,17 +1,25 @@
 """
-Result Processor - Search result processing, deduplication, and ranking
-Handles search result aggregation, filtering, and selection logic
+Module Name: result_processor.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Processes, deduplicates, and ranks search results for manual and automatic
+    selection.
 
-Location: services/search_engine/result_processor.py
-Purpose: Process and rank search results for both manual and automatic selection
+Location:
+    /services/search_engine/result_processor.py
+
 """
 
-from typing import Dict, List, Any, Optional, Tuple, Set
-import logging
 from datetime import datetime
-import hashlib
-import re
 from dataclasses import asdict, is_dataclass
+from typing import Any, Dict, List, Optional
+
+from utils.logger import get_module_logger
+
+
+_LOGGER = get_module_logger("Service.SearchEngine.ResultProcessor")
 
 
 class ResultProcessor:
@@ -26,9 +34,9 @@ class ResultProcessor:
     - Result filtering and validation
     """
     
-    def __init__(self):
+    def __init__(self, *, logger=None):
         """Initialize the result processor."""
-        self.logger = logging.getLogger("SearchEngineService.ResultProcessor")
+        self.logger = logger or _LOGGER
         
         # Deduplication thresholds
         self.similarity_threshold = 0.9
@@ -44,12 +52,12 @@ class ResultProcessor:
     def _initialize(self):
         """Initialize the result processor components."""
         try:
-            self.logger.debug("Initializing ResultProcessor...")
+            self.logger.debug("Initializing ResultProcessor")
             self.initialized = True
             self.logger.debug("ResultProcessor initialized successfully")
             
         except Exception as e:
-            self.logger.error(f"Failed to initialize ResultProcessor: {e}")
+            self.logger.error("Failed to initialize ResultProcessor", extra={"error": str(e)}, exc_info=True)
             self.initialized = False
     
     def process_manual_search_results(self, raw_results: List[Dict[str, Any]], 
@@ -59,7 +67,10 @@ class ResultProcessor:
             if not raw_results:
                 return []
             
-            self.logger.debug(f"Processing {len(raw_results)} raw results for manual selection")
+            self.logger.debug(
+                "Processing manual search results",
+                extra={"raw_count": len(raw_results), "title": title, "author": author},
+            )
             
             # Basic processing for now
             processed_results = []
@@ -84,7 +95,6 @@ class ResultProcessor:
                 if 'quality_assessment' in result:
                     quality_assessment = result['quality_assessment']
                     # Convert dataclass to dict for JSON serialization
-                    from dataclasses import asdict
                     processed_result['quality_assessment'] = asdict(quality_assessment)
                 
                 processed_results.append(processed_result)
@@ -92,7 +102,11 @@ class ResultProcessor:
             return processed_results
             
         except Exception as e:
-            self.logger.error(f"Failed to process manual search results: {e}")
+            self.logger.error(
+                "Failed to process manual search results",
+                extra={"error": str(e), "title": title, "author": author},
+                exc_info=True,
+            )
             return []
     
     def process_automatic_search_results(self, raw_results: List[Dict[str, Any]], 
@@ -124,7 +138,11 @@ class ResultProcessor:
             return None
             
         except Exception as e:
-            self.logger.error(f"Failed to process automatic search results: {e}")
+            self.logger.error(
+                "Failed to process automatic search results",
+                extra={"error": str(e), "book_id": book_info.get("id")},
+                exc_info=True,
+            )
             return None
 
     def _extract_quality_dict(self, result: Dict[str, Any]) -> Optional[Dict[str, Any]]:

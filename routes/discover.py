@@ -1,11 +1,13 @@
 """
-Discover Routes - AuralArchive
+Module Name: discover.py
+Author: TheDragonShaman
+Created: July 19, 2025
+Last Modified: December 23, 2025
+Description:
+    Discovery dashboard routes and supporting APIs for library trends and recommendations.
+Location:
+    /routes/discover.py
 
-Generates the discovery dashboard plus supporting APIs that summarize library
-activity, highlight trends, and surface recommendation data.
-
-Author: AuralArchive Development Team
-Updated: December 2, 2025
 """
 
 import math
@@ -24,7 +26,7 @@ from services.audible.audible_recommendations_service.audible_recommendations_se
 from utils.logger import get_module_logger
 
 discover_bp = Blueprint('discover', __name__)
-logger = get_module_logger("Route.Discover")
+logger = get_module_logger("Routes.Discover")
 
 _AUTHOR_SPLIT_PATTERN = re.compile(r"\s*(?:,|&|;|\band\b|\bwith\b)\s*", re.IGNORECASE)
 
@@ -138,7 +140,7 @@ def discover_page():
             recommendations_service = get_audible_recommendations_service(config_service)
             recommendations_configured = recommendations_service.is_configured()
         except Exception as config_error:
-            logger.debug(f"Recommendation service status unavailable: {config_error}")
+            logger.debug("Recommendation service status unavailable: %s", config_error)
 
         return render_template(
             'discover.html',
@@ -156,7 +158,7 @@ def discover_page():
         )
 
     except Exception as exc:
-        logger.error(f"Error loading discover page: {exc}")
+        logger.error("Error loading discover page: %s", exc)
         return render_template(
             'discover.html',
             title='Discover - AuralArchive',
@@ -188,7 +190,7 @@ def get_recommendations():
         })
 
     except Exception as e:
-        logger.error(f"Error getting library-based recommendations: {e}")
+        logger.error("Error getting library-based recommendations: %s", e)
         return jsonify({
             'success': False,
             'error': str(e),
@@ -209,5 +211,5 @@ def _get_library_based_recommendations(num_results: int = 20) -> List[Dict[str, 
             return []
             
     except Exception as e:
-        logger.error(f"Library-based recommendations failed: {e}")
+        logger.error("Library-based recommendations failed: %s", e)
         return []

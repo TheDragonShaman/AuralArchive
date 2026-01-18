@@ -1,6 +1,19 @@
-import logging
+"""
+Module Name: author_overrides.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Manages canonical author name overrides scoped optionally by ASIN.
+
+Location:
+    /services/database/author_overrides.py
+
+"""
+
 from typing import List, Optional, Dict
 from .error_handling import error_handler
+from utils.logger import get_module_logger
 
 
 class AuthorOverrideOperations:
@@ -8,9 +21,9 @@ class AuthorOverrideOperations:
 
     GLOBAL_SCOPE = ""
 
-    def __init__(self, connection_manager):
+    def __init__(self, connection_manager, *, logger=None):
         self.connection_manager = connection_manager
-        self.logger = logging.getLogger("DatabaseService.AuthorOverrides")
+        self.logger = logger or get_module_logger("Service.Database.AuthorOverrides")
 
     def _normalize_name(self, name: Optional[str]) -> str:
         if not name:

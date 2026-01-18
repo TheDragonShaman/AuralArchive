@@ -1,4 +1,29 @@
-"""API endpoints for manual audiobook imports."""
+"""
+Module Name: import_api.py
+Author: TheDragonShaman
+Created: August 1, 2025
+Last Modified: December 23, 2025
+Description:
+    REST API endpoints for manual audiobook imports. Supports previews, batch
+    staging, metadata refresh, imports, metadata search, and direct job-based
+    imports for audiobook files.
+
+Location:
+    /api/import_api.py
+
+Import API
+==========
+
+Endpoints:
+- POST   /api/import/preview                  - Preview files for import
+- POST   /api/import/batch/preview            - Stage batch preview
+- GET    /api/import/batch/<batch_id>         - Get batch preview
+- DELETE /api/import/batch/<batch_id>         - Delete batch preview
+- POST   /api/import/batch/<batch_id>/card/<card_id>/refresh - Refresh card metadata
+- POST   /api/import/batch/<batch_id>/import  - Import selected batch cards
+- GET    /api/import/metadata/search          - Search metadata candidates
+- POST   /api/import/jobs                     - Execute import jobs
+"""
 
 import os
 import time

@@ -1,33 +1,32 @@
 """
-Audible Library Database Operations - AuralArchive
+Module Name: audible_library_old.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Legacy Audible library database operations with CRUD, bulk flows, and
+    synchronization helpers.
 
-Handles all database operations for the audible_library table including
-CRUD operations, bulk operations, and efficient data synchronization.
+Location:
+    /services/database/audible_library_old.py
 
-Author: AuralArchive Development Team
-Created: September 18, 2025
 """
 
 import sqlite3
-import logging
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timedelta
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from utils.logger import get_module_logger
 
 
 class AudibleLibraryOperations:
     """Database operations for Audible library books"""
-    
-    def __init__(self, connection_manager):
-        """
-        Initialize audible library database operations.
-        
-        Args:
-            connection_manager: Database connection manager instance
-        """
+
+    def __init__(self, connection_manager, *, logger=None):
+        """Initialize audible library database operations."""
         self.connection_manager = connection_manager
-        self.logger = logging.getLogger("DatabaseService.AudibleLibrary")
+        self.logger = logger or get_module_logger("Service.Database.AudibleLibraryLegacy")
         self._db_lock = threading.Lock()
     
     def get_all_books(self, include_metadata: bool = True) -> List[Dict[str, Any]]:

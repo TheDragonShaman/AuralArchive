@@ -1,11 +1,13 @@
 """
-Indexer Settings Routes - AuralArchive
+Module Name: indexers.py
+Author: TheDragonShaman
+Created: August 4, 2025
+Last Modified: December 23, 2025
+Description:
+    Indexer settings routes for CRUD, toggle, and validation of Jackett/Prowlarr.
+Location:
+    /routes/settings_tools/indexers.py
 
-Exposes CRUD, toggle, and validation APIs for Jackett/Prowlarr
-indexers in the settings UI.
-
-Author: AuralArchive Development Team
-Updated: December 2, 2025
 """
 
 from typing import Any, Iterable, List
@@ -16,7 +18,7 @@ from config.config import Config
 from services.service_manager import get_config_service, get_indexer_manager_service
 from utils.logger import get_module_logger
 
-logger = get_module_logger("SettingsIndexers")
+logger = get_module_logger("Routes.Settings.Indexers")
 
 # Use the shared config service from the service manager so the settings UI
 # and API endpoints read/update the same configuration instance.

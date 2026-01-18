@@ -1,21 +1,22 @@
 """
-Audible Authentication Handler - AuralArchive
+Module Name: auth_handler.py
+Author: TheDragonShaman
+Created: August 21, 2025
+Last Modified: December 23, 2025
+Description:
+    Manage Audible auth token discovery and validation for library operations.
+Location:
+    /services/audible/audible_library_service/auth_handler.py
 
-Handles secure authentication and credential management for Audible API integration.
-Provides methods for managing Audible account authentication while maintaining
-security and respecting terms of service.
-
-Author: AuralArchive Development Team
-Created: September 16, 2025
 """
 
-import logging
 import os
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 
 import audible
+from utils.logger import get_module_logger
 
 
 class AudibleAuthHandler:
@@ -35,7 +36,7 @@ class AudibleAuthHandler:
             logger: Logger instance for authentication logging
         """
         self.config_service = config_service
-        self.logger = logger or logging.getLogger(__name__)
+        self.logger = logger or get_module_logger("Service.Audible.Auth")
 
         self.project_root = Path(__file__).resolve().parents[3]
         self.default_auth_path = self.project_root / "auth" / "audible_auth.json"
@@ -44,8 +45,8 @@ class AudibleAuthHandler:
         self.profile_info: Dict[str, str] = {}
 
         self.logger.debug(
-            "AudibleAuthHandler initialized (default auth file: %s)",
-            self.default_auth_path
+            "AudibleAuthHandler initialized",
+            extra={"default_auth_path": str(self.default_auth_path)}
         )
 
     def get_auth_config_path(self) -> Optional[str]:
@@ -53,7 +54,10 @@ class AudibleAuthHandler:
         try:
             return str(self.default_auth_path.parent)
         except Exception as exc:
-            self.logger.error("Error resolving auth config path: %s", exc)
+            self.logger.error(
+                "Error resolving auth config path",
+                extra={"exc": exc}
+            )
             return None
 
     def get_default_auth_file(self) -> str:
@@ -80,7 +84,10 @@ class AudibleAuthHandler:
                 if config_value:
                     _add(Path(config_value))
             except Exception as exc:
-                self.logger.debug("Unable to read audible auth file path from config: %s", exc)
+                self.logger.debug(
+                    "Unable to read audible auth file path from config",
+                    extra={"exc": exc}
+                )
 
         env_auth = os.getenv("AURALARCHIVE_AUDIBLE_AUTH_FILE") or os.getenv("AUDIBLE_AUTH_FILE")
         if env_auth:
@@ -103,7 +110,10 @@ class AudibleAuthHandler:
                     for candidate in directory.glob(pattern):
                         _add(candidate)
             except Exception as exc:
-                self.logger.debug("Failed checking directory %s: %s", directory, exc)
+                self.logger.debug(
+                    "Failed checking candidate directory",
+                    extra={"directory": str(directory), "exc": exc}
+                )
 
         unique_paths: List[Path] = []
         seen: set = set()
@@ -195,7 +205,10 @@ class AudibleAuthHandler:
             path = self._resolve_auth_path(profile, auth_file)
 
             if not path.exists():
-                self.logger.warning("Authentication test failed - auth file not found: %s", path)
+                self.logger.warning(
+                    "Authentication test failed - auth file not found",
+                    extra={"profile": profile or "default", "auth_file": str(path)}
+                )
                 return {
                     'authenticated': False,
                     'profile': profile or 'default',
@@ -218,7 +231,10 @@ class AudibleAuthHandler:
                 'account_id': account_info.get('customer_id') or account_info.get('id')
             }
 
-            self.logger.info("Authentication test successful for profile %s", profile_name)
+            self.logger.info(
+                "Authentication test successful",
+                extra={"profile": profile_name, "auth_file": str(path)}
+            )
             return {
                 'authenticated': True,
                 'profile': profile_name,
@@ -229,7 +245,10 @@ class AudibleAuthHandler:
 
         except Exception as exc:
             resolved_profile = profile or 'default'
-            self.logger.warning("Authentication test failed for profile %s: %s", resolved_profile, exc)
+            self.logger.warning(
+                "Authentication test failed",
+                extra={"profile": resolved_profile, "auth_file": str(path) if 'path' in locals() else None, "exc": exc}
+            )
             return {
                 'authenticated': False,
                 'profile': resolved_profile,
@@ -287,7 +306,10 @@ class AudibleAuthHandler:
             return response
 
         except Exception as exc:
-            self.logger.error("Error checking existing authentication: %s", exc)
+            self.logger.error(
+                "Error checking existing authentication",
+                extra={"exc": exc}
+            )
             return {
                 'has_auth': False,
                 'error': str(exc),
@@ -386,7 +408,10 @@ class AudibleAuthHandler:
             }
 
         except Exception as exc:
-            self.logger.error("Error validating credentials: %s", exc)
+            self.logger.error(
+                "Error validating credentials",
+                extra={"exc": exc}
+            )
             return {
                 'valid': False,
                 'error': str(exc),

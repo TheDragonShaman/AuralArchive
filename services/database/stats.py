@@ -1,16 +1,30 @@
-import logging
+"""
+Module Name: stats.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Provides analytics and aggregation helpers for the database.
+
+Location:
+    /services/database/stats.py
+
+"""
+
 from typing import Dict, TYPE_CHECKING
 from .error_handling import error_handler
+from utils.logger import get_module_logger
 
 if TYPE_CHECKING:
     from .connection import DatabaseConnection
 
+
 class DatabaseStats:
-    """Handles database statistics and analytics operations"""
-    
-    def __init__(self, connection_manager):
+    """Handles database statistics and analytics operations."""
+
+    def __init__(self, connection_manager, *, logger=None):
         self.connection_manager = connection_manager
-        self.logger = logging.getLogger("DatabaseService.Stats")
+        self.logger = logger or get_module_logger("Service.Database.Stats")
     
     def get_library_stats(self) -> Dict:
         """Get comprehensive library statistics."""

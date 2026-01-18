@@ -1,11 +1,13 @@
 """
-Main Dashboard Routes - AuralArchive
+Module Name: main.py
+Author: TheDragonShaman
+Created: July 23, 2025
+Last Modified: December 23, 2025
+Description:
+    Dashboard routes for landing page, library stats API, and download snapshots.
+Location:
+    /routes/main.py
 
-Serves the dashboard landing page, supporting API stats endpoints and
-download snapshots for the UI widgets.
-
-Author: AuralArchive Development Team
-Updated: December 2, 2025
 """
 
 import os
@@ -17,7 +19,7 @@ from services.service_manager import get_config_service, get_database_service
 from utils.logger import get_module_logger
 
 main_bp = Blueprint('main', __name__)
-logger = get_module_logger("Route.Main")
+logger = get_module_logger("Routes.Main")
 
 def _get_download_snapshot(limit: int = 3) -> Dict[str, Any]:
     """Fetch a small snapshot of active downloads."""
@@ -60,7 +62,7 @@ def _get_download_snapshot(limit: int = 3) -> Dict[str, Any]:
 
     except Exception as exc:
         snapshot['error'] = str(exc)
-        logger.debug(f"Download snapshot unavailable: {exc}")
+        logger.debug("Download snapshot unavailable: %s", exc)
 
     return snapshot
 

@@ -1,26 +1,22 @@
 """
-Client Selector
-===============
+Module Name: client_selector.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Chooses the appropriate download client by type, capability, and priority.
+    Currently selects qBittorrent for torrent workloads while caching configs
+    and instances for reuse.
 
-Selects appropriate download client based on:
-- Download type (torrent)
-- Client capability
-- Client priority
-- Client health/availability
+Location:
+    /services/download_management/client_selector.py
 
-CURRENTLY SUPPORTED CLIENTS:
-- qBittorrent (torrent/magnet downloads)
-
-FUTURE SUPPORT PLANNED:
-- Deluge (torrent/magnet)
-- Transmission (torrent/magnet)
 """
 
-import logging
 import re
 from typing import Optional, Dict, Any
 
-logger = logging.getLogger("DownloadManagement.ClientSelector")
+from utils.logger import get_module_logger
 
 
 class ClientSelector:
@@ -36,9 +32,9 @@ class ClientSelector:
     3. Client health and availability
     """
 
-    def __init__(self):
+    def __init__(self, *, logger=None):
         """Initialize client selector."""
-        self.logger = logging.getLogger("DownloadManagement.ClientSelector")
+        self.logger = logger or get_module_logger("Service.DownloadManagement.ClientSelector")
         self._config_service = None
         self._client_cache: Dict[str, Any] = {}
         self._client_configs: Dict[str, Dict[str, Any]] = {}
@@ -65,13 +61,17 @@ class ClientSelector:
         if download_type in ("torrent", "magnet"):
             return self._select_torrent_client()
 
-        self.logger.error(f"Unknown download type: {download_type}")
+        self.logger.error("Unknown download type", extra={
+            "download_type": download_type
+        })
         return None
 
     def _select_torrent_client(self) -> Optional[str]:
         """Select best available torrent client (currently qBittorrent)."""
 
-        self.logger.debug("Selecting torrent client: qbittorrent (only supported client)")
+        self.logger.debug("Selecting torrent client", extra={
+            "client": "qbittorrent"
+        })
         return "qbittorrent"
 
     def get_client(self, client_name: str):
@@ -97,14 +97,21 @@ class ClientSelector:
                 return client
 
             if client_name in ("deluge", "transmission"):
-                self.logger.warning(f"Client {client_name} not yet implemented - coming soon")
+                self.logger.warning("Client not yet implemented", extra={
+                    "client": client_name
+                })
                 return None
 
-            self.logger.error(f"Unknown client: {client_name}")
+            self.logger.error("Unknown client", extra={
+                "client": client_name
+            })
             return None
 
         except Exception as exc:
-            self.logger.error(f"Error loading client {client_name}: {exc}")
+            self.logger.exception("Error loading client", extra={
+                "client": client_name,
+                "error": str(exc)
+            })
             return None
 
     def get_client_config(self, client_name: str) -> Dict[str, Any]:

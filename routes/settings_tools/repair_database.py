@@ -1,11 +1,13 @@
 """
-Repair Database Route - AuralArchive
+Module Name: repair_database.py
+Author: TheDragonShaman
+Created: August 8, 2025
+Last Modified: December 23, 2025
+Description:
+    Settings helper to repair the database with integrity checks and maintenance.
+Location:
+    /routes/settings_tools/repair_database.py
 
-Runs integrity checks, rebuilds indexes, and vacuums the SQLite database,
-providing progress back to the settings UI.
-
-Author: AuralArchive Development Team
-Updated: December 2, 2025
 """
 
 import os
@@ -17,7 +19,7 @@ from flask import jsonify
 from services.service_manager import get_database_service
 from utils.logger import get_module_logger
 
-logger = get_module_logger("Route.Settings.RepairDatabase")
+logger = get_module_logger("Routes.Settings.RepairDatabase")
 
 def handle_repair_database():
     """Repair database with comprehensive checking."""

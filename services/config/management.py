@@ -1,63 +1,94 @@
+"""
+Module Name: management.py
+Author: TheDragonShaman
+Created: August 26, 2025
+Last Modified: December 24, 2025
+Description:
+    Singleton configuration manager with defaults, validation, and backup helpers.
+Location:
+    /services/config/management.py
+
+"""
+
 import configparser
 import json
 import os
-import logging
 import threading
 from typing import Dict, Any, Optional, Set
 
 from .defaults import ConfigDefaults
 from .validation import ConfigValidation
 from .export_import import ConfigExportImport
+from utils.logger import get_module_logger
+
 
 class ConfigService:
-    """Enhanced singleton service for configuration management with modular components"""
-    
-    _instance: Optional['ConfigService'] = None
+    """Enhanced singleton service for configuration management with modular components."""
+
+    _instance: Optional["ConfigService"] = None
     _lock = threading.Lock()
     _initialized = False
-    
-    def __new__(cls, config_file: str = "config/config.txt"):
+
+    def __new__(cls, *args, **kwargs):
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
                     cls._instance = super().__new__(cls)
         return cls._instance
-    
-    def __init__(self, config_file: str = "config/config.txt"):
+
+    def __init__(
+        self,
+        config_file: str = "config/config.txt",
+        *,
+        logger=None,
+        defaults: Optional[ConfigDefaults] = None,
+        validation: Optional[ConfigValidation] = None,
+        export_import: Optional[ConfigExportImport] = None,
+    ):
         if not self._initialized:
             with self._lock:
                 if not self._initialized:
-                    self.config_file = os.path.join(os.path.dirname(__file__), '..', '..', config_file)
-                    self.logger = logging.getLogger("ConfigService.Management")
-                    
+                    self.config_file = os.path.join(os.path.dirname(__file__), "..", "..", config_file)
+                    self.logger = logger or get_module_logger("Service.Config.Service")
+
                     # Initialize modular components
-                    self.defaults = ConfigDefaults(self.config_file)
-                    self.validation = ConfigValidation()
-                    self.export_import = ConfigExportImport(self.config_file)
-                    
+                    self.defaults = defaults or ConfigDefaults(self.config_file, logger=self.logger)
+                    self.validation = validation or ConfigValidation(logger=self.logger)
+                    self.export_import = export_import or ConfigExportImport(self.config_file, logger=self.logger)
+
                     # Ensure config exists
                     self.defaults.ensure_config_exists()
-                    
+
                     ConfigService._initialized = True
     
     def load_config(self) -> configparser.ConfigParser:
-        """Load configuration from disk with duplicate section recovery."""
-        parser = configparser.ConfigParser()
+        """Load configuration from disk with duplicate section recovery.
+
+        Uses a raw parser with interpolation disabled to tolerate '%' characters
+        in values (e.g., titles/paths) without blowing up the parser.
+        """
+        parser = configparser.RawConfigParser(interpolation=None)
         try:
             with open(self.config_file, "r", encoding="utf-8") as config_handle:
                 parser.read_file(config_handle)
             return parser
         except configparser.DuplicateSectionError as duplicate_error:
             self.logger.warning(
-                "Duplicate section detected in config.txt: %s. Attempting automatic recovery...",
-                duplicate_error,
+                "Duplicate section detected; attempting automatic recovery",
+                extra={"config_file": self.config_file, "error": str(duplicate_error)},
             )
             return self._recover_from_duplicate_sections()
         except FileNotFoundError:
-            self.logger.error("Configuration file %s not found", self.config_file)
+            self.logger.error(
+                "Configuration file not found",
+                extra={"config_file": self.config_file},
+            )
             return parser
         except Exception as exc:  # pragma: no cover - defensive guard
-            self.logger.error(f"Failed to load configuration: {exc}")
+            self.logger.exception(
+                "Failed to load configuration",
+                extra={"config_file": self.config_file},
+            )
             return parser
     
     def get_config_value(self, section: str, key: str, fallback: str = None) -> Optional[str]:
@@ -65,8 +96,11 @@ class ConfigService:
         try:
             config = self.load_config()
             return config.get(section.lower(), key.lower(), fallback=fallback)
-        except Exception as e:
-            self.logger.error(f"Failed to get config value [{section}][{key}]: {e}")
+        except Exception as exc:
+            self.logger.exception(
+                "Failed to read config value",
+                extra={"section": section, "key": key, "config_file": self.config_file},
+            )
             return fallback
     
     def get_config_bool(self, section: str, key: str, fallback: bool = False) -> bool:
@@ -100,18 +134,33 @@ class ConfigService:
 
             self._write_config(config)
             
-            self.logger.info(f"Updated config: [{section}][{key}] = {value}")
+            self.logger.info(
+                "Updated configuration value",
+                extra={"section": section, "key": key, "value": value, "config_file": self.config_file},
+            )
             return True
         
-        except Exception as e:
-            self.logger.error(f"Failed to update config: {e}")
+        except Exception as exc:
+            self.logger.exception(
+                "Failed to update configuration value",
+                extra={"section": section, "key": key, "config_file": self.config_file},
+            )
             return False
     
     def update_multiple_config(self, updates: Dict[str, str]) -> bool:
         """Update multiple configuration values at once."""
         try:
             config = self.load_config()
-            
+
+            # If config failed to load and is empty while file exists, avoid
+            # clobbering the file with a near-empty set of updates.
+            if not config.sections() and os.path.exists(self.config_file):
+                self.logger.error(
+                    "Config load returned empty; aborting multi-update to prevent reset",
+                    extra={"config_file": self.config_file},
+                )
+                return False
+
             for config_key, value in updates.items():
                 if '.' not in config_key:
                     continue
@@ -124,14 +173,28 @@ class ConfigService:
                     config.add_section(section)
                 
                 config.set(section, key, self._coerce_value(value))
-                self.logger.debug(f"Updated config: [{section}][{key}] = {value}")
+                self.logger.debug(
+                    "Updated configuration value",
+                    extra={
+                        "section": section,
+                        "key": key,
+                        "value": value,
+                        "config_file": self.config_file,
+                    },
+                )
             
             self._write_config(config)
-            self.logger.info(f"Updated {len(updates)} configuration values")
+            self.logger.info(
+                "Updated multiple configuration values",
+                extra={"count": len(updates), "config_file": self.config_file},
+            )
             return True
         
-        except Exception as e:
-            self.logger.error(f"Failed to update multiple config values: {e}")
+        except Exception as exc:
+            self.logger.exception(
+                "Failed to update multiple configuration values",
+                extra={"config_file": self.config_file},
+            )
             return False
     
     def list_config(self) -> Dict[str, Dict[str, str]]:
@@ -139,8 +202,11 @@ class ConfigService:
         try:
             config = self.load_config()
             return {section: dict(config.items(section)) for section in config.sections()}
-        except Exception as e:
-            self.logger.error(f"Failed to list configuration: {e}")
+        except Exception as exc:
+            self.logger.exception(
+                "Failed to list configuration",
+                extra={"config_file": self.config_file},
+            )
             return {}
     
     # Service-specific helper methods
@@ -159,10 +225,16 @@ class ConfigService:
                 config.set(section_name, key.lower(), self._coerce_value(value))
 
             self._write_config(config)
-            self.logger.info("Updated section '%s' with %d value(s)", section_name, len(values))
+            self.logger.info(
+                "Updated configuration section",
+                extra={"section": section_name, "count": len(values), "config_file": self.config_file},
+            )
             return True
         except Exception as exc:
-            self.logger.error(f"Failed to update section '{section}': {exc}")
+            self.logger.exception(
+                "Failed to update configuration section",
+                extra={"section": section, "config_file": self.config_file},
+            )
             return False
 
     def remove_section(self, section: str) -> bool:
@@ -176,10 +248,16 @@ class ConfigService:
 
             config.remove_section(section_name)
             self._write_config(config)
-            self.logger.info("Removed section '%s' from configuration", section_name)
+            self.logger.info(
+                "Removed configuration section",
+                extra={"section": section_name, "config_file": self.config_file},
+            )
             return True
         except Exception as exc:
-            self.logger.error(f"Failed to remove section '{section}': {exc}")
+            self.logger.exception(
+                "Failed to remove configuration section",
+                extra={"section": section, "config_file": self.config_file},
+            )
             return False
 
     def get_audiobookshelf_config(self) -> Dict[str, str]:
@@ -310,7 +388,10 @@ class ConfigService:
             
             return default
         except Exception as e:
-            self.logger.error(f"Error getting config key '{key}': {e}")
+            self.logger.exception(
+                "Error getting config key",
+                extra={"key": key, "config_file": self.config_file},
+            )
             return default
     
     def list_clients(self) -> list:
@@ -330,7 +411,10 @@ class ConfigService:
             
             return clients
         except Exception as e:
-            self.logger.error(f"Error listing clients: {e}")
+            self.logger.exception(
+                "Error listing enabled clients",
+                extra={"config_file": self.config_file},
+            )
             return []
     
     def get_jackett_config(self) -> Dict[str, Any]:
@@ -348,7 +432,10 @@ class ConfigService:
                 }
             return {'enabled': False}
         except Exception as e:
-            self.logger.error(f"Error getting Jackett config: {e}")
+            self.logger.exception(
+                "Error getting Jackett config",
+                extra={"config_file": self.config_file},
+            )
             return {'enabled': False}
     
     def get_prowlarr_config(self) -> Dict[str, Any]:
@@ -366,7 +453,10 @@ class ConfigService:
                 }
             return {'enabled': False}
         except Exception as e:
-            self.logger.error(f"Error getting Prowlarr config: {e}")
+            self.logger.exception(
+                "Error getting Prowlarr config",
+                extra={"config_file": self.config_file},
+            )
             return {'enabled': False}
     
     def get_nzbhydra_config(self) -> Dict[str, Any]:
@@ -384,7 +474,10 @@ class ConfigService:
                 }
             return {'enabled': False}
         except Exception as e:
-            self.logger.error(f"Error getting NZBHydra2 config: {e}")
+            self.logger.exception(
+                "Error getting NZBHydra2 config",
+                extra={"config_file": self.config_file},
+            )
             return {'enabled': False}
     
     def get_librivox_config(self) -> Dict[str, Any]:
@@ -400,7 +493,10 @@ class ConfigService:
                 }
             return {'enabled': True, 'base_url': 'https://librivox.org/api/feed', 'timeout': 30, 'max_results': 100}
         except Exception as e:
-            self.logger.error(f"Error getting LibriVox config: {e}")
+            self.logger.exception(
+                "Error getting LibriVox config",
+                extra={"config_file": self.config_file},
+            )
             return {'enabled': True}
     
     def get_section(self, section_name: str) -> Dict[str, Any]:
@@ -422,7 +518,10 @@ class ConfigService:
             
             return section_dict
         except Exception as e:
-            self.logger.error(f"Error getting section '{section_name}': {e}")
+            self.logger.exception(
+                "Error getting configuration section",
+                extra={"section": section_name, "config_file": self.config_file},
+            )
             return {}
 
     # ------------------------------------------------------------------
@@ -468,10 +567,16 @@ class ConfigService:
                 config.set(section_name, key, value)
 
             self._write_config(config)
-            self.logger.info("Saved indexer configuration for '%s'", indexer_key)
+            self.logger.info(
+                "Saved indexer configuration",
+                extra={"indexer": indexer_key, "config_file": self.config_file},
+            )
             return True
         except Exception as exc:
-            self.logger.error("Failed to save indexer '%s': %s", indexer_key, exc)
+            self.logger.exception(
+                "Failed to save indexer configuration",
+                extra={"indexer": indexer_key, "config_file": self.config_file},
+            )
             return False
 
     def delete_indexer_config(self, indexer_key: str) -> bool:
@@ -483,10 +588,16 @@ class ConfigService:
                 return True
             config.remove_section(section_name)
             self._write_config(config)
-            self.logger.info("Removed indexer configuration for '%s'", indexer_key)
+            self.logger.info(
+                "Removed indexer configuration",
+                extra={"indexer": indexer_key, "config_file": self.config_file},
+            )
             return True
         except Exception as exc:
-            self.logger.error("Failed to remove indexer '%s': %s", indexer_key, exc)
+            self.logger.exception(
+                "Failed to remove indexer configuration",
+                extra={"indexer": indexer_key, "config_file": self.config_file},
+            )
             return False
 
     # AudiobookServicesConfigManager compatibility methods
@@ -532,7 +643,10 @@ class ConfigService:
             
             return self.update_multiple_config(updates)
         except Exception as e:
-            self.logger.error(f"Error updating indexer config for {indexer_name}: {e}")
+            self.logger.exception(
+                "Error updating indexer config",
+                extra={"indexer": indexer_name, "config_file": self.config_file},
+            )
             return False
     
         """Get configuration for specific download client."""
@@ -547,7 +661,10 @@ class ConfigService:
             
             return self.update_multiple_config(updates)
         except Exception as e:
-            self.logger.error(f"Error updating client config for {client_name}: {e}")
+            self.logger.exception(
+                "Error updating client config",
+                extra={"client": client_name, "config_file": self.config_file},
+            )
             return False
     
         """Get download coordination configuration."""
@@ -575,7 +692,10 @@ class ConfigService:
             
             return self.update_multiple_config(updates)
         except Exception as e:
-            self.logger.error(f"Error updating download coordination config: {e}")
+            self.logger.exception(
+                "Error updating download coordination config",
+                extra={"config_file": self.config_file},
+            )
             return False
     
         """Get file processing configuration."""
@@ -603,7 +723,10 @@ class ConfigService:
             
             return self.update_multiple_config(updates)
         except Exception as e:
-            self.logger.error(f"Error updating file processing config: {e}")
+            self.logger.exception(
+                "Error updating file processing config",
+                extra={"config_file": self.config_file},
+            )
             return False
     
     def reload_config(self) -> bool:
@@ -638,10 +761,16 @@ class ConfigService:
                 cleaned_parser[section] = {key: value for key, value in recovery_parser.items(section)}
 
             self._write_config(cleaned_parser)
-            self.logger.info("Duplicate sections removed; configuration rewritten")
+            self.logger.info(
+                "Duplicate sections removed; configuration rewritten",
+                extra={"config_file": self.config_file},
+            )
             return cleaned_parser
         except Exception as exc:
-            self.logger.error(f"Failed to recover configuration: {exc}")
+            self.logger.exception(
+                "Failed to recover configuration from duplicate sections",
+                extra={"config_file": self.config_file},
+            )
             return configparser.ConfigParser()
 
     # ------------------------------------------------------------------
@@ -733,7 +862,10 @@ class ConfigService:
             with open(legacy_path, 'r', encoding='utf-8') as legacy_file:
                 legacy_indexers = json.load(legacy_file)
         except Exception as exc:
-            self.logger.error("Failed to read legacy indexers.json: %s", exc)
+            self.logger.exception(
+                "Failed to read legacy indexers.json",
+                extra={"legacy_path": legacy_path},
+            )
             return False
 
         migrated_any = False
@@ -747,8 +879,14 @@ class ConfigService:
             try:
                 backup_path = f"{legacy_path}.legacy"
                 os.replace(legacy_path, backup_path)
-                self.logger.info("Migrated legacy indexers.json to config.txt (backup: %s)", backup_path)
+                self.logger.info(
+                    "Migrated legacy indexers.json to config.txt",
+                    extra={"backup_path": backup_path, "legacy_path": legacy_path, "config_file": self.config_file},
+                )
             except OSError as exc:
-                self.logger.warning("Migrated indexers.json but failed to archive legacy file: %s", exc)
+                self.logger.warning(
+                    "Migrated indexers but failed to archive legacy file",
+                    extra={"legacy_path": legacy_path, "backup_error": str(exc)},
+                )
 
         return migrated_any

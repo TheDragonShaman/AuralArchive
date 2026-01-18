@@ -13,3 +13,4 @@ lxml>=5.0.0
 gunicorn==21.2.0
 audible==0.10.0
 cryptography>=41.0.0
+loguru==0.7.2

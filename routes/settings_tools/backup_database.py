@@ -1,11 +1,13 @@
 """
-Backup Database Route - AuralArchive
+Module Name: backup_database.py
+Author: TheDragonShaman
+Created: July 27, 2025
+Last Modified: December 23, 2025
+Description:
+    Settings helper for creating database backups with metadata for download.
+Location:
+    /routes/settings_tools/backup_database.py
 
-Creates database backups with metadata so admins can download the SQLite store
-from the settings UI.
-
-Author: AuralArchive Development Team
-Updated: December 2, 2025
 """
 
 import os
@@ -17,7 +19,7 @@ from flask import jsonify
 from services.service_manager import get_database_service
 from utils.logger import get_module_logger
 
-logger = get_module_logger("Route.Settings.BackupDatabase")
+logger = get_module_logger("Routes.Settings.BackupDatabase")
 
 def handle_backup_database():
     """Create database backup with enhanced metadata."""

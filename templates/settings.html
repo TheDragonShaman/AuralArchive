@@ -41,6 +41,7 @@
                         </label>
                         <select id="app_theme" class="select select-bordered w-full">
                             <option value="dark">Dark</option>
+                            <option value="light">Light</option>
                             <option value="nord">Nord</option>
                             <option value="blueberry">BlueBerry</option>
                         </select>
@@ -145,11 +146,26 @@
                             <input id="abs_auto_sync" type="checkbox" class="toggle toggle-primary" />
                         </label>
                     </div>
-                    <div class="form-control md:col-span-2">
+                    <div class="form-control">
+                        <label class="label cursor-pointer">
+                            <span class="label-text">Auto-match new imports (ABS)</span>
+                            <input id="abs_auto_match_imports" type="checkbox" class="toggle toggle-primary" />
+                        </label>
+                        <label class="label">
+                            <span class="label-text-alt text-base-content/60">Match ~10s after import completes.</span>
+                        </label>
+                    </div>
+                    <div class="form-control">
                         <label class="label pb-1">
                             <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Sync frequency</span>
                         </label>
                         <input id="abs_sync_frequency" type="text" class="input input-bordered w-full" placeholder="30min" />
+                    </div>
+                    <div class="form-control">
+                        <label class="label pb-1">
+                            <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Auto-match delay (seconds)</span>
+                        </label>
+                        <input id="abs_auto_match_delay_seconds" type="number" min="0" class="input input-bordered w-full" placeholder="10" />
                     </div>
                 </div>
                 <div id="absStatus" class="text-xs text-base-content/60 min-h-4"></div>
@@ -338,23 +354,17 @@
                                 </label>
                                 <select id="download_client_type" class="select select-bordered w-full">
                                     <option value="qbittorrent">qBittorrent</option>
-                                    <option value="deluge">Deluge</option>
-                                    <option value="transmission">Transmission</option>
+                                    <option value="deluge" disabled>Deluge (coming soon)</option>
+                                    <option value="transmission" disabled>Transmission (coming soon)</option>
                                 </select>
                                 <label class="label">
-                                    <span id="downloadClientTypeHelper" class="label-text-alt text-base-content/60">Choose the client protocol you want to configure.</span>
+                                    <span id="downloadClientTypeHelper" class="label-text-alt text-base-content/60">qBittorrent is supported today. Deluge and Transmission are coming soon.</span>
                                 </label>
                             </div>
                             <div class="form-control">
                                 <label class="label cursor-pointer">
                                     <span class="label-text">Enable client</span>
                                     <input id="download_client_enabled" type="checkbox" class="toggle toggle-primary" />
-                                </label>
-                            </div>
-                            <div class="form-control">
-                                <label class="label cursor-pointer">
-                                    <span class="label-text">Auto-start downloads</span>
-                                    <input id="download_client_auto" type="checkbox" class="toggle toggle-primary" />
                                 </label>
                             </div>
                         </div>
@@ -390,6 +400,12 @@
                                 </label>
                                 <input id="qb_category" type="text" class="input input-bordered w-full" placeholder="auralarchive" />
                             </div>
+                                <div class="form-control md:col-span-2">
+                                    <label class="label cursor-pointer">
+                                        <span class="label-text">Enable remote path mappings</span>
+                                        <input id="qb_path_mapping_enabled" type="checkbox" class="toggle toggle-primary" />
+                                    </label>
+                                </div>
                             <div class="form-control md:col-span-2" data-qb-path-mappings>
                                 <label class="label pb-1">
                                     <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Path mappings</span>
@@ -670,32 +686,17 @@
                         </div>
                         <div class="form-control">
                             <label class="label cursor-pointer">
-                                <span class="label-text">Keep torrent after import</span>
-                                <input id="dm_keep_torrent_active" type="checkbox" class="toggle toggle-primary" />
-                            </label>
-                        </div>
-                        <div class="form-control">
-                            <label class="label cursor-pointer">
-                                <span class="label-text">Wait for client completion</span>
-                                <input id="dm_wait_for_completion" type="checkbox" class="toggle toggle-primary" />
-                            </label>
-                        </div>
-                        <div class="form-control">
-                            <label class="label cursor-pointer">
                                 <span class="label-text">Delete source after import</span>
                                 <input id="dm_delete_source" type="checkbox" class="toggle toggle-primary" />
                             </label>
                         </div>
                         <div class="form-control">
                             <label class="label cursor-pointer">
-                                <span class="label-text">Delete temp files after conversion</span>
-                                <input id="dm_delete_temp" type="checkbox" class="toggle toggle-primary" />
+                                <span class="label-text">Overwrite existing library files</span>
+                                <input id="import_overwrite_existing" type="checkbox" class="toggle toggle-primary" />
                             </label>
-                        </div>
-                        <div class="form-control">
-                            <label class="label cursor-pointer">
-                                <span class="label-text">Auto process queue</span>
-                                <input id="dm_auto_process_queue" type="checkbox" class="toggle toggle-primary" />
+                            <label class="label">
+                                <span class="label-text-alt text-base-content/60">(If enabled, importer will replace any existing destination file.)</span>
                             </label>
                         </div>
                         <div class="form-control">
@@ -714,12 +715,6 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div class="form-control">
                             <label class="label pb-1">
-                                <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Failed retention (days)</span>
-                            </label>
-                            <input id="dm_retention_days" type="number" min="0" step="1" class="input input-bordered w-full" placeholder="7" />
-                        </div>
-                        <div class="form-control">
-                            <label class="label pb-1">
                                 <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Temp download path</span>
                             </label>
                             <input id="dm_temp_download_path" type="text" class="input input-bordered w-full" placeholder="/tmp/auralarchive/downloads" />
@@ -729,12 +724,6 @@
                                 <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Temp conversion path</span>
                             </label>
                             <input id="dm_temp_conversion_path" type="text" class="input input-bordered w-full" placeholder="/tmp/auralarchive/converting" />
-                        </div>
-                        <div class="form-control">
-                            <label class="label pb-1">
-                                <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Temp failed path</span>
-                            </label>
-                            <input id="dm_temp_failed_path" type="text" class="input input-bordered w-full" placeholder="/tmp/auralarchive/failed" />
                         </div>
                         <div class="form-control">
                             <label class="label pb-1">
@@ -864,6 +853,24 @@
             </form>
         </div>
     </div>
+
+    <dialog id="autoDownloadConfirmModal" class="modal modal-bottom sm:modal-middle">
+        <div class="modal-box w-full max-w-lg space-y-4">
+            <h3 class="text-lg font-semibold text-warning">Enable automatic downloads?</h3>
+            <p class="text-sm text-base-content/80 leading-relaxed">
+                WARNING: This action will enable automatic download searches. The application does not decide downloads
+                based on ratios or upload/download limits. Therefore, private trackers should be monitored closely otherwise
+                ration/standings could be impacted. You use this feature at your own risk.
+            </p>
+            <div class="modal-action">
+                <button type="button" class="btn btn-ghost" id="autoDownloadCancel">Cancel</button>
+                <button type="button" class="btn btn-primary" id="autoDownloadConfirm">Enable</button>
+            </div>
+        </div>
+        <form method="dialog" class="modal-backdrop">
+            <button aria-label="Close"></button>
+        </form>
+    </dialog>
 
     <dialog id="audibleAuthModal" class="modal modal-bottom sm:modal-middle">
         <div class="modal-box w-full max-w-lg space-y-4">

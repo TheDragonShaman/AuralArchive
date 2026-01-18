@@ -1,10 +1,16 @@
 """
-Audiobook Services Configuration Manager
-Handles configuration for all audiobook management services
+Module Name: audiobook_services_config.py
+Author: TheDragonShaman
+Created: August 26, 2025
+Last Modified: December 24, 2025
+Description:
+    Manage configuration for audiobook-related services (indexers, clients, processing).
+Location:
+    /services/config/audiobook_services_config.py
+
 """
 import json
 import os
-import logging
 from pathlib import Path
 from typing import Dict, Any, Optional
 from dataclasses import dataclass, asdict
@@ -42,18 +48,19 @@ class ProcessingConfig:
 
 class AudiobookServicesConfigManager:
     """
-    Manages configuration for all audiobook management services
-    Provides unified configuration access and validation
+    Manage configuration for all audiobook management services with unified access.
     """
-    
-    def __init__(self, config_path: Optional[str] = None):
-        """Initialize configuration manager"""
-        self.logger = get_module_logger(self.__class__.__name__)
+
+    def __init__(self, config_path: Optional[str] = None, logger=None):
+        self.logger = logger or get_module_logger("Service.Config.AudiobookServices")
         
         # Set default config path
         if config_path is None:
-            config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 
-                                     'config', 'audiobook_services_config.json')
+            config_path = os.path.join(
+                os.path.dirname(os.path.dirname(__file__)),
+                "config",
+                "audiobook_services_config.json",
+            )
         
         self.config_path = Path(config_path)
         self._config_data: Dict[str, Any] = {}
@@ -65,12 +72,21 @@ class AudiobookServicesConfigManager:
             if self.config_path.exists():
                 with open(self.config_path, 'r', encoding='utf-8') as f:
                     self._config_data = json.load(f)
-                self.logger.info(f"Loaded audiobook services configuration from {self.config_path}")
+                self.logger.info(
+                    "Loaded audiobook services configuration",
+                    extra={"config_path": str(self.config_path)},
+                )
             else:
-                self.logger.warning(f"Configuration file not found: {self.config_path}")
+                self.logger.warning(
+                    "Configuration file not found, creating defaults",
+                    extra={"config_path": str(self.config_path)},
+                )
                 self._create_default_config()
-        except Exception as e:
-            self.logger.error(f"Error loading configuration: {e}")
+        except Exception as exc:
+            self.logger.exception(
+                "Error loading audiobook services configuration",
+                extra={"config_path": str(self.config_path)},
+            )
             self._create_default_config()
     
     def _create_default_config(self):
@@ -125,17 +141,21 @@ class AudiobookServicesConfigManager:
         
         self._config_data = default_config
         self.save_config()
-    
-        """Get configuration for specific indexer"""
+
+    def get_indexer_config(self, indexer_name: str) -> Dict[str, Any]:
+        """Get configuration for a specific indexer."""
         return self._config_data.get("indexers", {}).get(indexer_name, {})
-    
-        """Get configuration for specific client"""
+
+    def get_client_config(self, client_name: str) -> Dict[str, Any]:
+        """Get configuration for a specific download client."""
         return self._config_data.get("clients", {}).get(client_name, {})
-    
-        """Get download coordination configuration"""
+
+    def get_download_coordination_config(self) -> Dict[str, Any]:
+        """Get download coordination configuration."""
         return self._config_data.get("download_coordination", {})
-    
-        """Get file processing configuration"""
+
+    def get_file_processing_config(self) -> Dict[str, Any]:
+        """Get file processing configuration."""
         return self._config_data.get("file_processing", {})
     
     def get_monitoring_config(self) -> Dict[str, Any]:
@@ -175,10 +195,16 @@ class AudiobookServicesConfigManager:
             with open(self.config_path, 'w', encoding='utf-8') as f:
                 json.dump(self._config_data, f, indent=2, ensure_ascii=False)
             
-            self.logger.info("Configuration saved successfully")
+            self.logger.info(
+                "Audiobook services configuration saved",
+                extra={"config_path": str(self.config_path)},
+            )
             
-        except Exception as e:
-            self.logger.error(f"Error saving configuration: {e}")
+        except Exception as exc:
+            self.logger.exception(
+                "Error saving audiobook services configuration",
+                extra={"config_path": str(self.config_path)},
+            )
             raise
     
     def validate_config(self) -> Dict[str, Any]:
@@ -269,7 +295,10 @@ class AudiobookServicesConfigManager:
     def reload_config(self):
         """Reload configuration from file"""
         self._load_config()
-        self.logger.info("Configuration reloaded from file")
+        self.logger.info(
+            "Audiobook services configuration reloaded",
+            extra={"config_path": str(self.config_path)},
+        )
 
 # Global config manager instance
 audiobook_config_manager = AudiobookServicesConfigManager()

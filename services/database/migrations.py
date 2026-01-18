@@ -1,223 +1,50 @@
-import logging
+"""
+Module Name: migrations.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Initializes and migrates the SQLite schema for AuralArchive.
+    Migrations are frozen; initialization is a no-op aside from connectivity
+    verification.
+
+Location:
+    /services/database/migrations.py
+
+"""
+
 from typing import TYPE_CHECKING
+
+from utils.logger import get_module_logger
 
 if TYPE_CHECKING:
     from .connection import DatabaseConnection
 
+
 class DatabaseMigrations:
-    """Handles database initialization and schema migrations"""
-    
-    def __init__(self, connection_manager):
+    """Handles database initialization and schema migrations (frozen)."""
+
+    def __init__(self, connection_manager: "DatabaseConnection", *, logger=None):
         self.connection_manager = connection_manager
-        self.logger = logging.getLogger("DatabaseService.Migrations")
-    
+        self.logger = logger or get_module_logger("Service.Database.Migrations")
+
     def initialize_database(self):
-        """Initialize the database and create the books table if it doesn't exist."""
+        """Verify connectivity; schema changes are frozen."""
         try:
-            conn, cursor = self.connection_manager.connect_db()
-            
-            # Create books table with full schema
-            self._create_books_table(cursor)
-            
-            # Create authors table
-            self._create_authors_table(cursor)
-            
-            # Create author override table
-            self._create_author_name_overrides_table(cursor)
-
-            # Create audible_library table
-            self._create_audible_library_table(cursor)
-            
-            # Create search-related tables
-            self._create_search_results_table(cursor)
-            self._create_indexer_status_table(cursor)
-            self._create_search_preferences_table(cursor)
-            self._create_download_queue_table(cursor)
-
-            # Seed default overrides
-            self._seed_default_author_overrides(cursor)
-            
-            conn.commit()
+            conn, _ = self.connection_manager.connect_db()
             conn.close()
-            
-            self.logger.info(f"Database initialized successfully: {self.connection_manager.db_file}")
-        
-        except Exception as e:
-            self.logger.error(f"Error initializing database: {e}")
+            self.logger.info("Database initialization skipped (frozen schema)")
+        except Exception as exc:
+            self.logger.error(
+                "Error initializing database (frozen state)",
+                extra={"error": str(exc)},
+                exc_info=True,
+            )
             raise
-    
-    def _create_books_table(self, cursor):
-        """Create the books table with complete schema"""
-        create_table_sql = """
-            CREATE TABLE IF NOT EXISTS books (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                title TEXT NOT NULL,
-                author TEXT,
-                series TEXT,
-                sequence TEXT,
-                narrator TEXT,
-                runtime TEXT,
-                release_date TEXT,
-                language TEXT,
-                publisher TEXT,
-                overall_rating TEXT,
-                rating TEXT,
-                num_ratings INTEGER DEFAULT 0,
-                status TEXT DEFAULT 'Wanted',
-                asin TEXT UNIQUE,
-                summary TEXT,
-                cover_image TEXT,
-                source TEXT DEFAULT 'manual',
-                ownership_status TEXT DEFAULT 'wanted',
-                file_path TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """
-        
-        cursor.execute(create_table_sql)
-        
-        # Create indexes for common queries
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_books_source ON books(source)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_books_ownership_status ON books(ownership_status)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_books_asin ON books(asin)')
-        
-        self.logger.debug("Books table created or verified")
-    
-    def _create_authors_table(self, cursor):
-        """Create the authors table for storing Audible author information"""
-        create_table_sql = """
-            CREATE TABLE IF NOT EXISTS authors (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL UNIQUE,
-                audible_author_id TEXT,
-                author_image_url TEXT,
-                author_bio TEXT,
-                author_page_url TEXT,
-                total_books_count INTEGER DEFAULT 0,
-                audible_books_count INTEGER DEFAULT 0,
-                last_fetched_at TIMESTAMP,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """
-        
-        cursor.execute(create_table_sql)
-        self.logger.debug("Authors table created or verified")
 
-    def _create_author_name_overrides_table(self, cursor):
-        """Create the table used for canonical author overrides."""
-        create_table_sql = """
-            CREATE TABLE IF NOT EXISTS author_name_overrides (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                source_author_name TEXT NOT NULL,
-                preferred_author_name TEXT NOT NULL,
-                asin TEXT DEFAULT '',
-                notes TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(source_author_name, asin)
-            )
-        """
-
-        cursor.execute(create_table_sql)
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_author_overrides_source ON author_name_overrides(source_author_name)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_author_overrides_asin ON author_name_overrides(asin)")
-        self.logger.debug("Author name overrides table created or verified")
-    
-    def _create_audible_library_table(self, cursor):
-        """Create the audible_library table with ASIN as primary key and comprehensive metadata fields"""
-        create_table_sql = """
-            CREATE TABLE IF NOT EXISTS audible_library (
-                asin TEXT PRIMARY KEY NOT NULL,
-                title TEXT,
-                author TEXT,
-                authors TEXT,
-                narrator TEXT,
-                narrators TEXT,
-                series_title TEXT,
-                series_sequence TEXT,
-                publisher TEXT,
-                publication_date TEXT,
-                release_date TEXT,
-                duration_minutes INTEGER,
-                runtime_length_min INTEGER,
-                summary TEXT,
-                description TEXT,
-                genres TEXT,
-                tags TEXT,
-                language TEXT,
-                format TEXT,
-                rating REAL,
-                num_ratings INTEGER DEFAULT 0,
-                purchase_date TEXT,
-                listened BOOLEAN DEFAULT 0,
-                progress REAL DEFAULT 0.0,
-                favorite BOOLEAN DEFAULT 0,
-                cover_image_url TEXT,
-                local_cover_path TEXT,
-                file_path TEXT,
-                file_size INTEGER,
-                added_date TEXT DEFAULT (datetime('now')),
-                last_updated TEXT DEFAULT (datetime('now')),
-                metadata_source TEXT DEFAULT 'audible_cli',
-                sync_status TEXT DEFAULT 'pending'
-            )
-        """
-        
-        cursor.execute(create_table_sql)
-        
-        # Create indexes for common queries
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_audible_library_title ON audible_library(title)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_audible_library_author ON audible_library(author)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_audible_library_series ON audible_library(series_title)')
-        
-        # Check if last_updated column exists before creating index
-        cursor.execute("PRAGMA table_info(audible_library)")
-        columns = [col[1] for col in cursor.fetchall()]
-        if 'last_updated' in columns:
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_audible_library_last_updated ON audible_library(last_updated)')
-        if 'sync_status' in columns:
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_audible_library_sync_status ON audible_library(sync_status)')
-        
-        self.logger.debug("Audible library table created or verified with ASIN primary key")
-    
-    def _create_search_results_table(self, cursor):
-        """Create the search_results table for search history and result caching"""
-        create_table_sql = """
-            CREATE TABLE IF NOT EXISTS search_results (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                search_id TEXT NOT NULL,
-                book_title TEXT NOT NULL,
-                book_author TEXT,
-                search_type TEXT DEFAULT 'manual',
-                indexer_name TEXT,
-                result_title TEXT,
-                result_author TEXT,
-                download_url TEXT,
-                info_url TEXT,
-                size_bytes INTEGER,
-                seeders INTEGER,
-                leechers INTEGER,
-                format TEXT,
-                bitrate INTEGER,
-                quality_score REAL,
-                match_score REAL,
-                selected BOOLEAN DEFAULT 0,
-                search_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """
-        
-        cursor.execute(create_table_sql)
-        
-        # Create indexes for common queries
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_search_results_search_id ON search_results(search_id)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_search_results_book_title ON search_results(book_title)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_search_results_search_date ON search_results(search_date)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_search_results_selected ON search_results(selected)')
-        
-        self.logger.debug("Search results table created or verified")
+    def migrate_database(self):
+        """Explicitly skip migrations while schema is frozen."""
+        self.logger.info("Database migrations frozen; skipping migration run")
     
     def _create_indexer_status_table(self, cursor):
         """Create the indexer_status table for indexer health and performance tracking"""

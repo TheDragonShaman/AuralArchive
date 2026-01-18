@@ -1,21 +1,26 @@
 """
-Filename Matcher - Extract ASIN and search for books
-Focuses on ASIN extraction with optional manual search fallback
+Module Name: filename_matcher.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Extracts ASIN identifiers from filenames and provides lightweight
+    search helpers to locate matching books in the database. Serves as the
+    first-pass matcher before deeper metadata inspection.
 
-Location: services/import_service/filename_matcher.py
-Purpose: Extract ASIN from filenames and provide search capabilities
+Location:
+    /services/import_service/filename_matcher.py
 
-TODO: After download management is complete, add metadata extraction from audio files
-      - Use mutagen/ffprobe to read ASIN from file metadata tags
-      - Extract from AAX/AAXC activation_bytes comments
-      - Read from M4B/M4A metadata tags
-      - Fallback to filename if metadata not available
 """
 
-import logging
 import os
 import re
 from typing import Dict, List, Optional, Tuple
+
+from utils.logger import get_module_logger
+
+
+_LOGGER = get_module_logger("Service.Import.FilenameMatcher")
 
 
 class FilenameMatcher:
@@ -26,8 +31,8 @@ class FilenameMatcher:
     Fallback: Search functionality for manual selection
     """
     
-    def __init__(self):
-        self.logger = logging.getLogger("ImportService.FilenameMatcher")
+    def __init__(self, *, logger=None):
+        self.logger = logger or _LOGGER
         
         # ASIN pattern - matches [B0XXXXXXXXX] format
         self.asin_pattern = re.compile(r'\[([B][A-Z0-9]{9})\]')

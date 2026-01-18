@@ -1,15 +1,23 @@
 """
-Path Generator - Generates complete file paths from templates and metadata
-Combines templates, metadata, and sanitization to create ABS-compatible paths
+Module Name: path_generator.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Generates complete file paths from templates and metadata, combining naming
+    parsing and sanitization to create AudioBookShelf-compatible paths.
 
-Location: services/file_naming/path_generator.py
-Purpose: Generate complete file paths following ABS conventions
+Location:
+    /services/file_naming/path_generator.py
+
 """
 
-import logging
 import os
 import re
 from typing import Dict, Optional
+from utils.logger import get_module_logger
+
+_LOGGER = get_module_logger("Service.FileNaming.PathGenerator")
 
 
 class PathGenerator:
@@ -23,8 +31,8 @@ class PathGenerator:
     - Path component sanitization
     """
     
-    def __init__(self):
-        self.logger = logging.getLogger("FileNamingService.PathGenerator")
+    def __init__(self, *, logger=None):
+        self.logger = logger or _LOGGER
         self.asin_pattern = re.compile(r'\[([A-Z0-9]+)\]')
     
     def generate_file_path(self, book_data: Dict, base_path: str, template: str, 

@@ -1,22 +1,28 @@
 """
-AudioBookShelf Sync Operations
-File: services/audiobookshelf/syncfromabs.py
-Handles syncing books FROM AudioBookShelf TO AuralArchive database
+Module Name: syncfromabs.py
+Author: TheDragonShaman
+Created: August 26, 2025
+Last Modified: December 24, 2025
+Description:
+    Sync books from AudioBookShelf into the AuralArchive database with caching and duplicate handling.
+Location:
+    /services/audiobookshelf/syncfromabs.py
+
 """
-import logging
 import re
 from typing import Dict, List, Optional, Tuple
+from utils.logger import get_module_logger
 
 ASIN_PATTERN = re.compile(r"(B[0-9A-Z]{9})", re.IGNORECASE)
 
 class AudioBookShelfSync:
     """Handles syncing books from AudioBookShelf to AuralArchive."""
-    
-    def __init__(self, connection, libraries, config_service):
+
+    def __init__(self, connection, libraries, config_service, logger=None):
         self.connection = connection
         self.libraries = libraries
         self.config_service = config_service
-        self.logger = logging.getLogger("AudioBookShelfSync")
+        self.logger = logger or get_module_logger("Service.AudioBookShelf.Sync")
     
     def sync_from_audiobookshelf(self, database_service) -> Tuple[bool, int, str]:
         """Sync books FROM AudioBookShelf TO AuralArchive database."""
@@ -30,7 +36,10 @@ class AudioBookShelfSync:
             if not library_id:
                 return False, 0, "No AudioBookShelf library selected in configuration"
             
-            self.logger.info(f"Starting sync from AudioBookShelf library: {library_id}")
+            self.logger.info(
+                "Starting sync from AudioBookShelf library",
+                extra={"library_id": library_id},
+            )
             
             # Get ALL items using pagination
             all_abs_items = self._fetch_all_library_items(library_id)
@@ -43,9 +52,12 @@ class AudioBookShelfSync:
             # Process items with reduced logging
             return self._process_sync_items(all_abs_items, existing_books, database_service)
         
-        except Exception as e:
-            self.logger.error(f"Error during AudioBookShelf sync: {e}")
-            return False, 0, f"Sync error: {str(e)}"
+        except Exception as exc:
+            self.logger.error(
+                "Error during AudioBookShelf sync",
+                extra={"error": str(exc)},
+            )
+            return False, 0, f"Sync error: {str(exc)}"
     
     def _fetch_all_library_items(self, library_id: str) -> List[Dict]:
         """Fetch all items from library using limit=0 (no limit)."""
@@ -54,14 +66,23 @@ class AudioBookShelfSync:
             success, all_items, message = self.libraries.get_library_items(library_id, limit=0, page=0)
             
             if success:
-                self.logger.info(f"Retrieved {len(all_items)} total items from AudioBookShelf")
+                self.logger.info(
+                    "Retrieved items from AudioBookShelf",
+                    extra={"count": len(all_items)},
+                )
                 return all_items
             else:
-                self.logger.error(f"Failed to fetch library items: {message}")
+                self.logger.error(
+                    "Failed to fetch library items",
+                    extra={"message": message},
+                )
                 return []
-        
-        except Exception as e:
-            self.logger.error(f"Error fetching library items: {e}")
+
+        except Exception as exc:
+            self.logger.error(
+                "Error fetching library items",
+                extra={"error": str(exc)},
+            )
             return []
     
     def _load_existing_books(self, database_service) -> Dict:
@@ -73,7 +94,10 @@ class AudioBookShelfSync:
         existing_titles = {(book.get('Title', '').lower(), book.get('Author', '').lower()): book 
                           for book in existing_books}
         
-        self.logger.info(f"Loaded {len(existing_books)} existing books for comparison")
+        self.logger.info(
+            "Loaded existing books for comparison",
+            extra={"count": len(existing_books)},
+        )
         
         return {
             'asins': existing_asins,
@@ -92,7 +116,10 @@ class AudioBookShelfSync:
         for i, abs_item in enumerate(all_abs_items):
             try:
                 if (i + 1) % 25 == 0:
-                    self.logger.info(f"Processing item {i+1}/{len(all_abs_items)}")
+                    self.logger.info(
+                        "Processing AudioBookShelf item",
+                        extra={"index": i + 1, "total": len(all_abs_items)},
+                    )
                 
                 # Convert AudioBookShelf item to AuralArchive format
                 book_data = self._convert_abs_item_to_auralarchive(abs_item)
@@ -117,8 +144,8 @@ class AudioBookShelfSync:
                     else:
                         duplicate_count += 1
                 
-            except Exception as e:
-                errors.append(f"{abs_item.get('title', 'Unknown')}: {str(e)}")
+            except Exception as exc:
+                errors.append(f"{abs_item.get('title', 'Unknown')}: {str(exc)}")
         
         # Create summary message
         total_processed = added_count + updated_count
@@ -137,7 +164,17 @@ class AudioBookShelfSync:
         error_summary = f" ({len(errors)} errors)" if errors else ""
         
         full_message = f"Processed {len(all_abs_items)} items: {main_message}{error_summary}"
-        self.logger.info(f"Sync completed: {full_message}")
+        self.logger.info(
+            "AudioBookShelf sync completed",
+            extra={
+                "processed": len(all_abs_items),
+                "added": added_count,
+                "updated": updated_count,
+                "skipped": skipped_count,
+                "duplicates": duplicate_count,
+                "errors": len(errors),
+            },
+        )
         
         return True, total_processed, full_message
     
@@ -197,8 +234,13 @@ class AudioBookShelfSync:
             # The item is already formatted by _format_library_item, so we can access fields directly
             title = abs_item.get('title', '').strip()
             if not title:
-                # Log the item structure for debugging
-                self.logger.warning(f"Item has no title: ID={abs_item.get('id', 'Unknown')}, Path={abs_item.get('path', 'Unknown')}")
+                self.logger.warning(
+                    "AudioBookShelf item has no title",
+                    extra={
+                        "id": abs_item.get('id', 'Unknown'),
+                        "path": abs_item.get('path', 'Unknown'),
+                    },
+                )
                 return None
             
             # Handle authors
@@ -227,9 +269,8 @@ class AudioBookShelfSync:
             asin = self._normalize_asin_value(abs_item.get('asin'))
             if not asin:
                 self.logger.debug(
-                    "AudioBookShelf item missing ASIN after extraction: title='%s', path='%s'",
-                    title,
-                    abs_item.get('path', 'Unknown')
+                    "AudioBookShelf item missing ASIN after extraction",
+                    extra={"title": title, "path": abs_item.get('path', 'Unknown')},
                 )
             abs_path = abs_item.get('path', '')
             
@@ -254,8 +295,11 @@ class AudioBookShelfSync:
                 'Status': 'Owned'
             }
         
-        except Exception as e:
-            self.logger.error(f"Error converting AudioBookShelf item: {e}")
+        except Exception as exc:
+            self.logger.error(
+                "Error converting AudioBookShelf item",
+                extra={"error": str(exc)},
+            )
             return None
 
     @staticmethod

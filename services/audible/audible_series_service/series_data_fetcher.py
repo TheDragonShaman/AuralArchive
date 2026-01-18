@@ -1,24 +1,29 @@
 """
-Series Data Fetcher
-Fetches complete series data from Audible API using series ASIN
+Module Name: series_data_fetcher.py
+Author: TheDragonShaman
+Created: August 26, 2025
+Last Modified: December 23, 2025
+Description:
+    Fetch complete series metadata and books from Audible using the shared client.
+Location:
+    /services/audible/audible_series_service/series_data_fetcher.py
+
 """
 
 from utils.logger import get_module_logger
 
-LOGGER_NAME = "SeriesDataFetcher"
-logger = get_module_logger(LOGGER_NAME)
-
 
 class SeriesDataFetcher:
-    """Fetches series data from Audible API"""
+    """Fetches series data from Audible API."""
     
-    def __init__(self, audible_client):
+    def __init__(self, audible_client, logger=None):
         """
         Initialize with Audible API client
         
         Args:
             audible_client: Authenticated Audible API client
         """
+        self.logger = logger or get_module_logger("Service.Audible.Series.DataFetcher")
         self.client = audible_client
     
     def fetch_series_metadata(self, series_asin):
@@ -32,7 +37,7 @@ class SeriesDataFetcher:
             dict: Series metadata including title, description, cover_url, etc.
         """
         try:
-            logger.debug(f"Fetching series metadata for {series_asin}")
+            self.logger.debug("Fetching series metadata", extra={"series_asin": series_asin})
             
             # Query Audible API for series information
             # Note: This uses the catalog/products endpoint with the series ASIN
@@ -42,7 +47,10 @@ class SeriesDataFetcher:
             )
             
             if not response:
-                logger.warning(f"No response for series ASIN: {series_asin}")
+                self.logger.warning(
+                    "No response for series ASIN",
+                    extra={"series_asin": series_asin},
+                )
                 return None
             
             # Handle both wrapped and unwrapped responses
@@ -58,11 +66,18 @@ class SeriesDataFetcher:
                 'total_books': self._extract_total_books(product)
             }
             
-            logger.info(f"Fetched series metadata for {series_data.get('series_title')}")
+            self.logger.info(
+                "Fetched series metadata",
+                extra={"series_asin": series_asin, "series_title": series_data.get('series_title')},
+            )
             return series_data
             
         except Exception as e:
-            logger.error(f"Error fetching series metadata for {series_asin}: {e}")
+            self.logger.error(
+                "Error fetching series metadata",
+                extra={"series_asin": series_asin, "error": str(e)},
+                exc_info=True,
+            )
             return None
     
     def fetch_series_books(self, series_asin):
@@ -76,7 +91,7 @@ class SeriesDataFetcher:
             list: List of book metadata dicts for all books in the series
         """
         try:
-            logger.debug(f"Fetching all books for series {series_asin}")
+            self.logger.debug("Fetching all books for series", extra={"series_asin": series_asin})
             
             # Query for series with relationships to get all book ASINs
             response = self.client.get(
@@ -103,7 +118,10 @@ class SeriesDataFetcher:
                         'sort_order': int(relationship.get('sort', 0))
                     })
             
-            logger.info(f"Found {len(book_asins)} books in series {series_asin}; fetching detailed metadata")
+            self.logger.info(
+                "Found books in series; fetching detailed metadata",
+                extra={"series_asin": series_asin, "count": len(book_asins)},
+            )
             
             # Now fetch full metadata for each book
             books = []
@@ -119,7 +137,10 @@ class SeriesDataFetcher:
                         books.append(book_metadata)
                     else:
                         # If we can't fetch metadata, use minimal data
-                        logger.warning(f"Could not fetch metadata for book {book_asin}, using minimal data")
+                        self.logger.warning(
+                            "Could not fetch metadata for book; using minimal data",
+                            extra={"book_asin": book_asin},
+                        )
                         books.append({
                             'asin': book_asin,
                             'title': 'Unknown',
@@ -127,7 +148,11 @@ class SeriesDataFetcher:
                             'sort_order': book_info['sort_order']
                         })
                 except Exception as e:
-                    logger.error(f"Error fetching metadata for book {book_asin}: {e}")
+                    self.logger.error(
+                        "Error fetching metadata for book",
+                        extra={"book_asin": book_asin, "error": str(e)},
+                        exc_info=True,
+                    )
                     # Add minimal book data so we don't lose the book entirely
                     books.append({
                         'asin': book_asin,
@@ -136,11 +161,18 @@ class SeriesDataFetcher:
                         'sort_order': book_info['sort_order']
                     })
             
-            logger.info(f"Fetched metadata for {len(books)} books in series {series_asin}")
+            self.logger.info(
+                "Fetched metadata for series books",
+                extra={"series_asin": series_asin, "count": len(books)},
+            )
             return books
             
         except Exception as e:
-            logger.error(f"Error fetching series books for {series_asin}: {e}")
+            self.logger.error(
+                "Error fetching series books",
+                extra={"series_asin": series_asin, "error": str(e)},
+                exc_info=True,
+            )
             return []
     
     def fetch_book_metadata(self, book_asin):
@@ -154,7 +186,7 @@ class SeriesDataFetcher:
             dict: Complete book metadata
         """
         try:
-            logger.info(f"Fetching metadata for book {book_asin}")
+            self.logger.info("Fetching metadata for book", extra={"book_asin": book_asin})
             
             response = self.client.get(
                 f"1.0/catalog/products/{book_asin}",
@@ -166,16 +198,25 @@ class SeriesDataFetcher:
             )
             
             if not response:
-                logger.warning(f"No response from Audible API for book {book_asin}")
+                self.logger.warning(
+                    "No response from Audible API for book",
+                    extra={"book_asin": book_asin},
+                )
                 return None
                 
             if 'product' not in response:
-                logger.warning(f"No 'product' key in response for book {book_asin}")
-                logger.debug(f"Response keys: {list(response.keys())}")
+                self.logger.warning("No 'product' key in response for book", extra={"book_asin": book_asin})
+                self.logger.debug(
+                    "Response keys for book fetch",
+                    extra={"book_asin": book_asin, "keys": list(response.keys())},
+                )
                 return None
             
             product = response['product']
-            logger.info(f"Successfully fetched metadata for book: {product.get('title', 'Unknown')}")
+            self.logger.info(
+                "Successfully fetched metadata for book",
+                extra={"book_asin": book_asin, "title": product.get('title', 'Unknown')},
+            )
             
             # Extract all the metadata we need
             customer_rights = product.get('customer_rights') or {}
@@ -204,11 +245,23 @@ class SeriesDataFetcher:
                 }
             }
             
-            logger.debug(f"Extracted metadata: title={metadata['title']}, author={metadata['author']}, narrator={metadata['narrator']}")
+            self.logger.debug(
+                "Extracted metadata",
+                extra={
+                    "book_asin": book_asin,
+                    "title": metadata['title'],
+                    "author": metadata['author'],
+                    "narrator": metadata['narrator'],
+                },
+            )
             return metadata
             
         except Exception as e:
-            logger.error(f"Error fetching book metadata for {book_asin}: {e}", exc_info=True)
+            self.logger.error(
+                "Error fetching book metadata",
+                extra={"book_asin": book_asin, "error": str(e)},
+                exc_info=True,
+            )
             return None
     
     def _extract_authors(self, product):

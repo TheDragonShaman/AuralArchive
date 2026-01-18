@@ -1,21 +1,23 @@
 """
-Audible Library Parser - AuralArchive
+Module Name: library_parser.py
+Author: TheDragonShaman
+Created: August 24, 2025
+Last Modified: December 23, 2025
+Description:
+    Parse and analyze Audible library data from API/CLI exports for search and stats.
+Location:
+    /services/audible/audible_library_service/library_parser.py
 
-Handles parsing and processing of Audible library data from audible-cli exports.
-Provides methods for analyzing library content, extracting metadata, and
-performing search operations on library data.
-
-Author: AuralArchive Development Team
-Created: September 16, 2025
 """
 
 import json
 import csv
 import re
 from typing import Dict, List, Any, Optional
-import logging
 from datetime import datetime
 from collections import defaultdict, Counter
+
+from utils.logger import get_module_logger
 
 
 class AudibleLibraryParser:
@@ -34,7 +36,7 @@ class AudibleLibraryParser:
         Args:
             logger: Logger instance for parser operations
         """
-        self.logger = logger or logging.getLogger(__name__)
+        self.logger = logger or get_module_logger("Service.Audible.Library.Parser")
         
         # Field mappings for different export formats
         self.field_mappings = {
@@ -73,11 +75,14 @@ class AudibleLibraryParser:
             else:
                 raise ValueError(f"Unsupported format type: {format_type}")
                 
-        except Exception as e:
-            self.logger.error(f"Error parsing library data: {str(e)}")
+        except Exception as exc:
+            self.logger.error(
+                "Error parsing library data",
+                extra={"format_type": format_type, "exc": exc}
+            )
             return {
                 'books': [],
-                'error': str(e),
+                'error': str(exc),
                 'format': format_type,
                 'parsed_count': 0
             }
@@ -112,7 +117,10 @@ class AudibleLibraryParser:
                 if parsed_book:
                     books.append(parsed_book)
             
-            self.logger.info(f"Successfully parsed {len(books)} books from JSON data")
+            self.logger.info(
+                "Parsed books from JSON",
+                extra={"parsed_count": len(books)}
+            )
             
             return {
                 'books': books,
@@ -121,11 +129,14 @@ class AudibleLibraryParser:
                 'parse_date': datetime.now().isoformat()
             }
             
-        except Exception as e:
-            self.logger.error(f"Error parsing JSON library: {str(e)}")
+        except Exception as exc:
+            self.logger.error(
+                "Error parsing JSON library",
+                extra={"exc": exc}
+            )
             return {
                 'books': [],
-                'error': str(e),
+                'error': str(exc),
                 'format': 'json',
                 'parsed_count': 0
             }
@@ -157,7 +168,10 @@ class AudibleLibraryParser:
                 if parsed_book:
                     books.append(parsed_book)
             
-            self.logger.info(f"Successfully parsed {len(books)} books from {format_type.upper()} data")
+            self.logger.info(
+                "Parsed books from delimited export",
+                extra={"parsed_count": len(books), "format": format_type}
+            )
             
             return {
                 'books': books,
@@ -166,11 +180,14 @@ class AudibleLibraryParser:
                 'parse_date': datetime.now().isoformat()
             }
             
-        except Exception as e:
-            self.logger.error(f"Error parsing {format_type.upper()} library: {str(e)}")
+        except Exception as exc:
+            self.logger.error(
+                "Error parsing delimited library",
+                extra={"format": format_type, "exc": exc}
+            )
             return {
                 'books': [],
-                'error': str(e),
+                'error': str(exc),
                 'format': format_type,
                 'parsed_count': 0
             }
@@ -235,11 +252,17 @@ class AudibleLibraryParser:
             if parsed_book.get('title') and parsed_book.get('asin'):
                 return parsed_book
             else:
-                self.logger.debug(f"Skipping book with insufficient data: {parsed_book}")
+                self.logger.debug(
+                    "Skipping book with insufficient data",
+                    extra={"book": parsed_book}
+                )
                 return None
                 
-        except Exception as e:
-            self.logger.error(f"Error parsing individual book data: {str(e)}")
+        except Exception as exc:
+            self.logger.error(
+                "Error parsing individual book data",
+                extra={"exc": exc}
+            )
             return None
     
     def _extract_field(self, data: Dict[str, Any], field_names: List[str]) -> Any:
@@ -531,14 +554,20 @@ class AudibleLibraryParser:
                     rating_dist[rating_key] += 1
                 stats['rating_distribution'] = dict(rating_dist)
             
-            self.logger.info(f"Calculated statistics for {total_books} books")
+            self.logger.info(
+                "Calculated library statistics",
+                extra={"book_count": total_books}
+            )
             return stats
             
-        except Exception as e:
-            self.logger.error(f"Error calculating library stats: {str(e)}")
+        except Exception as exc:
+            self.logger.error(
+                "Error calculating library stats",
+                extra={"exc": exc}
+            )
             return {
                 'total_books': len(books) if books else 0,
-                'error': str(e)
+                'error': str(exc)
             }
     
     def search_books(self, books: List[Dict[str, Any]], query: str, 
@@ -575,11 +604,17 @@ class AudibleLibraryParser:
                 if match_found:
                     matching_books.append(book)
             
-            self.logger.debug(f"Search for '{query}' found {len(matching_books)} matches")
+            self.logger.debug(
+                "Completed library search",
+                extra={"query": query, "matches": len(matching_books), "fields": search_fields}
+            )
             return matching_books
             
-        except Exception as e:
-            self.logger.error(f"Error searching books: {str(e)}")
+        except Exception as exc:
+            self.logger.error(
+                "Error searching books",
+                extra={"query": query, "exc": exc}
+            )
             return []
     
     def _search_in_field(self, book: Dict[str, Any], field: str, query: str) -> bool:

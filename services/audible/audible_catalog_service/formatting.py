@@ -1,12 +1,25 @@
-import logging
+"""
+Module Name: formatting.py
+Author: TheDragonShaman
+Created: August 19, 2025
+Last Modified: December 23, 2025
+Description:
+    Normalize Audible catalog API responses into UI/database-friendly book structures.
+Location:
+    /services/audible/audible_catalog_service/formatting.py
+
+"""
+
 from typing import List, Dict, Any, Optional
+
+from utils.logger import get_module_logger
 from .cover_utils import cover_utils
 
 class AudibleFormatter:
     """Handles formatting and processing of Audible API response data"""
     
     def __init__(self):
-        self.logger = logging.getLogger("AudibleService.Formatting")
+        self.logger = get_module_logger("Service.Audible.CatalogFormatting")
     
     def process_search_results(self, products: List[Dict], region: str = "us") -> List[Dict]:
         """Process raw API results into standardized book data format"""
@@ -18,12 +31,12 @@ class AudibleFormatter:
                 books.append(formatted_book)
                 
             except Exception as e:
-                self.logger.error(f"Error processing book data: {e}")
+                self.logger.error("Error processing book data", extra={"error": str(e)})
                 # Log the problematic book for debugging
-                self.logger.debug(f"Problematic book data: {book.get('title', 'Unknown')}")
+                self.logger.debug("Problematic book data", extra={"title": book.get('title', 'Unknown'), "asin": book.get('asin')})
                 continue
         
-        self.logger.info(f"Successfully processed {len(books)} books")
+        self.logger.info("Processed books", extra={"count": len(books)})
         return books
     
     def _format_single_book(self, book: Dict, region: str) -> Dict[str, Any]:
@@ -36,7 +49,7 @@ class AudibleFormatter:
             # Debug: Log raw series data from API
             raw_series = book.get("series", [])
             if raw_series:
-                self.logger.info(f"Raw series data for '{title}': {raw_series}")
+                self.logger.debug("Raw series data", extra={"title": title, "series": raw_series})
             
             # Process runtime
             runtime_minutes = book.get("runtime_length_min", 0)
@@ -61,9 +74,9 @@ class AudibleFormatter:
             
             # Debug logging for series extraction
             if series_asin:
-                self.logger.info(f"Extracted series_asin '{series_asin}' for book '{title}'")
+                self.logger.debug("Extracted series ASIN", extra={"title": title, "series_asin": series_asin})
             else:
-                self.logger.debug(f"No series_asin found for book '{title}'")
+                self.logger.debug("No series ASIN found", extra={"title": title})
             
             # Process rating
             rating_info = book.get("rating", {})
@@ -109,11 +122,11 @@ class AudibleFormatter:
                 book_data["Contributors"] = formatted_contributors
                 book_data["contributors"] = formatted_contributors
 
-            self.logger.debug(f"Formatted book: {title} by {author_str}")
+            self.logger.debug("Formatted book", extra={"title": title, "author": author_str})
             return book_data
             
         except Exception as e:
-            self.logger.error(f"Error formatting book {book.get('title', 'Unknown')}: {e}")
+            self.logger.exception("Error formatting book", extra={"title": book.get('title', 'Unknown'), "error": str(e)})
             raise
     
     def _format_runtime(self, runtime_minutes: int) -> str:
@@ -128,7 +141,7 @@ class AudibleFormatter:
             return f"{hours} hrs {minutes} mins"
             
         except Exception as e:
-            self.logger.debug(f"Error formatting runtime {runtime_minutes}: {e}")
+            self.logger.debug("Error formatting runtime", extra={"runtime_minutes": runtime_minutes, "error": str(e)})
             return "Unknown Runtime"
     
     def _format_authors(self, authors: List[Dict]) -> str:
@@ -147,7 +160,7 @@ class AudibleFormatter:
             return ", ".join(author_names) if author_names else "Unknown Author"
             
         except Exception as e:
-            self.logger.debug(f"Error formatting authors {authors}: {e}")
+            self.logger.debug("Error formatting authors", extra={"error": str(e)})
             return "Unknown Author"
     
     def _format_narrators(self, narrators: List[Dict]) -> str:
@@ -166,7 +179,7 @@ class AudibleFormatter:
             return ", ".join(narrator_names) if narrator_names else "Unknown Narrator"
             
         except Exception as e:
-            self.logger.debug(f"Error formatting narrators {narrators}: {e}")
+            self.logger.debug("Error formatting narrators", extra={"error": str(e)})
             return "Unknown Narrator"
     
     def _format_series(self, series_info: List[Dict]) -> tuple[str, str, str]:
@@ -187,7 +200,7 @@ class AudibleFormatter:
             return "N/A", "N/A", None
             
         except Exception as e:
-            self.logger.debug(f"Error formatting series {series_info}: {e}")
+            self.logger.debug("Error formatting series", extra={"error": str(e)})
             return "N/A", "N/A", None
     
     def _extract_series_asin_from_relationships(self, book: Dict) -> Optional[str]:
@@ -217,7 +230,7 @@ class AudibleFormatter:
             return None
             
         except Exception as e:
-            self.logger.error(f"Error extracting series ASIN from relationships: {e}")
+            self.logger.exception("Error extracting series ASIN from relationships", extra={"error": str(e)})
             return None
     
     def _format_rating(self, rating_info: Dict) -> str:
@@ -241,7 +254,7 @@ class AudibleFormatter:
             return "N/A"
             
         except Exception as e:
-            self.logger.debug(f"Error formatting rating {rating_info}: {e}")
+            self.logger.debug("Error formatting rating", extra={"error": str(e)})
             return "N/A"
 
     def _extract_num_ratings(self, rating_info: Dict) -> int:
@@ -259,7 +272,7 @@ class AudibleFormatter:
             return 0
             
         except Exception as e:
-            self.logger.debug(f"Error extracting num_ratings {rating_info}: {e}")
+            self.logger.debug("Error extracting num_ratings", extra={"error": str(e)})
             return 0
     
     def _format_release_date(self, release_date: Any) -> str:
@@ -276,7 +289,7 @@ class AudibleFormatter:
             return str(release_date)
             
         except Exception as e:
-            self.logger.debug(f"Error formatting release date {release_date}: {e}")
+            self.logger.debug("Error formatting release date", extra={"error": str(e)})
             return "Unknown"
     
     def _format_language(self, language: Any) -> str:
@@ -291,7 +304,7 @@ class AudibleFormatter:
             return str(language)
             
         except Exception as e:
-            self.logger.debug(f"Error formatting language {language}: {e}")
+            self.logger.debug("Error formatting language", extra={"error": str(e)})
             return "English"
     
     def _format_summary(self, summary: Any) -> str:
@@ -317,7 +330,7 @@ class AudibleFormatter:
             return str(summary)
             
         except Exception as e:
-            self.logger.debug(f"Error formatting summary: {e}")
+            self.logger.debug("Error formatting summary", extra={"error": str(e)})
             return "No summary available."
 
     def _format_contributors(self, book: Dict) -> List[Dict[str, Any]]:
@@ -353,7 +366,7 @@ class AudibleFormatter:
             return formatted
 
         except Exception as e:
-            self.logger.debug(f"Error formatting contributors: {e}")
+            self.logger.debug("Error formatting contributors", extra={"error": str(e)})
             return []
     
     def format_book_for_display(self, book_data: Dict) -> Dict[str, Any]:
@@ -377,7 +390,7 @@ class AudibleFormatter:
             return display_data
             
         except Exception as e:
-            self.logger.error(f"Error formatting book for display: {e}")
+            self.logger.exception("Error formatting book for display", extra={"error": str(e)})
             return book_data
     
     def _truncate_text(self, text: str, max_length: int) -> str:

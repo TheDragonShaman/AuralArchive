@@ -1,15 +1,25 @@
 """
-Indexer Operations - Manages indexer connections and search distribution
-Coordinates with indexer services and handles health monitoring
+Module Name: indexer_operations.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Manage indexer connections, distribute searches, and coordinate health
+    monitoring for the search engine. Provides configuration reload, failover,
+    and retry logic for indexer operations.
 
-Location: services/search_engine/indexer_operations.py
-Purpose: Indexer management for SearchEngineService
+Location:
+    /services/search_engine/indexer_operations.py
+
 """
 
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 import time
 
 from utils.logger import get_module_logger
+
+
+_LOGGER = get_module_logger("Service.SearchEngine.IndexerOperations")
 
 
 class IndexerOperations:
@@ -23,9 +33,9 @@ class IndexerOperations:
     - Failover and retry logic
     """
     
-    def __init__(self):
+    def __init__(self, *, logger=None):
         """Initialize indexer operations."""
-        self.logger = get_module_logger("SearchEngine.IndexerOperations")
+        self.logger = logger or _LOGGER
         
         # Get the real IndexerServiceManager
         self.indexer_service_manager = None
@@ -38,9 +48,16 @@ class IndexerOperations:
         try:
             from services.indexers import get_indexer_service_manager
             self.indexer_service_manager = get_indexer_service_manager()
-            self.logger.info(f"Connected to IndexerServiceManager with {len(self.indexer_service_manager.indexers)} indexer(s)")
+            self.logger.debug(
+                "Connected to IndexerServiceManager",
+                extra={"indexer_count": len(self.indexer_service_manager.indexers)},
+            )
         except Exception as e:
-            self.logger.error(f"Failed to initialize IndexerServiceManager: {e}")
+            self.logger.error(
+                "Failed to initialize IndexerServiceManager",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
             self.indexer_service_manager = None
     
     def get_indexer_status(self) -> Dict[str, Any]:
@@ -58,27 +75,38 @@ class IndexerOperations:
             return self.indexer_service_manager.get_service_status()
             
         except Exception as e:
-            self.logger.error(f"Failed to get indexer status: {e}")
+            self.logger.error(
+                "Failed to get indexer status",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
             return {'error': str(e)}
     
     def refresh_indexers(self) -> bool:
         """Refresh indexer list and perform health check."""
         try:
-            self.logger.info("Refreshing indexer list...")
+            self.logger.info("Refreshing indexer list")
             
             if not self.indexer_service_manager:
-                self.logger.warning("IndexerServiceManager not available, reinitializing...")
+                self.logger.warning("IndexerServiceManager not available, reinitializing")
                 self._init_indexer_service_manager()
                 return self.indexer_service_manager is not None
             
             # Reload indexers from configuration
             self.indexer_service_manager.reload_indexers()
             
-            self.logger.info(f"Indexer refresh complete: {len(self.indexer_service_manager.indexers)} indexers loaded")
+            self.logger.info(
+                "Indexer refresh complete",
+                extra={"indexer_count": len(self.indexer_service_manager.indexers)},
+            )
             return True
             
         except Exception as e:
-            self.logger.error(f"Failed to refresh indexers: {e}")
+            self.logger.error(
+                "Failed to refresh indexers",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
             return False
     
     def test_indexer_search(self, indexer_id: str, title: str = "Anima", 
@@ -99,7 +127,7 @@ class IndexerOperations:
             
             indexer = self.indexer_service_manager.indexers[indexer_id]
             
-            self.logger.info(f"Testing search for indexer: {indexer.name}")
+            self.logger.info("Testing search for indexer", extra={"indexer_id": indexer_id, "indexer_name": indexer.name})
             
             start_time = time.time()
             
@@ -123,7 +151,11 @@ class IndexerOperations:
             }
             
         except Exception as e:
-            self.logger.error(f"Indexer test failed for {indexer_id}: {e}")
+            self.logger.error(
+                "Indexer test failed",
+                extra={"indexer_id": indexer_id, "error": str(e)},
+                exc_info=True,
+            )
             return {
                 'success': False,
                 'error': str(e)
@@ -138,7 +170,10 @@ class IndexerOperations:
                 return []
             
             indexer_count = len(self.indexer_service_manager.indexers)
-            self.logger.info(f"Searching {indexer_count} indexers for: {title} by {author}")
+            self.logger.info(
+                "Searching indexers",
+                extra={"indexer_count": indexer_count, "title": title, "author": author},
+            )
             
             # Use the real IndexerServiceManager's parallel search
             results = self.indexer_service_manager.search(
@@ -149,11 +184,18 @@ class IndexerOperations:
                 parallel=True
             )
             
-            self.logger.info(f"Total results from all indexers: {len(results)}")
+            self.logger.info(
+                "Indexer search complete",
+                extra={"result_count": len(results)},
+            )
             return results
             
         except Exception as e:
-            self.logger.error(f"Failed to search indexers: {e}", exc_info=True)
+            self.logger.error(
+                "Failed to search indexers",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
             return []
     
     def shutdown(self):
@@ -161,4 +203,8 @@ class IndexerOperations:
         try:
             self.logger.debug("IndexerOperations shutdown complete")
         except Exception as e:
-            self.logger.error(f"Error during IndexerOperations shutdown: {e}")
+            self.logger.error(
+                "Error during IndexerOperations shutdown",
+                extra={"error": str(e)},
+                exc_info=True,
+            )

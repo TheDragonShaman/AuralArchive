@@ -1,8 +1,15 @@
 """
-Jackett Indexer Implementation
-==============================
+Module Name: jackett_indexer.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Torznab (Jackett/Prowlarr) indexer wrapper that filters to direct torrent
+    URLs and normalizes results for the search engine.
 
-Torznab wrapper that only returns direct .torrent download URLs.
+Location:
+    /services/indexers/jackett_indexer.py
+
 """
 
 from __future__ import annotations
@@ -18,7 +25,8 @@ import requests
 from .base_indexer import BaseIndexer
 from utils.logger import get_module_logger
 
-logger = get_module_logger("Indexer.Jackett")
+
+_LOGGER = get_module_logger("Service.Indexers.Jackett")
 
 TORZNAB_NS = {"torznab": "http://torznab.com/schemas/2015/feed"}
 
@@ -42,7 +50,7 @@ class ParsedItem:
 class JackettIndexer(BaseIndexer):
     """Jackett indexer that filters out magnet links entirely."""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], *, logger=None):
         config = dict(config)
         config["protocol"] = "torznab"
 
@@ -62,8 +70,8 @@ class JackettIndexer(BaseIndexer):
                 f"{config['base_url']}/api/v2.0/indexers/{self.indexer_id}/results/torznab"
             )
 
-        super().__init__(config)
-        logger.debug("Jackett indexer initialized: %s", self.api_endpoint)
+        super().__init__(config, logger=logger or _LOGGER)
+        self.logger.debug("Jackett indexer initialized: %s", self.api_endpoint)
 
     def connect(self) -> bool:
         try:
@@ -111,7 +119,7 @@ class JackettIndexer(BaseIndexer):
         offset: int = 0,
     ) -> List[Dict[str, Any]]:
         if not self.is_available():
-            logger.warning("%s is unavailable, skipping search", self.name)
+            self.logger.warning("%s is unavailable, skipping search", self.name)
             return []
 
         query = query or ""
@@ -141,7 +149,7 @@ class JackettIndexer(BaseIndexer):
             parsed_items = [item for item in self._parse_items(root) if item.download_url]
             results = [self._build_result(item) for item in parsed_items]
             self.mark_success()
-            logger.debug("%s returned %d torrent results", self.name, len(results))
+            self.logger.debug("%s returned %d torrent results", self.name, len(results))
             return results
         except requests.exceptions.Timeout:
             self.mark_failure(f"Search timeout after {self.timeout}s")
@@ -151,7 +159,7 @@ class JackettIndexer(BaseIndexer):
             self.mark_failure(f"Invalid XML response: {exc}")
         except Exception as exc:
             self.mark_failure(f"Unexpected search error: {exc}")
-            logger.exception("Error searching %s", self.name)
+            self.logger.exception("Error searching %s", self.name)
 
         return []
 
@@ -194,7 +202,7 @@ class JackettIndexer(BaseIndexer):
                 if parsed:
                     items.append(parsed)
             except Exception as exc:
-                logger.debug("Skipping malformed Torznab item: %s", exc, exc_info=True)
+                self.logger.debug("Skipping malformed Torznab item: %s", exc, exc_info=True)
         return items
 
     def _parse_single_item(self, element: ET.Element) -> Optional[ParsedItem]:
@@ -214,7 +222,7 @@ class JackettIndexer(BaseIndexer):
                 if magnet:
                     download_url = magnet
         if not download_url:
-            logger.debug("Skipping %s - no .torrent URL present", title)
+            self.logger.debug("Skipping %s - no .torrent URL present", title)
             return None
         seeders = self._safe_int(attrs.get("seeders", -1), default=-1)
         peers = self._safe_int(attrs.get("peers", -1), default=-1)

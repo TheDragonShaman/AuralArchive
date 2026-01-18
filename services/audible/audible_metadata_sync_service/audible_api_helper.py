@@ -1,15 +1,22 @@
 """
-Audible API Helper - Python API-based library access
-Replaces the broken CLI-based helper with direct Python API calls
+Module Name: audible_api_helper.py
+Author: TheDragonShaman
+Created: August 25, 2025
+Last Modified: December 23, 2025
+Description:
+    Python API-based library access replacing CLI helpers for metadata sync workflows.
+Location:
+    /services/audible/audible_metadata_sync_service/audible_api_helper.py
+
 """
 
 import audible
-import logging
 import math
 from typing import List, Dict, Any, Optional
 from pathlib import Path
+from utils.logger import get_module_logger
 
-logger = logging.getLogger("AuralArchiveLogger")
+logger = get_module_logger("Service.Audible.MetadataSync.ApiHelper")
 
 
 class AudibleApiHelper:
@@ -39,15 +46,24 @@ class AudibleApiHelper:
         try:
             auth_path = Path(self.auth_file)
             if not auth_path.exists():
-                logger.warning(f"Auth file not found: {self.auth_file}")
+                logger.warning(
+                    "Auth file not found",
+                    extra={"auth_file": self.auth_file}
+                )
                 return False
             
             self.auth = audible.Authenticator.from_file(str(auth_path))
-            logger.info(f"Loaded Audible authentication from {self.auth_file}")
+            logger.info(
+                "Loaded Audible authentication",
+                extra={"auth_file": self.auth_file}
+            )
             return True
             
-        except Exception as e:
-            logger.error(f"Failed to load authentication: {e}")
+        except Exception as exc:
+            logger.error(
+                "Failed to load authentication",
+                extra={"auth_file": self.auth_file, "exc": exc}
+            )
             return False
     
     def is_available(self) -> bool:
@@ -79,7 +95,7 @@ class AudibleApiHelper:
             raise Exception("Not authenticated. Please authenticate via the web UI.")
         
         try:
-            logger.info("Fetching library from Audible API...")
+            logger.info("Fetching library from Audible API")
             
             # Response groups for full metadata (from audible-cli source)
             response_groups = (
@@ -101,43 +117,65 @@ class AudibleApiHelper:
             # Add date filter if provided
             if purchased_after:
                 params['purchased_after'] = purchased_after
-                logger.info(f"Filtering library items purchased after: {purchased_after}")
+                logger.info(
+                    "Filtering library items after purchase date",
+                    extra={"purchased_after": purchased_after}
+                )
             
             all_items = []
             
             with audible.Client(auth=self.auth) as client:
                 # Fetch first page to get total count
-                logger.info("Fetching page 1...")
+                logger.info("Fetching page 1")
                 response = client.get("library", **params)
                 
                 items = response.get('items', [])
                 total_results = response.get('total_results', 0)
                 
                 all_items.extend(items)
-                logger.info(f"Page 1: Got {len(items)} items, total in library: {total_results}")
+                logger.info(
+                    "Fetched page",
+                    extra={"page": 1, "items": len(items), "total_results": total_results}
+                )
                 
                 # Calculate total pages needed
                 total_pages = math.ceil(total_results / 1000)
                 
                 # Fetch remaining pages
                 if total_pages > 1:
-                    logger.info(f"Fetching remaining {total_pages - 1} pages...")
+                    logger.info(
+                        "Fetching remaining pages",
+                        extra={"remaining_pages": total_pages - 1}
+                    )
                     
                     for page in range(2, total_pages + 1):
                         params['page'] = page
-                        logger.info(f"Fetching page {page}/{total_pages}...")
+                        logger.info(
+                            "Fetching page",
+                            extra={"page": page, "total_pages": total_pages}
+                        )
                         
                         page_response = client.get("library", **params)
                         page_items = page_response.get('items', [])
                         
                         all_items.extend(page_items)
-                        logger.info(f"Page {page}: Got {len(page_items)} items")
+                        logger.info(
+                            "Fetched page",
+                            extra={"page": page, "items": len(page_items)}
+                        )
             
-            logger.info(f"Library fetch complete: {len(all_items)} total items")
+            logger.info(
+                "Library fetch complete",
+                extra={"total_items": len(all_items)}
+            )
             return all_items
             
-        except Exception as e:
-            logger.error(f"Error fetching library from API: {e}", exc_info=True)
+        except Exception as exc:
+            logger.error(
+                "Error fetching library from API",
+                extra={"exc": exc},
+                exc_info=True
+            )
             raise
     
     def get_version(self) -> Dict[str, Any]:
@@ -152,6 +190,33 @@ class AudibleApiHelper:
             'package': 'audible (Python API)',
             'available': True
         }
+
+    def get_library_item(self, asin: str, response_groups: Optional[str] = None) -> Dict[str, Any]:
+        """Fetch a single library item with selectable response groups."""
+        if not asin or not str(asin).strip():
+            raise ValueError("ASIN is required")
+
+        if not self.auth and not self._load_auth():
+            raise Exception("Not authenticated. Please authenticate via the web UI.")
+
+        groups = response_groups or (
+            "contributors, media, price, product_attrs, product_desc, product_details, "
+            "product_extended_attrs, product_plan_details, product_plans, rating, sample, sku, "
+            "series, reviews, ws4v, origin, relationships, review_attrs, categories, "
+            "badge_types, category_ladders, claim_code_url, is_downloaded, is_finished, "
+            "is_returnable, origin_asin, pdf_url, percent_complete, periodicals, provided_review"
+        )
+
+        path = f"1.0/library/{asin}"
+        logger.info(
+            "Fetching Audible library item",
+            extra={"asin": asin}
+        )
+
+        with audible.Client(auth=self.auth) as client:
+            response = client.get(path, response_groups=groups)
+
+        return response or {}
     
     def check_status(self) -> Dict[str, Any]:
         """
@@ -180,12 +245,15 @@ class AudibleApiHelper:
                 'account': account_info.get('name')
             }
             
-        except Exception as e:
-            logger.error(f"Status check failed: {e}")
+        except Exception as exc:
+            logger.error(
+                "Status check failed",
+                extra={"exc": exc}
+            )
             return {
                 'available': True,
                 'authenticated': False,
-                'error': str(e)
+                'error': str(exc)
             }
 
     def get_activation_bytes(self, reload: bool = False) -> Dict[str, Any]:
@@ -201,7 +269,10 @@ class AudibleApiHelper:
                 try:
                     self.auth.refresh_access_token()
                 except Exception as exc:
-                    logger.debug("Failed to refresh access token before reloading activation bytes: %s", exc)
+                    logger.debug(
+                        "Failed to refresh access token before reloading activation bytes",
+                        extra={"exc": exc}
+                    )
 
             activation_bytes = self.auth.get_activation_bytes()
 
@@ -217,7 +288,10 @@ class AudibleApiHelper:
                 # Persist the updated auth blob so the bytes are cached for future calls
                 self.auth.to_file(self.auth_file)
             except Exception as exc:
-                logger.debug("Unable to persist activation bytes to auth file %s: %s", self.auth_file, exc)
+                logger.debug(
+                    "Unable to persist activation bytes to auth file",
+                    extra={"auth_file": self.auth_file, "exc": exc}
+                )
 
             return {
                 'success': True,
@@ -225,7 +299,10 @@ class AudibleApiHelper:
             }
 
         except Exception as exc:
-            logger.error("Error retrieving activation bytes via API: %s", exc)
+            logger.error(
+                "Error retrieving activation bytes via API",
+                extra={"auth_file": self.auth_file, "exc": exc}
+            )
             return {
                 'success': False,
                 'error': str(exc)

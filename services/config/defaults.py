@@ -1,19 +1,36 @@
+"""
+Module Name: defaults.py
+Author: TheDragonShaman
+Created: August 26, 2025
+Last Modified: December 24, 2025
+Description:
+    Generate and persist default configuration for AuralArchive.
+Location:
+    /services/config/defaults.py
+
+"""
+
 import configparser
 import os
-import logging
 from typing import Dict, Any
 
+from utils.logger import get_module_logger
+
+
 class ConfigDefaults:
-    """Handles default configuration generation for AuralArchive"""
-    
-    def __init__(self, config_file: str):
+    """Handle default configuration generation for AuralArchive."""
+
+    def __init__(self, config_file: str, logger=None):
         self.config_file = config_file
-        self.logger = logging.getLogger("ConfigService.Defaults")
+        self.logger = logger or get_module_logger("Service.Config.Defaults")
     
     def ensure_config_exists(self):
         """Ensure configuration file exists, create default if not."""
         if not os.path.exists(self.config_file):
-            self.logger.warning("Configuration file not found. Creating default...")
+            self.logger.warning(
+                "Configuration file not found; creating default configuration",
+                extra={"config_file": self.config_file},
+            )
             self.generate_default_config()
     
     def generate_default_config(self):
@@ -42,9 +59,15 @@ class ConfigDefaults:
         try:
             with open(self.config_file, "w") as configfile:
                 config.write(configfile)
-            self.logger.info(f"Default configuration created at {self.config_file}")
-        except Exception as e:
-            self.logger.error(f"Failed to create default configuration: {e}")
+            self.logger.info(
+                "Default configuration created",
+                extra={"config_file": self.config_file},
+            )
+        except Exception as exc:
+            self.logger.exception(
+                "Failed to create default configuration",
+                extra={"config_file": self.config_file},
+            )
     
     def _add_audible_config(self, config: configparser.ConfigParser):
         """Add Audible API configuration section."""

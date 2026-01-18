@@ -1,15 +1,14 @@
 """
-Format Detector - Conversion Service Helper
+Module Name: format_detector.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Detects and validates audiobook file formats for conversion workflows.
 
-Detects audiobook file formats and validates input files for conversion.
+Location:
+    /services/conversion_service/format_detector.py
 
-Features:
-- File extension and magic number detection
-- Format validation and compatibility checking
-- Support for AAX, AAXC, MP3, M4A, M4B, FLAC, OGG, WAV
-
-Author: AuralArchive Development Team
-Created: September 28, 2025
 """
 
 import os
@@ -22,9 +21,9 @@ from utils.logger import get_module_logger
 
 class FormatDetector:
     """Detector for audiobook file formats"""
-    
-    def __init__(self):
-        self.logger = get_module_logger("FormatDetector")
+
+    def __init__(self, *, logger=None):
+        self.logger = logger or get_module_logger("Service.Conversion.FormatDetector")
         
         # Supported format mappings
         self.format_extensions = {
@@ -74,7 +73,7 @@ class FormatDetector:
         """
         try:
             if not os.path.exists(file_path):
-                self.logger.error(f"File does not exist: {file_path}")
+                self.logger.warning("Input file missing", extra={"file_path": str(file_path)})
                 return 'unknown'
             
             file_path = Path(file_path)
@@ -82,7 +81,10 @@ class FormatDetector:
             # Method 1: Check file extension
             extension_format = self._detect_by_extension(file_path)
             if extension_format != 'unknown':
-                self.logger.debug(f"Detected format by extension: {extension_format}")
+                self.logger.debug(
+                    "Detected format by extension",
+                    extra={"file_path": str(file_path), "format": extension_format},
+                )
                 
                 # For M4A files, check if they're actually M4B
                 if extension_format == 'm4a':
@@ -95,20 +97,26 @@ class FormatDetector:
             # Method 2: Check MIME type
             mime_format = self._detect_by_mime(file_path)
             if mime_format != 'unknown':
-                self.logger.debug(f"Detected format by MIME type: {mime_format}")
+                self.logger.debug(
+                    "Detected format by MIME type",
+                    extra={"file_path": str(file_path), "format": mime_format},
+                )
                 return mime_format
             
             # Method 3: Check magic numbers
             magic_format = self._detect_by_magic(file_path)
             if magic_format != 'unknown':
-                self.logger.debug(f"Detected format by magic number: {magic_format}")
+                self.logger.debug(
+                    "Detected format by magic number",
+                    extra={"file_path": str(file_path), "format": magic_format},
+                )
                 return magic_format
             
-            self.logger.warning(f"Could not detect format for: {file_path}")
+            self.logger.warning("Could not detect format", extra={"file_path": str(file_path)})
             return 'unknown'
             
         except Exception as e:
-            self.logger.error(f"Error detecting format for {file_path}: {e}")
+            self.logger.exception("Error detecting format", extra={"file_path": str(file_path), "error": str(e)})
             return 'unknown'
     
     def _detect_by_extension(self, file_path: Path) -> str:
@@ -140,7 +148,7 @@ class FormatDetector:
                 return 'unknown'
                 
         except Exception as e:
-            self.logger.error(f"Error reading magic numbers from {file_path}: {e}")
+            self.logger.exception("Error reading magic numbers", extra={"file_path": str(file_path), "error": str(e)})
             return 'unknown'
     
     def _determine_mp4_subtype(self, file_handle) -> str:
@@ -178,7 +186,7 @@ class FormatDetector:
             return 'm4a'
             
         except Exception as e:
-            self.logger.debug(f"Could not refine M4 format detection: {e}")
+            self.logger.debug("Could not refine M4 format detection", extra={"file_path": str(file_path), "error": str(e)})
             return 'm4a'  # Default to M4A
     
     def validate_input_file(self, file_path: str) -> Dict[str, Any]:

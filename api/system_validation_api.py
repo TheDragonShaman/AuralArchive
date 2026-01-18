@@ -1,14 +1,34 @@
 """
-System Validation API Endpoint
-Provides endpoints to validate system integration and run tests
+Module Name: system_validation_api.py
+Author: TheDragonShaman
+Created: July 21, 2025
+Last Modified: December 23, 2025
+Description:
+    System validation API for integration checks and status reporting. Provides
+    endpoints to run validation suites, fetch system status snapshots, and
+    inspect detailed service state.
+
+Location:
+    /api/system_validation_api.py
+
+System Validation API
+=====================
+
+Endpoints:
+- POST /api/system/validate           - Run comprehensive system validation
+- GET  /api/system/status             - Get overall system status
+- GET  /api/system/services/status    - Detailed service status
+- POST /api/system/integration/test   - Run full integration test suite
 """
 from flask import Blueprint, jsonify, request
 import logging
 import asyncio
 from functools import wraps
+from utils.logger import get_module_logger
 
 # Create blueprint
 system_validation_bp = Blueprint('system_validation', __name__)
+logger = get_module_logger("API.System.Validation")
 
 def handle_errors(f):
     """Decorator to handle API errors"""
@@ -17,7 +37,7 @@ def handle_errors(f):
         try:
             return f(*args, **kwargs)
         except Exception as e:
-            logging.error(f"API Error in {f.__name__}: {e}")
+            logger.error(f"API Error in {f.__name__}: {e}")
             return jsonify({'error': str(e), 'success': False}), 500
     return decorated_function
 

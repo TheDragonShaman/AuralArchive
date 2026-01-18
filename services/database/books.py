@@ -1,17 +1,30 @@
-import logging
+"""
+Module Name: books.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Database operations for book records, including bulk import and status updates.
+
+Location:
+    /services/database/books.py
+
+"""
+
 import threading
 from typing import List, Dict, Optional, TYPE_CHECKING, Any, Tuple, Set
 from .error_handling import error_handler
+from utils.logger import get_module_logger
 
 if TYPE_CHECKING:
     from .connection import DatabaseConnection
 
 class BookOperations:
     """Handles all book-related database operations"""
-    
-    def __init__(self, connection_manager, author_override_operations=None):
+
+    def __init__(self, connection_manager, author_override_operations=None, *, logger=None):
         self.connection_manager = connection_manager
-        self.logger = logging.getLogger("DatabaseService.Books")
+        self.logger = logger or get_module_logger("Service.Database.Books")
         self._series_sync_lock = threading.Lock()
         self._pending_series_sync: Set[str] = set()
         self._series_worker_threads: Set[threading.Thread] = set()
@@ -106,10 +119,11 @@ class BookOperations:
                     continue
                 existing_asin = self._sanitize_asin_value(existing_record.get('asin'))
                 if existing_asin and existing_asin != sanitized_asin:
-                    self.logger.debug(
-                        "Skipping ASIN update for book ID %s due to mismatch (existing=%s, new=%s)",
-                        existing_record.get('id'), existing_asin, sanitized_asin
-                    )
+                    self.logger.debug("Skipping ASIN update due to mismatch", extra={
+                        "book_id": existing_record.get('id'),
+                        "existing_asin": existing_asin,
+                        "incoming_asin": sanitized_asin
+                    })
                     continue
                 value = sanitized_asin
 
@@ -124,11 +138,11 @@ class BookOperations:
         cursor.execute(query, values + [existing_record['id']])
 
         if cursor.rowcount > 0:
-            self.logger.info(
-                "Updated existing book '%s' (ID %s) with Audible metadata",
-                update_data.get('title', existing_record.get('id')),
-                existing_record.get('id')
-            )
+            self.logger.info("Updated existing book with Audible metadata", extra={
+                "book_id": existing_record.get('id'),
+                "title": update_data.get('title', existing_record.get('id')),
+                "asin": existing_record.get('asin')
+            })
             return True
         return False
 
@@ -171,7 +185,10 @@ class BookOperations:
             cursor.execute("SELECT 1 FROM books WHERE asin = ? LIMIT 1", (asin,))
             exists = cursor.fetchone() is not None
             
-            self.logger.debug(f"Book existence check for ASIN {asin}: {exists}")
+            self.logger.debug("Book existence check", extra={
+                "asin": asin,
+                "exists": exists
+            })
             return exists
         
         finally:
@@ -208,9 +225,12 @@ class BookOperations:
                     if self._merge_book_record(cursor, existing_record, db_row):
                         conn.commit()
                         return True
-                    self.logger.warning(
-                        f"Book with ASIN {asin_clean} already exists, skipping: {book_data.get('Title', 'Unknown')}"
-                    )
+                    self.logger.warning("Book already exists, skipping add", extra={
+                        "asin": asin_clean,
+                        "title": book_data.get('Title', 'Unknown'),
+                        "source": db_row.get('source'),
+                        "ownership_status": db_row.get('ownership_status')
+                    })
                     return False
             
             # Extract series_asin if present in book_data
@@ -261,18 +281,31 @@ class BookOperations:
                     from services.image_cache import cache_book_cover
                     cached_cover_url = cache_book_cover(cover_image_url)
                     if cached_cover_url:
-                        self.logger.debug(f"Cached book cover for '{book_data.get('Title')}': {cover_image_url}")
+                        self.logger.debug("Cached book cover", extra={
+                            "title": book_data.get('Title'),
+                            "cover_image_url": cover_image_url
+                        })
                 except Exception as e:
-                    self.logger.warning(f"Failed to cache book cover for '{book_data.get('Title')}': {e}")
+                    self.logger.warning("Failed to cache book cover", extra={
+                        "title": book_data.get('Title'),
+                        "cover_image_url": cover_image_url,
+                        "error": str(e)
+                    })
             
             # Process author contributors for author metadata updates
             try:
                 from routes.authors import process_book_contributors_for_authors
                 author_results = process_book_contributors_for_authors(book_data)
                 if author_results:
-                    self.logger.info(f"Processed {len(author_results)} author(s) from book contributors")
+                    self.logger.info("Processed author contributors", extra={
+                        "author_count": len(author_results),
+                        "title": book_data.get('Title')
+                    })
             except Exception as e:
-                self.logger.warning(f"Failed to process author contributors: {e}")
+                self.logger.warning("Failed to process author contributors", extra={
+                    "title": book_data.get('Title'),
+                    "error": str(e)
+                })
             
             # Automatically extract and sync series information for this book
             if asin_for_series:
@@ -287,14 +320,28 @@ class BookOperations:
                         
                         if series_result.get('success') and series_result.get('series_count', 0) > 0:
                             series_count = series_result.get('series_count', 0)
-                            self.logger.info(f"Auto-synced {series_count} series for book '{book_data.get('Title')}'")
+                            self.logger.info("Auto-synced series for book", extra={
+                                "title": book_data.get('Title'),
+                                "series_count": series_count,
+                                "asin": asin_for_series
+                            })
                         elif not series_result.get('success'):
-                            self.logger.debug(f"Series sync returned: {series_result.get('message', series_result.get('error'))}")
+                            self.logger.debug("Series sync returned message", extra={
+                                "asin": asin_for_series,
+                                "message": series_result.get('message', series_result.get('error'))
+                            })
                     else:
-                        self.logger.debug("Series service not initialized, skipping auto-sync")
+                        self.logger.debug("Series service not initialized, skipping auto-sync", extra={
+                            "asin": asin_for_series,
+                            "title": book_data.get('Title')
+                        })
                 except Exception as e:
                     # Don't fail the book addition if series sync fails
-                    self.logger.warning(f"Failed to auto-sync series for '{book_data.get('Title')}': {e}")
+                    self.logger.warning("Failed to auto-sync series", extra={
+                        "title": book_data.get('Title'),
+                        "asin": asin_for_series,
+                        "error": str(e)
+                    })
             
             return True
         
@@ -326,7 +373,10 @@ class BookOperations:
         
         if len(valid_books) != len(books):
             failed = len(books) - len(valid_books)
-            self.logger.warning(f"Filtered out {failed} books without valid ASINs")
+            self.logger.warning("Filtered books without ASINs", extra={
+                "filtered_count": failed,
+                "total_received": len(books)
+            })
         
         try:
             # Process books in parallel batches
@@ -350,16 +400,24 @@ class BookOperations:
                         if batch_candidates:
                             series_sync_candidates.extend(batch_candidates)
                     except Exception as e:
-                        self.logger.error(f"Batch processing failed: {e}")
+                        self.logger.exception("Batch processing failed", extra={
+                            "error": str(e)
+                        })
                         failed += len(batch)
             
-            self.logger.info(f"Bulk operation completed: {successful} successful, {failed} failed")
+            self.logger.info("Bulk book operation completed", extra={
+                "successful": successful,
+                "failed": failed,
+                "total": len(valid_books)
+            })
             if series_sync_candidates:
                 self._queue_series_sync(series_sync_candidates)
             return successful, failed
             
         except Exception as e:
-            self.logger.error(f"Error in bulk insert/update: {e}")
+            self.logger.exception("Error in bulk insert/update", extra={
+                "error": str(e)
+            })
             return successful, len(valid_books) - successful
     
     def _process_book_batch(self, books: List[Dict[str, Any]]) -> Tuple[int, int, List[str]]:
@@ -473,14 +531,19 @@ class BookOperations:
                         missing_series_asins.append(asin)
                     
                 except Exception as e:
-                    self.logger.error(f"Error processing book {book.get('asin', 'unknown')}: {e}")
+                    self.logger.exception("Error processing book in batch", extra={
+                        "asin": book.get('asin', 'unknown'),
+                        "error": str(e)
+                    })
                     failed += 1
             
             conn.commit()
             conn.close()
             
         except Exception as e:
-            self.logger.error(f"Error in batch processing: {e}")
+            self.logger.exception("Error in batch processing", extra={
+                "error": str(e)
+            })
             failed += len(books) - successful
         
         return successful, failed, missing_series_asins
@@ -517,7 +580,10 @@ class BookOperations:
                 get_database_service
             )
         except Exception as import_error:
-            self.logger.error(f"Unable to import services for series sync: {import_error}")
+            self.logger.exception("Unable to import services for series sync", extra={
+                "asins": asins,
+                "error": str(import_error)
+            })
             with self._series_sync_lock:
                 for asin in asins:
                     self._pending_series_sync.discard(asin)
@@ -526,20 +592,28 @@ class BookOperations:
             db_service = get_database_service()
             audible_manager = get_audible_service_manager()
             if not audible_manager or not db_service:
-                self.logger.warning("Series sync skipped: services unavailable")
+                self.logger.warning("Series sync skipped: services unavailable", extra={
+                    "asin_count": len(asins)
+                })
                 return
             if not audible_manager.initialize_series_service(db_service):
-                self.logger.warning("Series sync skipped: Audible series service not initialized")
+                self.logger.warning("Series sync skipped: Audible series service not initialized", extra={
+                    "asin_count": len(asins)
+                })
                 return
             for asin in asins:
                 try:
                     result = audible_manager.series_service.sync_book_series_by_asin(asin)
                     if not result.get('success'):
-                        self.logger.debug(
-                            f"Series sync failed for {asin}: {result.get('error', result.get('message'))}"
-                        )
+                        self.logger.debug("Series sync failed", extra={
+                            "asin": asin,
+                            "message": result.get('error', result.get('message'))
+                        })
                 except Exception as e:
-                    self.logger.warning(f"Error syncing series for {asin}: {e}")
+                    self.logger.warning("Error syncing series", extra={
+                        "asin": asin,
+                        "error": str(e)
+                    })
                 finally:
                     with self._series_sync_lock:
                         self._pending_series_sync.discard(asin)
@@ -576,11 +650,15 @@ class BookOperations:
                 book = dict(zip(columns, row))
                 self._apply_author_overrides(book)
                 books.append(book)
-            self.logger.debug(f"Retrieved {len(books)} books from database")
+            self.logger.debug("Retrieved books from database", extra={
+                "count": len(books)
+            })
             return books
         
         except Exception as e:
-            self.logger.error(f"Error getting all books: {e}")
+            self.logger.exception("Error getting all books", extra={
+                "error": str(e)
+            })
             return []
         
         finally:
@@ -620,11 +698,17 @@ class BookOperations:
                 book = dict(zip(columns, row))
                 self._apply_author_overrides(book)
                 books.append(book)
-            self.logger.debug(f"Retrieved {len(books)} recent books from database")
+            self.logger.debug("Retrieved recent books", extra={
+                "count": len(books),
+                "limit": limit
+            })
             return books
 
         except Exception as e:
-            self.logger.error(f"Error getting recent books: {e}")
+            self.logger.exception("Error getting recent books", extra={
+                "limit": limit,
+                "error": str(e)
+            })
             return []
 
         finally:
@@ -668,14 +752,23 @@ class BookOperations:
                 result['asin'] = result.get('ASIN')
                 result['runtime_length_min'] = result.get('Runtime')
                 
-                self.logger.debug(f"Retrieved book by ASIN {asin}: {result.get('Title')}")
+                self.logger.debug("Retrieved book by ASIN", extra={
+                    "asin": asin,
+                    "title": result.get('Title')
+                })
                 return result
             else:
-                self.logger.warning(f"Book not found with ASIN: {asin}")
+                # Downgrade to debug to avoid noisy warnings when lookups miss
+                self.logger.debug("Book not found by ASIN", extra={
+                    "asin": asin
+                })
                 return None
         
         except Exception as e:
-            self.logger.error(f"Error getting book by ASIN {asin}: {e}")
+            self.logger.exception("Error getting book by ASIN", extra={
+                "asin": asin,
+                "error": str(e)
+            })
             return None
         
         finally:
@@ -705,14 +798,22 @@ class BookOperations:
                                   "import_date", "naming_template"]
                 result = dict(zip(columns, book))
                 self._apply_author_overrides(result)
-                self.logger.debug(f"Retrieved book ID {book_id}: {result.get('Title')}")
+                self.logger.debug("Retrieved book by ID", extra={
+                    "book_id": book_id,
+                    "title": result.get('Title')
+                })
                 return result
             else:
-                self.logger.warning(f"Book not found with ID: {book_id}")
+                self.logger.warning("Book not found by ID", extra={
+                    "book_id": book_id
+                })
                 return None
         
         except Exception as e:
-            self.logger.error(f"Error getting book by ID {book_id}: {e}")
+            self.logger.exception("Error getting book by ID", extra={
+                "book_id": book_id,
+                "error": str(e)
+            })
             return None
         
         finally:
@@ -737,7 +838,10 @@ class BookOperations:
                 error_handler.log_operation("Book status updated", f"ID {book_id} to '{new_status}'")
                 return True
             else:
-                self.logger.warning(f"No book found with ID {book_id}")
+                self.logger.warning("No book found for status update", extra={
+                    "book_id": book_id,
+                    "new_status": new_status
+                })
                 return False
         
         finally:
@@ -755,11 +859,16 @@ class BookOperations:
                 error_handler.log_operation("Book deleted", f"ID {book_id}")
                 return True
             else:
-                self.logger.warning(f"No book found with ID {book_id}")
+                self.logger.warning("No book found for delete", extra={
+                    "book_id": book_id
+                })
                 return False
         
         except Exception as e:
-            self.logger.error(f"Error deleting book ID {book_id}: {e}")
+            self.logger.exception("Error deleting book", extra={
+                "book_id": book_id,
+                "error": str(e)
+            })
             return False
         
         finally:
@@ -805,11 +914,17 @@ class BookOperations:
                 book = dict(zip(columns, row))
                 self._apply_author_overrides(book)
                 books.append(book)
-            self.logger.debug(f"Search for '{query}' returned {len(books)} results")
+            self.logger.debug("Search returned results", extra={
+                "query": query,
+                "result_count": len(books)
+            })
             return books
         
         except Exception as e:
-            self.logger.error(f"Error searching books with query '{query}': {e}")
+            self.logger.exception("Error searching books", extra={
+                "query": query,
+                "error": str(e)
+            })
             return []
         
         finally:
@@ -848,11 +963,17 @@ class BookOperations:
                 book = dict(zip(columns, row))
                 self._apply_author_overrides(book)
                 books.append(book)
-            self.logger.debug(f"Retrieved {len(books)} books with status '{status}'")
+            self.logger.debug("Retrieved books by status", extra={
+                "status": status,
+                "count": len(books)
+            })
             return books
         
         except Exception as e:
-            self.logger.error(f"Error getting books by status '{status}': {e}")
+            self.logger.exception("Error getting books by status", extra={
+                "status": status,
+                "error": str(e)
+            })
             return []
         
         finally:

@@ -1,18 +1,26 @@
 """
-File Naming Service - Generates AudioBookShelf-compatible file paths
-Manages audiobook file naming with user-configurable templates and ABS conventions
+Module Name: file_naming_service.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Singleton service for generating AudioBookShelf-compatible file paths and
+    filenames using user-configurable templates and sanitization helpers.
 
-Location: services/file_naming/file_naming_service.py
-Purpose: Singleton service for generating ABS-compatible file paths and names
+Location:
+    /services/file_naming/file_naming_service.py
+
 """
 
 from typing import Dict, Optional, List
-import logging
 import threading
 
 from .template_parser import TemplateParser
 from .path_generator import PathGenerator
 from .sanitizer import PathSanitizer
+from utils.logger import get_module_logger
+
+_LOGGER = get_module_logger("Service.FileNaming.Main")
 
 
 class FileNamingService:
@@ -38,11 +46,11 @@ class FileNamingService:
                     cls._instance = super().__new__(cls)
         return cls._instance
     
-    def __init__(self):
+    def __init__(self, *_, logger=None, **__):
         if not self._initialized:
             with self._lock:
                 if not self._initialized:
-                    self.logger = logging.getLogger("FileNamingService.Main")
+                    self.logger = logger or _LOGGER
                     
                     # Initialize operation components
                     self.template_parser = TemplateParser()
@@ -50,10 +58,22 @@ class FileNamingService:
                     self.sanitizer = PathSanitizer()
                     
                     # Default naming templates (can be overridden by config)
-                    # AudiobookShelf standard: Author/Series/BookFolder/BookFile.m4b
+                    # Structured to match expected library layout: Author/Series/Title folders
+                    # Title folders can include series sequence, year, and narrator in braces.
                     self.templates = {
-                        'standard': '{author}/{series}/{title}/{series_number} - {title} ({year}) - {narrator}',
-                        'standard_asin': '{author}/{series}/{title}/{series_number} - {title} ({year}) [{asin}] - {narrator}',
+                        # Series-first with year and narrator
+                        'standard': '{author}/{series}/{title}/Vol {series_number} - {year} - {title} {{{narrator}}}',
+                        'standard_asin': '{author}/{series}/{title}/Vol {series_number} - {year} - {title} {{{narrator}}} [{asin}]',
+
+                        # Series-first without narrator/year
+                        'series_basic': '{author}/{series}/{title}/Vol {series_number} - {title}',
+                        'series_basic_asin': '{author}/{series}/{title}/Vol {series_number} - {title} [{asin}]',
+
+                        # Title with year (non-series friendly)
+                        'title_year': '{author}/{title}/{year} - {title} {{{narrator}}}',
+                        'title_year_asin': '{author}/{title}/{year} - {title} {{{narrator}}} [{asin}]',
+
+                        # Minimal title-only variants
                         'simple': '{author}/{series}/{title}/{title}',
                         'simple_asin': '{author}/{series}/{title}/{title} [{asin}]',
                         'flat': '{author}/{title}/{title}',
@@ -78,9 +98,9 @@ class FileNamingService:
             # Configuration will be loaded lazily when first needed
             # to avoid circular dependency with ServiceManager
             
-            self.logger.info("FileNamingService initialized successfully")
+            self.logger.success("File naming service started successfully")
         except Exception as e:
-            self.logger.error(f"Failed to initialize FileNamingService: {e}")
+            self.logger.error("Failed to initialize FileNamingService", extra={"error": str(e)})
             raise
     
     def _load_configuration(self):
@@ -110,9 +130,9 @@ class FileNamingService:
                     self.templates.update(custom_templates)
                 
                 self._config_loaded = True
-                self.logger.debug(f"Loaded naming configuration: ASIN={self.include_asin}, Author folders={self.create_author_folders}, Series folders={self.create_series_folders}")
+                self.logger.debug("Loaded naming configuration", extra={"include_asin": self.include_asin, "create_author_folders": self.create_author_folders, "create_series_folders": self.create_series_folders})
         except Exception as e:
-            self.logger.warning(f"Could not load configuration, using defaults: {e}")
+            self.logger.warning("Could not load configuration, using defaults", extra={"error": str(e)})
             self._config_loaded = True  # Mark as attempted even if failed
     
     # Template management methods
@@ -241,16 +261,16 @@ class FileNamingService:
         try:
             return self.generate_filename(sample_book_data, template_name, 'm4b')
         except Exception as e:
-            self.logger.error(f"Error generating template preview: {e}")
+            self.logger.error("Error generating template preview", extra={"error": str(e)})
             return f"Error: {str(e)}"
     
     def set_include_asin(self, include: bool):
         """Update the include_asin setting."""
         self.include_asin = include
-        self.logger.debug(f"Updated include_asin setting to: {include}")
+        self.logger.debug("Updated include_asin setting", extra={"include_asin": include})
     
     def set_folder_creation(self, create_author: bool, create_series: bool):
         """Update folder creation settings."""
         self.create_author_folders = create_author
         self.create_series_folders = create_series
-        self.logger.debug(f"Updated folder settings - Author: {create_author}, Series: {create_series}")
+        self.logger.debug("Updated folder settings", extra={"create_author_folders": create_author, "create_series_folders": create_series})

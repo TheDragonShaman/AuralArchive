@@ -1,12 +1,37 @@
 """
-Settings API Routes - Modern Backend for Redesigned Settings Interface
-======================================================================
+Module Name: settings_api.py
+Author: TheDragonShaman
+Created: August 9, 2025
+Last Modified: December 23, 2025
+Description:
+    Modern backend for the redesigned settings interface. Provides grouped
+    endpoints for overview, health, logs, services, configuration, integrations,
+    automation, database maintenance, and UI preferences.
 
-Provides clean, organized API endpoints for the new settings UI with:
-- Logical grouping of functionality
-- Performance optimization
-- Real-time monitoring capabilities
-- Proper error handling
+Location:
+    /api/settings_api.py
+
+Settings API
+============
+
+Endpoints (selected):
+- GET    /settings/api/overview                    - System overview metrics
+- GET    /settings/api/system-health               - CPU/memory/disk/process metrics
+- GET    /settings/api/logs/latest                 - Live log tail
+- GET    /settings/api/logs/download               - Download log file
+- GET    /settings/api/services-status             - Service health summary
+- GET    /settings/api/config/export               - Export config
+- POST   /settings/api/config/import               - Import config
+- GET    /settings/api/config/sections             - List config sections
+- PUT    /settings/api/config/section/<name>       - Update config section
+- GET    /settings/api/integrations/audnexus       - Audnexus integration status
+- POST   /settings/api/integrations/audnexus       - Update Audnexus settings
+- GET    /settings/api/database/backups            - List database backups
+- POST   /settings/api/database/backups/create     - Create backup
+- POST   /settings/api/database/backups/restore    - Restore backup
+- POST   /settings/api/database/compact            - Compact database
+- GET    /settings/api/ui/preferences              - Get UI preferences
+- POST   /settings/api/ui/preferences              - Save UI preferences
 """
 
 from flask import Blueprint, jsonify, request, send_file, current_app

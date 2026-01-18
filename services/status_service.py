@@ -1,11 +1,21 @@
 """
-Status Service
-==============
+Module Name: status_service.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    In-memory activity feed for user-facing operations (search, downloads,
+    conversion, imports). Provides start/update/complete semantics for UI
+    surfaced events with short retention.
 
-Provides an in-memory activity feed describing user-facing operations such as
-searches, downloads, conversions, and imports. Designed for lightweight,
-short-lived status updates that can be surfaced in the UI.
+Location:
+    /services/status_service.py
+
 """
+
+# Bottleneck: pruning occurs on update; consider scheduled cleanup if events grow.
+# Upgrade: add capped retention metrics and async pruning.
+
 from __future__ import annotations
 
 from collections import deque
@@ -13,6 +23,11 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime, timedelta
 from threading import Lock
 from typing import Any, Deque, Dict, List, Optional
+
+from utils.logger import get_module_logger
+
+
+_LOGGER = get_module_logger("Service.StatusService")
 
 
 @dataclass
@@ -53,9 +68,11 @@ class StatusService:
                     cls._instance = super().__new__(cls)
         return cls._instance
 
-    def __init__(self):
+    def __init__(self, *, logger=None):
         if getattr(self, "_initialized", False):
             return
+
+        self.logger = logger or _LOGGER
 
         self._events: Deque[StatusEvent] = deque(maxlen=200)
         self._index: Dict[int, StatusEvent] = {}
@@ -63,6 +80,11 @@ class StatusService:
         self._counter = 0
         self._retention = timedelta(minutes=20)
         self._initialized = True
+
+        self.logger.success(
+            "Status service started successfully",
+            extra={"retention_minutes": self._retention.total_seconds() / 60},
+        )
 
     # ------------------------------------------------------------------
     # Core helpers
@@ -120,6 +142,18 @@ class StatusService:
             self._events.append(event)
             self._index[event_id] = event
 
+        self.logger.debug(
+            "Started status event",
+            extra={
+                "event_id": event_id,
+                "category": category,
+                "title": title,
+                "state": state,
+                "level": level,
+                "source": source,
+            },
+        )
+
         return event.to_dict()
 
     def update_event(self, event_id: int, **updates) -> Optional[Dict[str, Any]]:
@@ -129,6 +163,10 @@ class StatusService:
         with self._events_lock:
             event = self._index.get(event_id)
             if not event:
+                self.logger.warning(
+                    "Status event not found for update",
+                    extra={"event_id": event_id, "keys": list(updates.keys())},
+                )
                 return None
 
             for key, value in updates.items():
@@ -140,6 +178,16 @@ class StatusService:
                     event.metadata[key] = value
 
             self._touch_event(event)
+
+            self.logger.debug(
+                "Updated status event",
+                extra={
+                    "event_id": event_id,
+                    "state": event.state,
+                    "level": event.level,
+                    "keys": list(updates.keys()),
+                },
+            )
             return event.to_dict()
 
     def complete_event(
@@ -161,7 +209,17 @@ class StatusService:
             updates["message"] = message
         if metadata:
             updates.setdefault("metadata", {}).update(metadata)
-        return self.update_event(event_id, **updates)
+        result = self.update_event(event_id, **updates)
+        if result:
+            self.logger.success(
+                "Status event completed successfully",
+                extra={
+                    "event_id": event_id,
+                    "event_message": message,
+                    "event_level": updates["level"],
+                },
+            )
+        return result
 
     def fail_event(
         self,
@@ -180,7 +238,13 @@ class StatusService:
             updates["message"] = message
         if error:
             updates.setdefault("metadata", {}).update({"error": error})
-        return self.update_event(event_id, **updates)
+        result = self.update_event(event_id, **updates)
+        if result:
+            self.logger.error(
+                "Failed status event",
+                extra={"event_id": event_id, "event_message": message, "error": error},
+            )
+        return result
 
     def cancel_event(self, event_id: int, message: Optional[str] = None) -> Optional[Dict[str, Any]]:
         updates = {
@@ -189,7 +253,13 @@ class StatusService:
         }
         if message:
             updates["message"] = message
-        return self.update_event(event_id, **updates)
+        result = self.update_event(event_id, **updates)
+        if result:
+            self.logger.info(
+                "Cancelled status event",
+                extra={"event_id": event_id, "event_message": message},
+            )
+        return result
 
     def record_snapshot(
         self,

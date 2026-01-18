@@ -1,26 +1,21 @@
-"""Direct Indexer Implementation
-================================
+"""
+Module Name: direct_indexer.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+        Direct indexer that talks to custom provider APIs (non-Torznab) using
+        session tokens. Supports provider adapters for JSON and HTML-based
+        endpoints.
 
-Lightweight indexer that queries custom provider APIs using a session token
-(typically a cookie or bearer token) instead of a Torznab feed.
+Location:
+        /services/indexers/direct_indexer.py
 
-The provider is expected to expose JSON endpoints with the following defaults:
-
-- ``GET /api/direct/search``: accepts ``q`` (query), ``title``, ``author``, and
-  ``limit`` query parameters and returns ``{"success": true, "results": [...]}``
-- ``GET /api/direct/health``: optional health-check endpoint that returns
-  ``{"success": true}``
-
-Both endpoints must accept the configured session ID via either the
-``Authorization: Bearer <session_id>`` header, ``X-Session-ID`` header, or one of
-the standard cookies (``session``, ``session_id``, ``mam_id``). Providers that
-use a different route naming convention can override the defaults by adding
-``search_path`` or ``health_path`` keys to the indexer's configuration.
 """
 
 from __future__ import annotations
 
-import logging
+from utils.logger import get_module_logger
 from typing import Any, Dict, List, Optional
 from urllib.parse import urljoin
 
@@ -30,7 +25,8 @@ from .base_indexer import BaseIndexer
 from .providers import ProviderRequestSpec, resolve_provider_adapter
 from utils.search_normalization import normalize_search_terms
 
-logger = logging.getLogger("Indexer.Direct")
+
+_LOGGER = get_module_logger("Service.Indexers.Direct")
 
 
 class DirectIndexer(BaseIndexer):
@@ -39,7 +35,7 @@ class DirectIndexer(BaseIndexer):
     DEFAULT_SEARCH_PATH = "/api/direct/search"
     DEFAULT_HEALTH_PATH = "/api/direct/health"
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], *, logger=None):
         cfg = dict(config)
         cfg.setdefault("protocol", "direct")
 
@@ -57,7 +53,7 @@ class DirectIndexer(BaseIndexer):
         cfg["health_path"] = self.health_path
         cfg["base_url"] = cfg.get("base_url")
 
-        super().__init__(cfg)
+        super().__init__(cfg, logger=logger or _LOGGER)
         self.adapter = resolve_provider_adapter(self.base_url, cfg)
 
     def connect(self) -> bool:
@@ -91,13 +87,18 @@ class DirectIndexer(BaseIndexer):
             error = f"Connection timeout after {self.timeout}s"
             self.mark_failure(error)
             return {"success": False, "error": error}
+        except RuntimeError as exc:
+            # Provider returned an error page (e.g., 507 Insufficient Storage); treat as a soft failure.
+            error = f"Direct provider health check failed: {exc}"
+            self.mark_failure(error)
+            return {"success": False, "error": error}
         except PermissionError as exc:
             error = f"Authorization failed: {exc}"
             self.mark_failure(error)
             return {"success": False, "error": error}
         except Exception as exc:  # pragma: no cover - defensive
             error = f"Direct provider health check failed: {exc}"
-            logger.exception(error)
+            self.logger.exception(error)
             self.mark_failure(error)
             return {"success": False, "error": error}
 
@@ -110,12 +111,17 @@ class DirectIndexer(BaseIndexer):
         offset: int = 0,
     ) -> List[Dict[str, Any]]:
         if not self.is_available():
-            logger.warning("%s is unavailable, skipping direct search", self.name)
+            self.logger.warning("%s is unavailable, skipping direct search", self.name)
             return []
 
         normalized_query = self._compose_focus_query(query, title, author)
-        logger.debug("DirectIndexer.search called with query='%s' title='%s' author='%s' -> normalized='%s'",
-                 query, title, author, normalized_query)
+        self.logger.debug(
+            "DirectIndexer.search called with query='%s' title='%s' author='%s' -> normalized='%s'",
+            query,
+            title,
+            author,
+            normalized_query,
+        )
 
         params: Dict[str, Any] = {
             "q": normalized_query,
@@ -134,12 +140,16 @@ class DirectIndexer(BaseIndexer):
                 params.get("limit", 100),
                 params.get("offset", 0)
             )
-            logger.debug("DirectIndexer: provider request spec params=%s headers=%s path=%s",
-                         spec.params, getattr(spec, 'headers', None), getattr(spec, 'path', None))
+            self.logger.debug(
+                "DirectIndexer: provider request spec params=%s headers=%s path=%s",
+                spec.params,
+                getattr(spec, 'headers', None),
+                getattr(spec, 'path', None),
+            )
             payload = self._perform_request(spec)
             normalized = list(self.adapter.parse_search_results(payload))
             self.mark_success()
-            logger.debug("%s (direct) returned %d results", self.name, len(normalized))
+            self.logger.debug("%s (direct) returned %d results", self.name, len(normalized))
             return normalized
         except PermissionError as exc:
             self.mark_failure(f"Authorization failed: {exc}")
@@ -147,7 +157,7 @@ class DirectIndexer(BaseIndexer):
             self.mark_failure(f"Direct search timeout after {self.timeout}s")
         except Exception as exc:  # pragma: no cover - defensive
             self.mark_failure(f"Unexpected direct search error: {exc}")
-            logger.exception("Error searching direct provider %s", self.name)
+            self.logger.exception("Error searching direct provider %s", self.name)
         return []
 
     def get_capabilities(self) -> Dict[str, Any]:

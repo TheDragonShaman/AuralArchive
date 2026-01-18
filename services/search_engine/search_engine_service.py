@@ -1,15 +1,22 @@
 """
-Search Engine Service - Main search coordination service following AuralArchive patterns
-Manages audiobook search functionality with fuzzy matching and quality assessment
+Module Name: search_engine_service.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Coordinates audiobook search with fuzzy matching, quality assessment, and
+    multi-indexer integration.
 
-Location: services/search_engine/search_engine_service.py
-Purpose: Singleton service for coordinating all search operations
+Location:
+    /services/search_engine/search_engine_service.py
+
 """
 
-from typing import Dict, List, Any, Optional, Tuple
-import logging
 import threading
 from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple
+
+from utils.logger import get_module_logger
 
 from .search_operations import SearchOperations
 from .indexer_operations import IndexerOperations
@@ -17,6 +24,9 @@ from .result_operations import ResultOperations
 from .fuzzy_matcher import FuzzyMatcher
 from .quality_assessor import QualityAssessor
 from .result_processor import ResultProcessor
+
+
+_LOGGER = get_module_logger("Service.SearchEngine.Service")
 
 
 class SearchEngineService:
@@ -42,11 +52,11 @@ class SearchEngineService:
                     cls._instance = super().__new__(cls)
         return cls._instance
     
-    def __init__(self):
+    def __init__(self, *, logger=None):
         if not self._initialized:
             with self._lock:
                 if not self._initialized:
-                    self.logger = logging.getLogger("SearchEngineService.Main")
+                    self.logger = logger or _LOGGER
                     
                     # Initialize operation components
                     self.search_operations = None
@@ -74,7 +84,7 @@ class SearchEngineService:
     def _initialize_service(self):
         """Initialize the search engine service components."""
         try:
-            self.logger.debug("Initializing SearchEngineService...")
+            self.logger.debug("Initializing SearchEngineService")
             
             # Initialize helper components
             self.fuzzy_matcher = FuzzyMatcher()
@@ -100,10 +110,17 @@ class SearchEngineService:
                 self.result_processor
             )
             
-            self.logger.info("SearchEngineService initialized successfully")
+            indexer_count = 0
+            if self.indexer_operations and self.indexer_operations.indexer_service_manager:
+                indexer_count = len(self.indexer_operations.indexer_service_manager.indexers)
+            self.logger.success("Search engine started successfully", extra={"indexers": indexer_count})
             
         except Exception as e:
-            self.logger.error(f"Failed to initialize SearchEngineService: {e}")
+            self.logger.error(
+                "Failed to initialize SearchEngineService",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
             raise
     
     # Search operation methods (delegate to search_operations)
@@ -188,7 +205,7 @@ class SearchEngineService:
                 title = test_book["title"]
                 author = test_book["author"]
                 
-                self.logger.info(f"Testing search for: {title} by {author}")
+                self.logger.info("Testing search", extra={"title": title, "author": author})
                 
                 # Test search
                 search_result = self.search_for_audiobook(title, author, manual_search=True)
@@ -218,7 +235,7 @@ class SearchEngineService:
             return overall_result
             
         except Exception as e:
-            self.logger.error(f"Search functionality test failed: {e}")
+            self.logger.error("Search functionality test failed", extra={"error": str(e)}, exc_info=True)
             return {
                 "success": False,
                 "error": str(e),
@@ -252,7 +269,7 @@ class SearchEngineService:
             return status
             
         except Exception as e:
-            self.logger.error(f"Error getting service status: {e}")
+            self.logger.error("Error getting service status", extra={"error": str(e)}, exc_info=True)
             return {'error': str(e)}
     
     def reset_service(self):
@@ -271,4 +288,4 @@ class SearchEngineService:
             self.logger.info("SearchEngineService shutdown complete")
             
         except Exception as e:
-            self.logger.error(f"Error during SearchEngineService shutdown: {e}")
+            self.logger.error("Error during SearchEngineService shutdown", extra={"error": str(e)}, exc_info=True)

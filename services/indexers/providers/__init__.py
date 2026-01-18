@@ -1,4 +1,16 @@
-"""Direct provider adapter registry."""
+"""
+Module Name: __init__.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Registry and resolver for direct provider adapters used by the direct
+    indexer.
+
+Location:
+    /services/indexers/providers/__init__.py
+
+"""
 
 from __future__ import annotations
 

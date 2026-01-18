@@ -1,8 +1,20 @@
-import logging
+"""
+Module Name: catalog_search.py
+Author: TheDragonShaman
+Created: August 16, 2025
+Last Modified: December 23, 2025
+Description:
+    Perform Audible catalog queries with retry/error handling and shared sessions.
+Location:
+    /services/audible/audible_catalog_service/catalog_search.py
+
+"""
+
 from typing import Any, Dict, List, Optional
 
 import requests
 
+from utils.logger import get_module_logger
 from .error_handling import error_handler
 
 
@@ -10,7 +22,7 @@ class AudibleSearch:
     """Handles Audible API search operations and requests."""
 
     def __init__(self) -> None:
-        self.logger = logging.getLogger("AudibleService.Search")
+        self.logger = get_module_logger("Service.Audible.CatalogSearch")
         self.base_url = "https://api.audible.com/1.0/catalog/products"
         self.session = self._setup_session()
 
@@ -32,7 +44,7 @@ class AudibleSearch:
     def search_books(self, query: str, region: str = "us", num_results: int = 25) -> List[Dict[str, Any]]:
         """Search for books on Audible by keyword."""
 
-        self.logger.info("Searching Audible for: %s", query)
+        self.logger.info("Searching Audible", extra={"query": query, "region": region, "requested": num_results})
 
         try:
             params = self._build_search_params(query=query, num_results=num_results, region=region)
@@ -47,21 +59,21 @@ class AudibleSearch:
             api_data = response.json()
             products = api_data.get("products", [])
 
-            self.logger.info("Found %s books for query '%s'", len(products), query)
+            self.logger.info("Search results received", extra={"query": query, "region": region, "count": len(products)})
             return products
 
         except requests.exceptions.RequestException as exc:
-            self.logger.error("Request error while searching for '%s': %s", query, exc)
+            self.logger.error("Request error while searching", extra={"query": query, "region": region, "error": str(exc)})
             raise
         except Exception as exc:  # noqa: BLE001 - surface unexpected issues
-            self.logger.error("Unexpected error while searching for '%s': %s", query, exc)
+            self.logger.error("Unexpected error while searching", extra={"query": query, "region": region, "error": str(exc)})
             raise
 
     @error_handler.with_retry(max_retries=3, retry_delay=1.0)
     def get_book_details(self, asin: str, region: str = "us") -> Optional[Dict[str, Any]]:
         """Retrieve detailed information for a specific ASIN."""
 
-        self.logger.info("Retrieving details for ASIN: %s", asin)
+        self.logger.info("Retrieving book details", extra={"asin": asin, "region": region})
 
         try:
             params = self._build_details_params(asin=asin, region=region)
@@ -76,21 +88,21 @@ class AudibleSearch:
             api_data = response.json()
             products = api_data.get("products", [])
             if not products:
-                self.logger.warning("No product returned for ASIN: %s", asin)
+                self.logger.warning("No product returned", extra={"asin": asin, "region": region})
                 return None
 
             product = products[0]
             returned_asin = product.get("asin")
             if returned_asin and returned_asin != asin:
-                self.logger.warning("ASIN mismatch. Requested %s but received %s", asin, returned_asin)
+                self.logger.warning("ASIN mismatch", extra={"requested": asin, "received": returned_asin, "region": region})
 
             return product
 
         except requests.exceptions.RequestException as exc:
-            self.logger.error("Request error while fetching ASIN '%s': %s", asin, exc)
+            self.logger.error("Request error while fetching ASIN", extra={"asin": asin, "region": region, "error": str(exc)})
             raise
         except Exception as exc:  # noqa: BLE001
-            self.logger.error("Unexpected error while fetching ASIN '%s': %s", asin, exc)
+            self.logger.error("Unexpected error while fetching ASIN", extra={"asin": asin, "region": region, "error": str(exc)})
             raise
 
     def _build_search_params(self, query: str, num_results: int, region: str) -> Dict[str, str]:
@@ -123,7 +135,7 @@ class AudibleSearch:
     ) -> List[Dict[str, Any]]:
         """Search for books using Audible's author filter."""
 
-        self.logger.info("Searching Audible for author: %s", author)
+        self.logger.info("Searching Audible for author", extra={"author": author, "region": region, "requested": num_results})
 
         try:
             effective_results = max(1, min(num_results, 50))
@@ -146,21 +158,21 @@ class AudibleSearch:
 
             api_data = response.json()
             products = api_data.get("products", [])
-            self.logger.info("Found %s books for author '%s'", len(products), author)
+            self.logger.info("Author search results received", extra={"author": author, "region": region, "count": len(products)})
             return products
 
         except requests.exceptions.RequestException as exc:
-            self.logger.error("Request error while searching author '%s': %s", author, exc)
+            self.logger.error("Request error while searching author", extra={"author": author, "region": region, "error": str(exc)})
             raise
         except Exception as exc:  # noqa: BLE001
-            self.logger.error("Unexpected error while searching author '%s': %s", author, exc)
+            self.logger.error("Unexpected error while searching author", extra={"author": author, "region": region, "error": str(exc)})
             raise
 
     @error_handler.with_retry(max_retries=3, retry_delay=1.0)
     def search_by_series(self, series: str, region: str = "us", num_results: int = 25) -> List[Dict[str, Any]]:
         """Search for books in a series via keyword search."""
 
-        self.logger.info("Searching Audible for series: %s", series)
+        self.logger.info("Searching Audible for series", extra={"series": series, "region": region, "requested": num_results})
 
         try:
             params = {
@@ -181,14 +193,14 @@ class AudibleSearch:
 
             api_data = response.json()
             products = api_data.get("products", [])
-            self.logger.info("Found %s books for series '%s'", len(products), series)
+            self.logger.info("Series search results received", extra={"series": series, "region": region, "count": len(products)})
             return products
 
         except requests.exceptions.RequestException as exc:
-            self.logger.error("Request error while searching series '%s': %s", series, exc)
+            self.logger.error("Request error while searching series", extra={"series": series, "region": region, "error": str(exc)})
             raise
         except Exception as exc:  # noqa: BLE001
-            self.logger.error("Unexpected error while searching series '%s': %s", series, exc)
+            self.logger.error("Unexpected error while searching series", extra={"series": series, "region": region, "error": str(exc)})
             raise
 
     def get_api_status(self) -> Dict[str, Any]:
@@ -227,10 +239,10 @@ class AudibleSearch:
             return status
 
         except requests.exceptions.RequestException as exc:
-            self.logger.error("Request error during API status check: %s", exc)
+            self.logger.error("Request error during API status check", extra={"error": str(exc)})
             status["error"] = str(exc)
             return status
         except Exception as exc:  # noqa: BLE001
-            self.logger.error("Unexpected error during API status check: %s", exc)
+            self.logger.error("Unexpected error during API status check", extra={"error": str(exc)})
             status["error"] = str(exc)
             return status

@@ -1,11 +1,13 @@
 """
-System Status Route - AuralArchive
+Module Name: get_system_status.py
+Author: TheDragonShaman
+Created: August 2, 2025
+Last Modified: December 23, 2025
+Description:
+    Settings helper aggregating service health, configuration checks, and uptime.
+Location:
+    /routes/settings_tools/get_system_status.py
 
-Aggregates service health, configuration checks, and uptime information for the
-settings dashboard.
-
-Author: AuralArchive Development Team
-Updated: December 2, 2025
 """
 
 import os
@@ -23,7 +25,7 @@ from services.service_manager import (
 )
 from utils.logger import get_module_logger
 
-logger = get_module_logger("Route.Settings.SystemStatus")
+logger = get_module_logger("Routes.Settings.SystemStatus")
 _download_service = None
 
 

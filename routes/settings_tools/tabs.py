@@ -1,11 +1,13 @@
 """
-Settings Tabs Routes - AuralArchive
+Module Name: tabs.py
+Author: TheDragonShaman
+Created: August 9, 2025
+Last Modified: December 23, 2025
+Description:
+    Settings tab routes serving AJAX content for system status and configuration views.
+Location:
+    /routes/settings_tools/tabs.py
 
-Serves AJAX-powered tab content for the settings UI, including system status,
-configuration, and integrations.
-
-Author: AuralArchive Development Team
-Updated: December 2, 2025
 """
 
 import os
@@ -25,7 +27,7 @@ from utils.logger import get_module_logger
 
 # Create blueprint for tab routes
 tabs_bp = Blueprint('tabs', __name__)
-logger = get_module_logger("Route.Settings.Tabs")
+logger = get_module_logger("Routes.Settings.Tabs")
 
 # ============================================================================
 # TAB CONTENT ROUTES

@@ -1,4 +1,21 @@
-"""Status Feed API - surfaces user-friendly operations feed."""
+"""
+Module Name: status_api.py
+Author: TheDragonShaman
+Created: June 27, 2025
+Last Modified: December 23, 2025
+Description:
+    Status Feed API that surfaces user-friendly operations/events feed for the
+    UI. Provides a lightweight feed endpoint backed by the status service.
+
+Location:
+    /api/status_api.py
+
+Status Feed API
+===============
+
+Endpoints:
+- GET /api/status/feed  - Latest status events for UI consumption
+"""
 from datetime import datetime
 
 from flask import Blueprint, jsonify, request

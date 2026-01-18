@@ -1,26 +1,28 @@
 """
-AudioBookShelf Connection Management
-File: services/audiobookshelf/connection.py            if response.status_code == 200:
-                data = response.json()
-                # AudioBookShelf /api/me returns user data directly
-                username = data.get('username', 'Unknown')
-                # Try to get server info from a different endpoint or handle missing version
-                version = 'Unknown'
-                
-                return True, f"Connected as '{username}' (Server version: {version})"authentication, session management, and basic connectivity
+Module Name: connection.py
+Author: TheDragonShaman
+Created: August 26, 2025
+Last Modified: December 24, 2025
+Description:
+    Manage AudioBookShelf authentication, session setup, and connectivity checks.
+Location:
+    /services/audiobookshelf/connection.py
+
 """
 import requests
-import logging
-from typing import Tuple
+from typing import Optional, Tuple
+
 from services.config import ConfigService
+from utils.logger import get_module_logger
+
 
 class AudioBookShelfConnection:
     """Manages connections and authentication to AudioBookShelf server."""
-    
-    def __init__(self):
-        self.logger = logging.getLogger("AudioBookShelfConnection")
-        self.config_service =ConfigService()
-        self.session = requests.Session()
+
+    def __init__(self, *, config_service: Optional[ConfigService] = None, logger=None, session: Optional[requests.Session] = None):
+        self.logger = logger or get_module_logger("Service.AudioBookShelf.Connection")
+        self.config_service = config_service or ConfigService()
+        self.session = session or requests.Session()
         self.auth_token = None
         self._setup_session()
     
@@ -41,8 +43,11 @@ class AudioBookShelfConnection:
                 'abs_api_key': self.config_service.get_config_value('audiobookshelf', 'abs_api_key', ''),
                 'abs_library_id': self.config_service.get_config_value('audiobookshelf', 'abs_library_id', '')
             }
-        except Exception as e:
-            self.logger.error(f"Error getting AudioBookShelf config: {e}")
+        except Exception as exc:
+            self.logger.error(
+                "Error getting AudioBookShelf config",
+                extra={"error": str(exc)},
+            )
             return {}
     
     def get_base_url(self) -> str:
@@ -108,9 +113,12 @@ class AudioBookShelfConnection:
             return False, "Cannot connect to AudioBookShelf server - check host/port"
         except requests.exceptions.Timeout:
             return False, "Connection timeout - server may be slow or unreachable"
-        except Exception as e:
-            self.logger.error(f"Connection test error: {e}")
-            return False, f"Connection error: {str(e)}"
+        except Exception as exc:
+            self.logger.error(
+                "Connection test error",
+                extra={"error": str(exc)},
+            )
+            return False, f"Connection error: {str(exc)}"
     
     def ensure_authenticated(self) -> bool:
         """Ensure we have a valid authentication token."""
@@ -160,6 +168,9 @@ class AudioBookShelfConnection:
             
             return False
             
-        except Exception as e:
-            self.logger.error(f"Authentication error: {e}")
+        except Exception as exc:
+            self.logger.error(
+                "Authentication error",
+                extra={"error": str(exc)},
+            )
             return False

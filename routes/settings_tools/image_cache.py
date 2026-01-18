@@ -1,11 +1,13 @@
 """
-Image Cache Routes - AuralArchive
+Module Name: image_cache.py
+Author: TheDragonShaman
+Created: August 3, 2025
+Last Modified: December 23, 2025
+Description:
+    Image cache management routes for stats, clearing, and preloading author artwork.
+Location:
+    /routes/settings_tools/image_cache.py
 
-Expose cache statistics plus clear/preload actions for author artwork from the
-settings interface.
-
-Author: AuralArchive Development Team
-Updated: December 2, 2025
 """
 
 from flask import Blueprint, jsonify, request
@@ -17,7 +19,7 @@ from services.image_cache import (
 from utils.logger import get_module_logger
 
 cache_management_bp = Blueprint('cache_management', __name__)
-logger = get_module_logger("Route.Settings.ImageCache")
+logger = get_module_logger("Routes.Settings.ImageCache")
 
 @cache_management_bp.route('/image-cache/stats')
 def get_image_cache_stats():

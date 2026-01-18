@@ -1,11 +1,16 @@
 """
-Application Bootstrap - AuralArchive
+Module Name: app.py
+Author: TheDragonShaman
+Created: July 15, 2025
+Last Modified: December 23, 2025
+Description:
+    Application bootstrap for AuralArchive. Builds the Flask/SocketIO app,
+    wires blueprints, and initializes core services and background tasks for
+    the web UI and APIs.
 
-Creates the Flask/SocketIO application, registers blueprints, and initializes
-the core services needed for the web UI and APIs.
+Location:
+    /app.py
 
-Author: AuralArchive Development Team
-Updated: December 2, 2025
 """
 
 import logging
@@ -13,7 +18,7 @@ from flask import Flask, jsonify, request  # type: ignore
 from flask_socketio import SocketIO  # type: ignore
 
 from config.config import Config
-from utils.logger import setup_logger
+from utils.logger import get_module_logger, setup_logger
 
 # Import blueprints
 from routes.main import main_bp
@@ -23,6 +28,7 @@ from routes.authors import authors_bp
 from routes.series import series_bp
 from routes.downloads import downloads_bp
 from routes.settings import settings_bp
+from routes.debug_tools import debug_bp
 from api.settings_api import settings_api_bp
 from routes.settings_tools.tabs import tabs_bp
 from routes.settings_tools.indexers import indexers_bp
@@ -37,7 +43,8 @@ from api.audible_library_api import audible_library_api
 from api.status_api import status_api_bp
 from api.import_api import import_api_bp
 
-logger = logging.getLogger("AuralArchiveLogger")
+LOGGER_NAME = "Core.App"
+logger = get_module_logger(LOGGER_NAME)
 
 
 def create_app(config_class=Config):
@@ -45,10 +52,14 @@ def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
     
-    # Setup logging
+    # Setup logging with standardized module name
     global logger
-    logger = setup_logger("AuralArchiveLogger", app.config.get('LOG_FILE', 'auralarchive_web.log'))
-    logger.info("Starting AuralArchive Flask application")
+    setup_logger(LOGGER_NAME, app.config.get('LOG_FILE', 'auralarchive_web.log'))
+    logger = get_module_logger(LOGGER_NAME)
+    logger.info(
+        "Starting AuralArchive Flask application",
+        extra={"socketio_async_mode": app.config.get('SOCKETIO_ASYNC_MODE', 'eventlet')},
+    )
     
     # Suppress duplicate werkzeug logs
     werkzeug_logger = logging.getLogger('werkzeug')
@@ -71,6 +82,7 @@ def create_app(config_class=Config):
     app.register_blueprint(series_bp, url_prefix='/series')
     app.register_blueprint(authors_bp, url_prefix='/authors')
     app.register_blueprint(downloads_bp, url_prefix='/downloads')
+    app.register_blueprint(debug_bp, url_prefix='/')
     app.register_blueprint(discover_bp, url_prefix='/')
     app.register_blueprint(import_bp, url_prefix='/import')
     app.register_blueprint(settings_bp, url_prefix='/settings')
@@ -98,37 +110,52 @@ def create_app(config_class=Config):
         
         # Initialize services silently - ServiceManager will handle the logging
         database_service = get_database_service()
-        config_service = get_config_service()
-        download_service = get_download_management_service()
+        get_config_service()
+        get_download_management_service()
         automatic_download_service = get_automatic_download_service()
-        logger.info("Download management services initialized (pipeline + automation)")
+        logger.success(
+            "Download management services started successfully",
+            extra={"services": ["download_management", "automatic_download"]},
+        )
         
         # Initialize Audible Service Manager (includes series service)
-        audible_manager = get_audible_service_manager()
-        logger.info("Audible Service Manager initialized with series support")
-        
-        logger.info("Core services initialized (database, config, audible)")
+        get_audible_service_manager()
+        logger.success(
+            "Audible Service Manager started successfully",
+            extra={"services": ["audible_catalog", "wishlist", "series"]},
+        )
+
+        logger.success(
+            "Core services started successfully",
+            extra={"services": ["database", "config", "audible"]},
+        )
         
         # Initialize search services
         logger.debug("Initializing search services...")
         try:
             from services.service_manager import get_search_engine_service, get_indexer_manager_service
             from api.manual_download_api import init_search_services as init_manual_search_api
-            
+
             # Initialize services
             search_engine_service = get_search_engine_service()
-            indexer_manager_service = get_indexer_manager_service()
-            
+            get_indexer_manager_service()
+
             # Initialize manual search API (uses same search engine service)
             init_manual_search_api(
                 auto_search_svc=automatic_download_service,
                 manual_search_svc=search_engine_service,
-                db_service=database_service
+                db_service=database_service,
             )
-            
-            logger.info("Search services initialized successfully")
-        except Exception as e:
-            logger.error(f"Error initializing search services: {e}")
+
+            logger.success(
+                "Search services started successfully",
+                extra={"indexers_initialized": True},
+            )
+        except Exception as exc:
+            logger.error(
+                "Error initializing search services",
+                extra={"error": str(exc)},
+            )
         
         # Initialize image cache service and preload images in background
         try:
@@ -139,22 +166,32 @@ def create_app(config_class=Config):
                 """Background thread to preload images into cache."""
                 try:
                     from services.image_cache import preload_images_from_database
+
                     preload_images_from_database()
-                except Exception as e:
-                    logger.warning(f"Error preloading images: {e}")
+                except Exception as exc:
+                    logger.warning(
+                        "Error preloading images",
+                        extra={"error": str(exc)},
+                    )
             
             # Initialize cache service
-            cache_service = get_image_cache_service()
+            get_image_cache_service()
             
             # Start image preloading in background thread
             preload_thread = threading.Thread(target=preload_images, daemon=True)
             preload_thread.start()
             
-        except Exception as e:
-            logger.warning(f"Error initializing image cache service: {e}")
-            
-    except Exception as e:
-        logger.error(f"Error initializing services at startup: {e}")
+        except Exception as exc:
+            logger.warning(
+                "Error initializing image cache service",
+                extra={"error": str(exc)},
+            )
+
+    except Exception as exc:
+        logger.error(
+            "Error initializing services at startup",
+            extra={"error": str(exc)},
+        )
     
     # API routes using service manager
     register_api_routes(app)
@@ -162,7 +199,7 @@ def create_app(config_class=Config):
     # Error handlers
     register_error_handlers(app)
     
-    logger.info("AuralArchive Flask application initialized successfully")
+    logger.success("AuralArchive Flask application started successfully")
     return app, socketio
 
 def register_api_routes(app):
@@ -185,13 +222,19 @@ def register_api_routes(app):
                 return jsonify({'error': 'Book already exists in library'}), 409
             
             if db_service.add_book(book_data, status="Wanted"):
-                logger.info(f"Added book to library: {book_data.get('Title', 'Unknown')}")
+                logger.info(
+                    "Added book to library",
+                    extra={"title": book_data.get('Title', 'Unknown'), "asin": asin},
+                )
                 return jsonify({'success': True, 'message': 'Book added to library'})
             else:
                 return jsonify({'error': 'Failed to add book'}), 500
         
-        except Exception as e:
-            logger.error(f"Error adding book: {e}")
+        except Exception as exc:
+            logger.error(
+                "Error adding book",
+                extra={"error": str(exc)},
+            )
             return jsonify({'error': 'Failed to add book'}), 500
     
     @app.route('/api/books/<int:book_id>/status', methods=['PUT'])
@@ -202,14 +245,17 @@ def register_api_routes(app):
             new_status = request.json.get('status')
             if not new_status:
                 return jsonify({'error': 'Status is required'}), 400
-            
+
             if db_service.update_book_status(book_id, new_status):
                 return jsonify({'success': True, 'message': 'Status updated'})
             else:
                 return jsonify({'error': 'Failed to update status'}), 500
-        
-        except Exception as e:
-            logger.error(f"Error updating book status: {e}")
+
+        except Exception as exc:
+            logger.error(
+                "Error updating book status",
+                extra={"error": str(exc), "book_id": book_id, "status": request.json.get('status')},
+            )
             return jsonify({'error': 'Failed to update status'}), 500
     
     @app.route('/api/books/<int:book_id>', methods=['DELETE'])
@@ -217,13 +263,19 @@ def register_api_routes(app):
         """API endpoint to delete book using service manager."""
         try:
             db_service = get_database_service()
+            logger.info("API delete request for book", extra={"book_id": book_id})
             if db_service.delete_book(book_id):
+                logger.info("Book deleted via API", extra={"book_id": book_id})
                 return jsonify({'success': True, 'message': 'Book deleted'})
             else:
+                logger.warning("Book delete failed via API", extra={"book_id": book_id})
                 return jsonify({'error': 'Failed to delete book'}), 500
         
-        except Exception as e:
-            logger.error(f"Error deleting book: {e}")
+        except Exception as exc:
+            logger.error(
+                "Error deleting book",
+                extra={"error": str(exc), "book_id": book_id},
+            )
             return jsonify({'error': 'Failed to delete book'}), 500
     
     @app.route('/api/stats')
@@ -233,8 +285,11 @@ def register_api_routes(app):
             db_service = get_database_service()
             stats = db_service.get_library_stats()
             return jsonify(stats)
-        except Exception as e:
-            logger.error(f"Error getting stats: {e}")
+        except Exception as exc:
+            logger.error(
+                "Error getting stats",
+                extra={"error": str(exc)},
+            )
             return jsonify({'error': 'Failed to get stats'}), 500
     
     @app.route('/health')
@@ -275,12 +330,12 @@ def register_error_handlers(app):
     
     @app.errorhandler(500)
     def internal_error(error):
-        logger.error(f"Internal server error: {error}")
+        logger.error("Internal server error", extra={"error": str(error)})
         return jsonify({'error': 'Internal server error'}), 500
     
     @app.errorhandler(Exception)
     def handle_exception(e):
-        logger.error(f"Unhandled exception: {e}")
+        logger.error("Unhandled exception", extra={"error": str(e)})
         return jsonify({'error': 'An unexpected error occurred'}), 500
 
 # Create app instance
@@ -289,19 +344,19 @@ app, socketio = create_app()
 # SocketIO Event Handlers
 @socketio.on('connect')
 def handle_connect():
-    logging.getLogger("AuralArchiveLogger").info(f"SocketIO client connected: {request.sid}")
+    logger.info("SocketIO client connected", extra={"sid": request.sid})
     socketio.emit('connection_status', {'status': 'connected', 'message': 'Connected to AuralArchive'})
 
 @socketio.on('disconnect') 
 def handle_disconnect():
-    logging.getLogger("AuralArchiveLogger").info(f"SocketIO client disconnected: {request.sid}")
+    logger.info("SocketIO client disconnected", extra={"sid": request.sid})
 
 @socketio.on('ping')
 def handle_ping():
     socketio.emit('pong', {'message': 'Server is alive'})
 
 if __name__ == '__main__':
-    logger.info("AuralArchive Starting...")
+    logger.info("AuralArchive starting", extra={"mode": "development"})
     
     # Initialize wishlist service in background after startup
     def initialize_services():
@@ -318,12 +373,15 @@ if __name__ == '__main__':
             # The service will auto-start if configured properly
             status = wishlist_service.get_status()
             if status.get('auto_sync_running', False):
-                logger.info("Wishlist auto-sync already running (15-minute intervals)")
+                logger.info(
+                    "Wishlist auto-sync already running",
+                    extra={"interval_minutes": 15},
+                )
             elif status.get('service_configured', False):
                 # If service is configured but not auto-started, start it on startup
                 success = wishlist_service.start_auto_sync("startup")
                 if success:
-                    logger.info("Wishlist auto-sync initialized successfully on server startup")
+                    logger.success("Wishlist auto-sync started successfully")
                 else:
                     logger.warning("Failed to start wishlist auto-sync on startup")
             else:
@@ -337,10 +395,16 @@ if __name__ == '__main__':
                 
                 # Start the monitoring thread
                 dm_service.start_monitoring()
-                logger.info("Download management service monitoring started")
+                logger.success(
+                    "Download management service monitoring started successfully",
+                    extra={"monitoring": True},
+                )
                 
-            except Exception as e:
-                logger.error(f"Error starting download management service: {e}")
+            except Exception as exc:
+                logger.error(
+                    "Error starting download management service",
+                    extra={"error": str(exc)},
+                )
             
             
             # Start async audiobook management services
@@ -356,18 +420,27 @@ if __name__ == '__main__':
                 # Start all async services
                 loop.run_until_complete(service_manager.start_all_services())
                 
-                logger.info("All async audiobook management services started successfully")
+                logger.success(
+                    "All async audiobook management services started successfully",
+                    extra={"services": "all_async"},
+                )
                 
-            except Exception as e:
-                logger.error(f"Error starting async services: {e}")
+            except Exception as exc:
+                logger.error(
+                    "Error starting async services",
+                    extra={"error": str(exc)},
+                )
                 
-        except Exception as e:
-            logger.error(f"Error initializing background services: {e}")
+        except Exception as exc:
+            logger.error(
+                "Error initializing background services",
+                extra={"error": str(exc)},
+            )
     
     # Start background services in separate thread
     import threading
     services_thread = threading.Thread(target=initialize_services, daemon=True)
     services_thread.start()
     
-    # Run with SocketIO support  
+    # Run with SocketIO support
     socketio.run(app, debug=True, host='0.0.0.0', port=5000)

@@ -1,25 +1,19 @@
 """
-Audible Manager Service
-======================
+Module Name: audible_service_manager.py
+Author: TheDragonShaman
+Created: August 26, 2025
+Last Modified: December 23, 2025
+Description:
+    Manage Audible authentication, shared client helpers, and downstream service coordination.
+Location:
+    /services/audible/audible_service_manager.py
 
-Shared service for managing Audible authentication, API connections, and common utilities.
-Coordinates all Audible services including library, recommendations, wishlist, and catalog services.
-
-Services managed:
-- audible_library_service: Direct library access via Python audible package
-- audible_recommendations_service: Book recommendations
-- audible_wishlist_service: Wishlist management
-- audible_catalog_service: Catalog browsing
 """
 
 import audible
-import logging
 import os
-import json
-from typing import Dict, List, Any, Optional, Tuple
-from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional, Tuple
 import threading
-import time
 
 from utils.logger import get_module_logger
 
@@ -27,12 +21,10 @@ from utils.logger import get_module_logger
 from .audible_library_service.audible_library_service import AudibleLibraryService
 from .audible_series_service.audible_series_service import AudibleSeriesService
 
-logger = get_module_logger("AudibleServiceManager")
-
 class AudibleServiceManager:
     """Shared manager for Audible authentication, API utilities, and service coordination."""
     
-    def __init__(self, auth_file: str = None, config_service=None):
+    def __init__(self, auth_file: str = None, config_service=None, logger=None):
         """
         Initialize the Audible manager with all sub-services.
         
@@ -40,29 +32,29 @@ class AudibleServiceManager:
             auth_file: Path to authentication file (optional)
             config_service: Configuration service instance
         """
+        self.logger = logger or get_module_logger("Service.Audible.Manager")
         self.config_service = config_service
         self.auth_file = auth_file or "auth/audible_auth.json"
         self.auth = None
         self._lock = threading.Lock()
         
         # Initialize sub-services
-        self.library_service = AudibleLibraryService(config_service, logger)
-        self.series_service = AudibleSeriesService()
+        self.library_service = AudibleLibraryService(config_service, self.logger)
+        self.series_service = AudibleSeriesService(logger=self.logger)
         
         # Try to load existing auth on initialization
         self._load_existing_auth()
-        
-    logger.debug("AudibleServiceManager initialized with library and series services")
+        self.logger.debug("AudibleServiceManager initialized", extra={"auth_file": self.auth_file})
         
     def _load_existing_auth(self) -> bool:
         """Try to load existing authentication from file."""
         try:
             if os.path.exists(self.auth_file):
-                logger.debug(f"Loading existing Audible authentication from {self.auth_file}")
+                self.logger.debug("Loading existing Audible authentication", extra={"auth_file": self.auth_file})
                 self.auth = audible.Authenticator.from_file(self.auth_file)
                 return True
         except Exception as e:
-            logger.warning(f"Failed to load existing auth: {e}")
+            self.logger.warning("Failed to load existing auth", extra={"error": str(e), "auth_file": self.auth_file})
         return False
     
     def is_configured(self) -> bool:
@@ -71,7 +63,7 @@ class AudibleServiceManager:
             # Only check if auth token file exists
             return os.path.exists(self.auth_file)
         except Exception as e:
-            logger.error(f"Error checking Audible configuration: {e}")
+            self.logger.error("Error checking Audible configuration", extra={"error": str(e), "auth_file": self.auth_file})
             return False
     
     def authenticate(self) -> Tuple[bool, str]:
@@ -89,11 +81,17 @@ class AudibleServiceManager:
                 # Try to load existing authentication token only
                 if self.auth is None and os.path.exists(self.auth_file):
                     try:
-                        logger.debug("Loading existing Audible authentication token")
+                        self.logger.debug(
+                            "Loading existing Audible authentication token",
+                            extra={"auth_file": self.auth_file},
+                        )
                         self.auth = audible.Authenticator.from_file(self.auth_file)
                         return True, "Successfully loaded existing authentication"
                     except Exception as e:
-                        logger.warning(f"Failed to load existing auth token: {e}")
+                        self.logger.warning(
+                            "Failed to load existing auth token",
+                            extra={"error": str(e), "auth_file": self.auth_file},
+                        )
                         return False, "Failed to load authentication token"
                 
                 # If we already have valid auth, return success
@@ -101,12 +99,15 @@ class AudibleServiceManager:
                     return True, "Authentication already loaded"
                 
                 # No auth available - user needs to authenticate via web UI
-                logger.info("No authentication token found - user must authenticate via web UI")
+                self.logger.info(
+                    "No authentication token found - user must authenticate via web UI",
+                    extra={"auth_file": self.auth_file},
+                )
                 return False, "No authentication token found. Please authenticate using the Settings > Audible page."
                 
             except Exception as e:
                 error_msg = f"Error checking authentication: {e}"
-                logger.error(error_msg)
+                self.logger.error("Error checking authentication", extra={"error": str(e)})
                 return False, error_msg
     
     def submit_otp(self, otp_code: str) -> Tuple[bool, str]:
@@ -137,7 +138,7 @@ class AudibleServiceManager:
             
         except Exception as e:
             error_msg = f"Connection test failed: {e}"
-            logger.error(error_msg)
+            self.logger.error("Connection test failed", extra={"error": str(e)})
             return False, error_msg
     
     def get_client(self) -> Optional[audible.Client]:
@@ -146,13 +147,13 @@ class AudibleServiceManager:
             if not self.auth:
                 success, message = self.authenticate()
                 if not success:
-                    logger.error(f"Cannot create client: {message}")
+                    self.logger.error("Cannot create Audible client", extra={"message": message})
                     return None
             
             return audible.Client(auth=self.auth)
             
         except Exception as e:
-            logger.error(f"Error creating Audible client: {e}")
+            self.logger.error("Error creating Audible client", extra={"error": str(e)})
             return None
     
     def make_api_call(self, endpoint: str, **kwargs) -> Optional[Dict[str, Any]]:
@@ -171,12 +172,12 @@ class AudibleServiceManager:
                 if client is None:
                     return None
                 
-                logger.debug(f"Making API call to: {endpoint}")
+                self.logger.debug("Making API call", extra={"endpoint": endpoint, "kwargs": kwargs})
                 response = client.get(endpoint, **kwargs)
                 return response
                 
         except Exception as e:
-            logger.error(f"API call to {endpoint} failed: {e}")
+            self.logger.error("API call failed", extra={"endpoint": endpoint, "error": str(e)})
             return None
     
     def try_multiple_endpoints(self, endpoints: List[str], **kwargs) -> Optional[Dict[str, Any]]:
@@ -192,21 +193,21 @@ class AudibleServiceManager:
         """
         for endpoint in endpoints:
             try:
-                logger.debug(f"Trying endpoint: {endpoint}")
+                self.logger.debug("Trying endpoint", extra={"endpoint": endpoint})
                 response = self.make_api_call(endpoint, **kwargs)
                 
                 if response and isinstance(response, dict):
                     # Check if response has meaningful data
                     has_data = any(key in response for key in ['products', 'items', 'books', 'collections', 'lists'])
                     if has_data:
-                        logger.debug(f"Successful response from endpoint: {endpoint}")
+                        self.logger.debug("Successful response from endpoint", extra={"endpoint": endpoint})
                         return response
                     
             except Exception as e:
-                logger.debug(f"Endpoint {endpoint} failed: {e}")
+                self.logger.debug("Endpoint failed", extra={"endpoint": endpoint, "error": str(e)})
                 continue
         
-        logger.warning(f"All endpoints failed: {endpoints}")
+        self.logger.warning("All endpoints failed", extra={"endpoints": endpoints})
         return None
     
     def format_book_data(self, book: Dict[str, Any]) -> Dict[str, Any]:
@@ -387,7 +388,7 @@ class AudibleServiceManager:
             }
             
         except Exception as e:
-            logger.error(f"Error getting manager status: {e}")
+            self.logger.error("Error getting manager status", extra={"error": str(e)})
             return {
                 'configured': False,
                 'connected': False,
@@ -427,9 +428,9 @@ class AudibleServiceManager:
             client = self.get_client()
             if client:
                 self.series_service.initialize(client, db_service)
-                logger.debug("Series service initialized with Audible client and database service")
+                self.logger.debug("Series service initialized", extra={"db_initialized": True})
                 return True
-        logger.warning("Cannot initialize series service - authentication not available")
+        self.logger.warning("Cannot initialize series service - authentication not available", extra={"auth_loaded": self.auth is not None})
         return False
     
     def sync_book_series(self, book_asin: str, book_metadata: Dict) -> Dict[str, Any]:

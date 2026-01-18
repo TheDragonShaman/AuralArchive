@@ -1,4 +1,16 @@
-"""MyAnonamouse provider adapter."""
+"""
+Module Name: myanonamouse.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Direct provider adapter for MyAnonamouse JSON search API with filtering to
+    audiobook categories and rejection of ebook results.
+
+Location:
+    /services/indexers/providers/myanonamouse.py
+
+"""
 
 from __future__ import annotations
 
@@ -7,9 +19,12 @@ import re
 from typing import Any, Dict, List, Sequence
 from urllib.parse import urljoin
 
-import logging
+from utils.logger import get_module_logger
 from .base import DirectProviderAdapter, ProviderRequestSpec
 from . import register_provider
+
+
+_LOGGER = get_module_logger("Service.Indexers.MyAnonamouse")
 
 
 @register_provider
@@ -23,8 +38,9 @@ class MyAnonamouseAdapter(DirectProviderAdapter):
     AUDIO_FILETYPES = {"m4b", "mp3", "flac", "aac", "ogg", "m4a", "wav"}
     EBOOK_FILETYPES = {"epub", "pdf", "mobi", "azw", "azw3", "cbz", "cbr"}
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], *, logger=None):
         super().__init__(config)
+        self.logger = logger or _LOGGER
         # Always force the well-known AJAX endpoint regardless of generic defaults
         self.search_path = self.SEARCH_PATH
         self.health_path = self.SEARCH_PATH
@@ -99,16 +115,18 @@ class MyAnonamouseAdapter(DirectProviderAdapter):
         )
 
     def parse_search_results(self, payload: Any) -> Sequence[Dict[str, Any]]:
-        adapter_logger = logging.getLogger("Indexer.MyAnonamouseAdapter")
         if not isinstance(payload, dict):
-            adapter_logger.debug("parse_search_results: payload not a dict (type=%s)", type(payload))
+            self.logger.debug("parse_search_results: payload not a dict (type=%s)", type(payload))
             return []
         entries = payload.get("data")
         if not isinstance(entries, list):
-            adapter_logger.debug("parse_search_results: 'data' missing or not a list, payload keys=%s", list(payload.keys()))
+            self.logger.debug(
+                "parse_search_results: 'data' missing or not a list, payload keys=%s",
+                list(payload.keys()),
+            )
             return []
 
-        adapter_logger.debug("parse_search_results: raw entries count=%d", len(entries))
+        self.logger.debug("parse_search_results: raw entries count=%d", len(entries))
         titles = []
         results: List[Dict[str, Any]] = []
         for entry in entries:
@@ -121,7 +139,12 @@ class MyAnonamouseAdapter(DirectProviderAdapter):
                 results.append(parsed)
 
         # Log what we kept vs raw
-        adapter_logger.debug("parse_search_results: parsed_count=%d kept_count=%d sample_titles=%s", len(entries), len(results), titles[:6])
+        self.logger.debug(
+            "parse_search_results: parsed_count=%d kept_count=%d sample_titles=%s",
+            len(entries),
+            len(results),
+            titles[:6],
+        )
         return results
 
     def parse_health_response(self, payload: Any) -> Dict[str, Any]:
@@ -147,14 +170,14 @@ class MyAnonamouseAdapter(DirectProviderAdapter):
         if not torrent_id:
             return None
 
-        adapter_logger = logging.getLogger("Indexer.MyAnonamouseAdapter")
-
         entry_main_cat = self._resolve_entry_main_cat(entry)
         # If adapter has an explicit allowed main category list, respect it
         if self._allowed_main_categories and (
             not entry_main_cat or entry_main_cat not in self._allowed_main_categories
         ):
-            adapter_logger.debug("Dropping entry %s: main_cat '%s' not allowed", torrent_id, entry_main_cat)
+            self.logger.debug(
+                "Dropping entry %s: main_cat '%s' not allowed", torrent_id, entry_main_cat
+            )
             return None
 
         # -----------------------------
@@ -168,7 +191,7 @@ class MyAnonamouseAdapter(DirectProviderAdapter):
         # If the provider explicitly labels this as an eBook filetype, drop it
         if filetype:
             if filetype in self.EBOOK_FILETYPES:
-                adapter_logger.debug("Dropping entry %s: filetype '%s' is non-audio", torrent_id, filetype)
+                self.logger.debug("Dropping entry %s: filetype '%s' is non-audio", torrent_id, filetype)
                 return None
             # If it's an audio filetype, accept immediately
             if filetype in self.AUDIO_FILETYPES:
@@ -186,13 +209,18 @@ class MyAnonamouseAdapter(DirectProviderAdapter):
         if entry_main_cat:
             # main category '14' is e-books per adapter mapping
             if str(entry_main_cat) == "14":
-                adapter_logger.debug("Dropping entry %s: main_cat == 14 (ebook)", torrent_id)
+                self.logger.debug("Dropping entry %s: main_cat == 14 (ebook)", torrent_id)
                 return None
 
         # Heuristic title/tags checks for eBook indicators
         ebook_indicators = ("ebook", "epub", "pdf", "mobi", "azw", "azw3", "ebookcollection", "e-book")
         if any(term in title_text for term in ebook_indicators) or any(term in tags_text for term in ebook_indicators):
-            adapter_logger.debug("Dropping entry %s: title/tags indicate ebook ('%s' / '%s')", torrent_id, title_text[:120], tags_text[:120])
+            self.logger.debug(
+                "Dropping entry %s: title/tags indicate ebook ('%s' / '%s')",
+                torrent_id,
+                title_text[:120],
+                tags_text[:120],
+            )
             return None
 
 

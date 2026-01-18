@@ -1,18 +1,27 @@
 """
-Search Operations - Core search functionality and coordination
-Handles search execution, history tracking, and result coordination
+Module Name: search_operations.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Core search execution, history tracking, and result coordination for the
+    search engine service.
 
-Location: services/search_engine/search_operations.py
-Purpose: Main search operation logic for SearchEngineService
+Location:
+    /services/search_engine/search_operations.py
+
 """
 
-from typing import Dict, List, Any
-from datetime import datetime
 import re
 import time
+from datetime import datetime
+from typing import Any, Dict, List
 
 from utils.logger import get_module_logger
 from utils.search_normalization import normalize_search_terms
+
+
+_LOGGER = get_module_logger("Service.SearchEngine.SearchOperations")
 
 
 class SearchOperations:
@@ -26,9 +35,9 @@ class SearchOperations:
     - Integration with indexers and quality assessment
     """
     
-    def __init__(self, fuzzy_matcher, quality_assessor, result_processor):
+    def __init__(self, fuzzy_matcher, quality_assessor, result_processor, *, logger=None):
         """Initialize search operations with injected dependencies."""
-        self.logger = get_module_logger("SearchEngine.SearchOperations")
+        self.logger = logger or _LOGGER
         self.fuzzy_matcher = fuzzy_matcher
         self.quality_assessor = quality_assessor
         self.result_processor = result_processor
@@ -99,12 +108,14 @@ class SearchOperations:
             search_author = normalized_author or original_author
 
             self.logger.info(
-                "Starting %s search for: %s by %s (normalized to '%s' / '%s')",
-                'manual' if manual_search else 'automatic',
-                original_title,
-                original_author,
-                search_title,
-                search_author,
+                "Starting search",
+                extra={
+                    "search_type": "manual" if manual_search else "automatic",
+                    "title": original_title,
+                    "author": original_author,
+                    "normalized_title": search_title,
+                    "normalized_author": search_author,
+                },
             )
 
             queries = []
@@ -121,27 +132,34 @@ class SearchOperations:
 
             if queries:
                 self.logger.info(
-                    "Search variants prepared (%s): %s",
-                    len(queries),
-                    queries
+                    "Search variants prepared",
+                    extra={"variant_count": len(queries), "variants": queries},
                 )
             else:
-                self.logger.info("No title provided; using empty search query")
+                self.logger.info(
+                    "No title provided; using empty search query",
+                    extra={"title": title, "author": author},
+                )
 
             raw_results: List[Dict[str, Any]] = []
             seen_keys: set = set()
 
             if not self.indexer_operations:
-                self.logger.warning("IndexerOperations not available, returning empty results")
+                self.logger.warning(
+                    "Indexer operations unavailable",
+                    extra={"variant_count": len(queries)},
+                )
             else:
                 for idx, query_title in enumerate(queries or ['']):
                     if not query_title:
                         continue
                     self.logger.info(
-                        "Running search variant %s/%s: '%s'",
-                        idx + 1,
-                        len(queries),
-                        query_title
+                        "Running search variant",
+                        extra={
+                            "variant_index": idx + 1,
+                            "variant_total": len(queries),
+                            "query": query_title,
+                        },
                     )
                     variant_results = self.indexer_operations.search_all_indexers(
                         query_title,
@@ -163,13 +181,19 @@ class SearchOperations:
             
             # Assess quality and rank results (adds quality_assessment with confidence to each result)
             if raw_results:
-                self.logger.info(f"🔍 About to assess quality for {len(raw_results)} results (title='{title}', author='{author}')")
+                self.logger.info(
+                    "Assessing quality for search results",
+                    extra={"result_count": len(raw_results), "title": title, "author": author},
+                )
                 scored_results = self.quality_assessor.rank_results_by_quality(
                     raw_results, 
                     search_title=title, 
                     search_author=author
                 )
-                self.logger.info(f"✅ Quality assessment complete, scored {len(scored_results)} results")
+                self.logger.info(
+                    "Quality assessment complete",
+                    extra={"scored_count": len(scored_results)},
+                )
             else:
                 scored_results = []
             
@@ -199,7 +223,11 @@ class SearchOperations:
             }
             
         except Exception as e:
-            self.logger.error(f"Search failed for {title} by {author}: {e}", exc_info=True)
+            self.logger.error(
+                "Search failed",
+                extra={"title": title, "author": author, "error": str(e)},
+                exc_info=True,
+            )
             return {
                 'success': False,
                 'error': str(e),
@@ -210,7 +238,7 @@ class SearchOperations:
     def automatic_search_flagged_books(self) -> Dict[str, Any]:
         """Perform automatic search for all flagged books."""
         try:
-            self.logger.info("Starting automatic search for flagged books...")
+            self.logger.info("Starting automatic search for flagged books")
             
             # For Phase 1, return mock response
             return {

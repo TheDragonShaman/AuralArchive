@@ -1,5 +1,19 @@
+"""
+Module Name: local_file_importer.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    High-level coordinator that turns local audiobook files into library
+    imports. Provides preview, batch preparation, metadata reconciliation,
+    and delegation to ImportService for final file moves.
+
+Location:
+    /services/import_service/local_file_importer.py
+
+"""
+
 import hashlib
-import logging
 import os
 import re
 import uuid
@@ -17,15 +31,19 @@ from services.service_manager import (
     get_file_naming_service,
 )
 
+from utils.logger import get_module_logger
+
 from .filename_matcher import FilenameMatcher
 from .local_metadata_extractor import LocalMetadataExtractor
+
+_LOGGER = get_module_logger("Service.Import.LocalImporter")
 
 
 class LocalFileImportCoordinator:
     """High-level helper that turns local audiobook files into library imports."""
 
-    def __init__(self) -> None:
-        self.logger = logging.getLogger("ImportService.LocalCoordinator")
+    def __init__(self, *, logger=None) -> None:
+        self.logger = logger or _LOGGER
         self.database_service = get_database_service()
         self.import_service = get_import_service()
         self.metadata_service = get_metadata_update_service()

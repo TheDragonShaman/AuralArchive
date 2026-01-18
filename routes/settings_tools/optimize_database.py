@@ -1,10 +1,13 @@
 """
-Optimize Database Route - AuralArchive
+Module Name: optimize_database.py
+Author: TheDragonShaman
+Created: August 5, 2025
+Last Modified: December 23, 2025
+Description:
+    Settings helper to VACUUM/ANALYZE/REINDEX the database and report metadata.
+Location:
+    /routes/settings_tools/optimize_database.py
 
-Runs VACUUM/ANALYZE/REINDEX cycles and reports metadata back to the settings UI.
-
-Author: AuralArchive Development Team
-Updated: December 2, 2025
 """
 
 import os
@@ -15,7 +18,7 @@ from flask import jsonify
 from services.service_manager import get_database_service
 from utils.logger import get_module_logger
 
-logger = get_module_logger("Route.Settings.OptimizeDatabase")
+logger = get_module_logger("Routes.Settings.OptimizeDatabase")
 
 def get_database_size():
     """Get database file size in human readable format."""
@@ -32,7 +35,7 @@ def get_database_size():
         else:
             return "Unknown"
     except Exception as e:
-        logger.error(f"Error getting database size: {e}")
+        logger.error("Error getting database size: %s", e)
         return "Unknown"
 
 def handle_optimize_database():
@@ -64,7 +67,7 @@ def handle_optimize_database():
             cursor.execute("PRAGMA optimize")
             optimization_steps.append("PRAGMA optimize completed")
         except Exception as e:
-            logger.warning(f"PRAGMA optimize failed: {e}")
+            logger.warning("PRAGMA optimize failed: %s", e)
         
         # Check database integrity
         try:
@@ -75,7 +78,7 @@ def handle_optimize_database():
             else:
                 optimization_steps.append(f"Integrity check: {integrity_result}")
         except Exception as e:
-            logger.warning(f"Integrity check failed: {e}")
+            logger.warning("Integrity check failed: %s", e)
         
         conn.close()
         
@@ -94,7 +97,7 @@ def handle_optimize_database():
         })
     
     except Exception as e:
-        logger.error(f"Error optimizing database: {e}")
+        logger.error("Error optimizing database: %s", e)
         return jsonify({
             'success': False,
             'error': f'Failed to optimize database: {str(e)}'

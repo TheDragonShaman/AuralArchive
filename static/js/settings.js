@@ -40,7 +40,10 @@
         }
     };
 
+    const BLOCKED_CLIENT_TYPES = ["deluge", "transmission"];
     const CLIENT_ORDER = Object.keys(CLIENT_DEFINITIONS);
+    const SUPPORTED_CLIENT_TYPES = CLIENT_ORDER.filter((type) => !BLOCKED_CLIENT_TYPES.includes(type));
+    const DEFAULT_CLIENT_TYPE = SUPPORTED_CLIENT_TYPES[0] || CLIENT_ORDER[0];
     const MAX_PATH_MAPPINGS = 5;
 
     const INDEXER_TYPE_LABELS = {
@@ -97,6 +100,10 @@
         document.querySelectorAll('[data-indexer-field="direct"]').forEach((element) => {
             element.classList.toggle("hidden", !isDirect);
         });
+    }
+
+    function isBlockedClientType(type) {
+        return BLOCKED_CLIENT_TYPES.includes((type || "").toLowerCase());
     }
 
     function parseCategoriesList(rawValue) {
@@ -217,6 +224,10 @@
         safeAddEventListener("absRefreshLibraries", "click", handleAbsRefreshLibraries);
         safeAddEventListener("absManualSync", "click", handleAbsManualSync);
         safeAddEventListener("qbPathMappingAdd", "click", handleQbPathMappingAdd);
+        safeAddEventListener("auto_download_enabled", "change", handleAutoDownloadToggle);
+        safeAddEventListener("autoDownloadConfirm", "click", handleAutoDownloadConfirm);
+        safeAddEventListener("autoDownloadCancel", "click", handleAutoDownloadCancel);
+        safeAddEventListener("qb_path_mapping_enabled", "change", handleQbPathMappingToggle);
 
         safeAddEventListener("audibleRefreshButton", "click", (event) => {
             event.preventDefault();
@@ -359,6 +370,11 @@
         setCheckboxValue("abs_sync_metadata", absConfig.abs_sync_metadata);
         setCheckboxValue("abs_sync_only_owned", absConfig.abs_sync_only_owned);
         setCheckboxValue("abs_auto_sync", absConfig.abs_auto_sync || absConfig.abs_auto_sync_enabled);
+        setCheckboxValue("abs_auto_match_imports", absConfig.auto_match_imports || absConfig.abs_auto_match_imports);
+        setInputValue(
+            "abs_auto_match_delay_seconds",
+            absConfig.auto_match_delay_seconds || absConfig.abs_auto_match_delay_seconds || 10
+        );
 
         const libraryId = absConfig.abs_library_id || absConfig.library_id || "";
         populateAbsLibrarySelect(libraryId);
@@ -514,18 +530,33 @@
 
         CLIENT_ORDER.forEach((type) => {
             const definition = CLIENT_DEFINITIONS[type];
+            const isBlocked = isBlockedClientType(type);
             const button = document.createElement("button");
             button.type = "button";
             button.dataset.clientKey = type;
-            button.className = `btn btn-sm w-full justify-between ${state.selectedClientKey === type ? "btn-primary" : "btn-outline"}`;
+            button.disabled = isBlocked;
+
+            const buttonClasses = ["btn", "btn-sm", "w-full", "justify-between"];   
+            if (isBlocked) {
+                buttonClasses.push("btn-outline", "btn-disabled");
+            } else {
+                buttonClasses.push(state.selectedClientKey === type ? "btn-primary" : "btn-outline");
+            }
+
+            button.className = buttonClasses.join(" ");
 
             const name = document.createElement("span");
-            name.textContent = definition.label;
+            name.textContent = isBlocked ? `${definition.label} (coming soon)` : definition.label;
 
             const status = document.createElement("span");
             const configured = Boolean(state.downloadClients[type]);
-            status.textContent = configured ? "Configured" : "Not configured";
-            status.className = `text-xs ${configured ? "text-success" : "text-base-content/60"}`;
+            if (isBlocked) {
+                status.textContent = "Coming soon";
+                status.className = "text-xs text-base-content/60";
+            } else {
+                status.textContent = configured ? "Configured" : "Not configured";
+                status.className = `text-xs ${configured ? "text-success" : "text-base-content/60"}`;
+            }
 
             button.append(name, status);
             list.appendChild(button);
@@ -547,6 +578,13 @@
         const statusTarget = document.getElementById("downloadClientStatus");
 
         if (!editor || !emptyCard || !heading || !helper || !deleteButton || !typeSelect || !statusTarget) {
+            return;
+        }
+
+        if (clientKey && isBlockedClientType(clientKey)) {
+            showNotification(`${CLIENT_DEFINITIONS[clientKey].label} is coming soon. Only ${CLIENT_DEFINITIONS[DEFAULT_CLIENT_TYPE].label} is available today.`, "info");
+            state.selectedClientKey = null;
+            renderDownloadClientsList();
             return;
         }
 
@@ -578,7 +616,12 @@
 
     function populateClientFields(clientType, data = {}) {
         setCheckboxValue("download_client_enabled", data.enabled);
-        setCheckboxValue("download_client_auto", data.auto_download);
+
+        const mappingToggle = document.getElementById("qb_path_mapping_enabled");
+        if (mappingToggle) {
+            const shouldEnableMappings = clientType === "qbittorrent" && Array.isArray(data.path_mappings) && data.path_mappings.length > 0;
+            setCheckboxValue("qb_path_mapping_enabled", shouldEnableMappings);
+        }
 
         switch (clientType) {
             case "qbittorrent":
@@ -606,6 +649,8 @@
                 renderQbPathMappings();
                 break;
         }
+
+        updateQbPathMappingVisibility(clientType);
     }
 
     function parsePathMappings(rawValue) {
@@ -813,15 +858,62 @@
         addButton.classList.toggle("btn-disabled", disabled);
     }
 
+    function updateQbPathMappingVisibility(clientType) {
+        const mappingSection = document.querySelector("[data-qb-path-mappings]");
+        const toggle = document.getElementById("qb_path_mapping_enabled");
+        if (!mappingSection || !toggle) {
+            return;
+        }
+
+        const isQb = clientType === "qbittorrent";
+        const enabled = isQb && toggle.checked && !isBlockedClientType(clientType);
+
+        mappingSection.classList.toggle("hidden", !enabled);
+
+        const controls = mappingSection.querySelectorAll("input, button");
+        controls.forEach((control) => {
+            control.disabled = !enabled;
+            if (control.id === "qbPathMappingAdd") {
+                control.classList.toggle("btn-disabled", !enabled || control.disabled);
+            }
+        });
+
+        if (enabled) {
+            const currentCount = collectQbPathMappings(true).length;
+            updateQbPathMappingAddState(currentCount);
+        } else {
+            const addButton = document.getElementById("qbPathMappingAdd");
+            if (addButton) {
+                addButton.disabled = true;
+                addButton.classList.add("btn-disabled");
+            }
+        }
+    }
+
+    function handleQbPathMappingToggle() {
+        const typeSelect = document.getElementById("download_client_type");
+        const clientType = typeSelect ? typeSelect.value : "qbittorrent";
+        updateQbPathMappingVisibility(clientType);
+    }
+
     function handleClientTypeChange(event) {
         const newType = event.target.value;
+        if (isBlockedClientType(newType)) {
+            const fallback = DEFAULT_CLIENT_TYPE;
+            event.target.value = fallback;
+            showNotification(`${CLIENT_DEFINITIONS[newType].label} is coming soon. Please use ${CLIENT_DEFINITIONS[fallback].label}.`, "info");
+            showClientPanel(fallback);
+            populateClientFields(fallback, CLIENT_DEFINITIONS[fallback].defaults);
+            return;
+        }
+
         showClientPanel(newType);
         populateClientFields(newType, CLIENT_DEFINITIONS[newType].defaults);
     }
 
     function findNextAvailableClientType() {
-        const firstUnconfigured = CLIENT_ORDER.find((type) => !state.downloadClients[type]);
-        return firstUnconfigured || CLIENT_ORDER[0];
+        const firstUnconfigured = SUPPORTED_CLIENT_TYPES.find((type) => !state.downloadClients[type]);
+        return firstUnconfigured || DEFAULT_CLIENT_TYPE;
     }
 
     async function handleDownloadClientSubmit(form) {
@@ -834,6 +926,13 @@
         }
 
         const clientType = typeSelect.value;
+
+        if (isBlockedClientType(clientType)) {
+            statusTarget.textContent = `${CLIENT_DEFINITIONS[clientType].label} is coming soon.`;
+            statusTarget.className = "text-xs text-base-content/60";
+            showNotification("Only qBittorrent can be configured right now.", "info");
+            return;
+        }
 
         let payload;
         try {
@@ -933,6 +1032,13 @@
 
         const clientType = typeSelect.value;
 
+        if (isBlockedClientType(clientType)) {
+            statusTarget.textContent = `${CLIENT_DEFINITIONS[clientType].label} is coming soon.`;
+            statusTarget.className = "text-xs text-base-content/60";
+            showNotification("Only qBittorrent can be tested right now.", "info");
+            return;
+        }
+
         let payload;
         try {
             payload = getClientPayload(clientType);
@@ -970,7 +1076,7 @@
     function getClientPayload(clientType) {
         const payload = {
             enabled: getCheckboxValue("download_client_enabled"),
-            auto_download: getCheckboxValue("download_client_auto")
+            auto_download: state.downloadClients[clientType]?.auto_download ?? CLIENT_DEFINITIONS[clientType]?.defaults?.auto_download ?? false
         };
 
         switch (clientType) {
@@ -980,12 +1086,16 @@
                 payload.username = getInputValue("qb_username");
                 payload.password = getInputValue("qb_password");
                 payload.category = getInputValue("qb_category") || CLIENT_DEFINITIONS.qbittorrent.defaults.category;
-                const rawMappings = collectQbPathMappings(true);
-                const incompleteMapping = rawMappings.find((mapping) => (mapping.remote && !mapping.local) || (!mapping.remote && mapping.local));
-                if (incompleteMapping) {
-                    throw new Error("Complete both qB and host paths for each mapping entry.");
+                if (getCheckboxValue("qb_path_mapping_enabled")) {
+                    const rawMappings = collectQbPathMappings(true);
+                    const incompleteMapping = rawMappings.find((mapping) => (mapping.remote && !mapping.local) || (!mapping.remote && mapping.local));
+                    if (incompleteMapping) {
+                        throw new Error("Complete both qB and host paths for each mapping entry.");
+                    }
+                    payload.path_mappings = rawMappings.filter((mapping) => mapping.remote && mapping.local);
+                } else {
+                    payload.path_mappings = [];
                 }
-                payload.path_mappings = rawMappings.filter((mapping) => mapping.remote && mapping.local);
                 break;
             case "deluge":
                 payload.host = getInputValue("deluge_host") || CLIENT_DEFINITIONS.deluge.defaults.host;
@@ -1492,18 +1602,13 @@
     setInputValue("mm_import_directory", state.mediaSettings.import_directory || "/downloads/import");
 
         setCheckboxValue("dm_seeding_enabled", state.downloadSettings.seeding_enabled);
-        setCheckboxValue("dm_keep_torrent_active", state.downloadSettings.keep_torrent_active);
-        setCheckboxValue("dm_wait_for_completion", state.downloadSettings.wait_for_seeding_completion);
         setCheckboxValue("dm_delete_source", state.downloadSettings.delete_source_after_import);
-        setCheckboxValue("dm_delete_temp", state.downloadSettings.delete_temp_files);
-        setCheckboxValue("dm_auto_process_queue", state.downloadSettings.auto_process_queue);
+        setCheckboxValue("import_overwrite_existing", state.mediaSettings.overwrite_existing_files);
         setCheckboxValue("dm_auto_start_monitoring", state.downloadSettings.auto_start_monitoring);
         setCheckboxValue("dm_monitor_seeding", state.downloadSettings.monitor_seeding);
 
-        setNumericInput("dm_retention_days", state.downloadSettings.retention_days, 7);
         setInputValue("dm_temp_download_path", state.downloadSettings.temp_download_path || "");
         setInputValue("dm_temp_conversion_path", state.downloadSettings.temp_conversion_path || "");
-        setInputValue("dm_temp_failed_path", state.downloadSettings.temp_failed_path || "");
         setNumericInput("dm_max_concurrent_downloads", state.downloadSettings.max_concurrent_downloads, 3);
         setNumericInput("dm_queue_priority", state.downloadSettings.queue_priority_default, 5);
         setNumericInput("dm_monitor_interval", state.downloadSettings.monitoring_interval, 2);
@@ -1623,22 +1728,17 @@
             naming_template: templateValue,
             verify_after_import: Boolean(state.mediaSettings.verify_after_import),
             create_backup_on_error: Boolean(state.mediaSettings.create_backup_on_error),
-            delete_source_after_import: Boolean(state.mediaSettings.delete_source_after_import)
+            delete_source_after_import: Boolean(state.mediaSettings.delete_source_after_import),
+            overwrite_existing_files: getCheckboxValue("import_overwrite_existing")
         };
 
         const downloadPayload = {
             seeding_enabled: getCheckboxValue("dm_seeding_enabled"),
-            keep_torrent_active: getCheckboxValue("dm_keep_torrent_active"),
-            wait_for_seeding_completion: getCheckboxValue("dm_wait_for_completion"),
             delete_source_after_import: getCheckboxValue("dm_delete_source"),
-            delete_temp_files: getCheckboxValue("dm_delete_temp"),
-            auto_process_queue: getCheckboxValue("dm_auto_process_queue"),
             auto_start_monitoring: getCheckboxValue("dm_auto_start_monitoring"),
             monitor_seeding: getCheckboxValue("dm_monitor_seeding"),
-            retention_days: toNumeric(getInputValue("dm_retention_days"), state.downloadSettings.retention_days || 7),
             temp_download_path: getInputValue("dm_temp_download_path"),
             temp_conversion_path: getInputValue("dm_temp_conversion_path"),
-            temp_failed_path: getInputValue("dm_temp_failed_path"),
             max_concurrent_downloads: toNumeric(getInputValue("dm_max_concurrent_downloads"), state.downloadSettings.max_concurrent_downloads || 3),
             queue_priority_default: toNumeric(getInputValue("dm_queue_priority"), state.downloadSettings.queue_priority_default || 5),
             monitoring_interval: toNumeric(getInputValue("dm_monitor_interval"), state.downloadSettings.monitoring_interval || 2),
@@ -1824,6 +1924,32 @@
         target.textContent = `Configuration loaded ${state.lastLoaded.toLocaleString()}`;
     }
 
+    function handleAutoDownloadToggle(event) {
+        const checkbox = event.target;
+        if (!checkbox || !checkbox.checked) {
+            return;
+        }
+
+        checkbox.checked = false;
+        openModal("autoDownloadConfirmModal");
+    }
+
+    function handleAutoDownloadConfirm() {
+        const checkbox = document.getElementById("auto_download_enabled");
+        if (checkbox) {
+            checkbox.checked = true;
+        }
+        closeModal("autoDownloadConfirmModal");
+    }
+
+    function handleAutoDownloadCancel() {
+        const checkbox = document.getElementById("auto_download_enabled");
+        if (checkbox) {
+            checkbox.checked = false;
+        }
+        closeModal("autoDownloadConfirmModal");
+    }
+
     async function handleGeneralSubmit(form) {
         const selectedTheme = getInputValue("app_theme") || "dark";
         const updates = {
@@ -1854,7 +1980,9 @@
                 abs_sync_metadata: getCheckboxValue("abs_sync_metadata"),
                 abs_sync_only_owned: getCheckboxValue("abs_sync_only_owned"),
                 abs_auto_sync: getCheckboxValue("abs_auto_sync"),
-                abs_auto_sync_enabled: getCheckboxValue("abs_auto_sync")
+                abs_auto_sync_enabled: getCheckboxValue("abs_auto_sync"),
+                abs_auto_match_imports: getCheckboxValue("abs_auto_match_imports"),
+                abs_auto_match_delay_seconds: toNumeric(getInputValue("abs_auto_match_delay_seconds"), 10)
             }
         };
 
@@ -1944,7 +2072,12 @@
 
     function showClientPanel(clientType) {
         const sections = document.querySelectorAll("[data-client-panel]");
+        const blocked = isBlockedClientType(clientType);
         sections.forEach((section) => {
+            if (blocked) {
+                section.classList.add("hidden");
+                return;
+            }
             if (section.dataset.clientPanel === clientType) {
                 section.classList.remove("hidden");
             } else {
@@ -1952,10 +2085,7 @@
             }
         });
 
-        const mappingSection = document.querySelector("[data-qb-path-mappings]");
-        if (mappingSection) {
-            mappingSection.classList.toggle("hidden", clientType !== "qbittorrent");
-        }
+        updateQbPathMappingVisibility(blocked ? null : clientType);
     }
 
     function toggleRefreshButton(isLoading) {
@@ -2198,10 +2328,32 @@
             summaryLines.push(`<p><span class="font-semibold">Marketplace:</span> ${escapeHtml(account.marketplace)}</p>`);
         }
         if (Array.isArray(authData?.auth_files) && authData.auth_files.length) {
+            const formatAuthFile = (file) => {
+                if (typeof file === "string") {
+                    return file;
+                }
+                if (file && typeof file === "object") {
+                    if (file.path) {
+                        return file.path;
+                    }
+                    if (file.filepath) {
+                        return file.filepath;
+                    }
+                    if (file.filename) {
+                        return file.filename;
+                    }
+                }
+                try {
+                    return JSON.stringify(file);
+                } catch (_) {
+                    return String(file);
+                }
+            };
+
             summaryLines.push(`<p class="mt-2 text-xs text-base-content/60">Auth files:</p>`);
             summaryLines.push(`<ul class="list-disc pl-4 text-xs text-base-content/60">${authData.auth_files
                 .slice(0, 4)
-                .map((file) => `<li>${escapeHtml(file)}</li>`)
+                .map((file) => `<li>${escapeHtml(formatAuthFile(file))}</li>`)
                 .join("")}</ul>`);
         }
 

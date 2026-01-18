@@ -1,17 +1,27 @@
 """
-File Operations - Handles atomic file moving and verification
-Manages file system operations for importing audiobooks
+Module Name: file_operations.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Handles atomic file moves and copies with optional checksum verification
+    for the import service. Encapsulates disk checks and cleanup of
+    partially moved files.
 
-Location: services/import/file_operations.py
-Purpose: Safe file operations with atomic moves and verification
+Location:
+    /services/import_service/file_operations.py
+
 """
 
-import logging
 import os
 import shutil
 import hashlib
-from pathlib import Path
 from typing import Tuple
+
+from utils.logger import get_module_logger
+
+
+_LOGGER = get_module_logger("Service.Import.FileOperations")
 
 
 class FileOperations:
@@ -25,8 +35,8 @@ class FileOperations:
     - Disk space checks
     """
     
-    def __init__(self):
-        self.logger = logging.getLogger("ImportService.FileOperations")
+    def __init__(self, *, logger=None):
+        self.logger = logger or _LOGGER
     
     def move_file_atomic(self, source: str, destination: str, verify: bool = True) -> Tuple[bool, str]:
         """
@@ -85,7 +95,7 @@ class FileOperations:
                         pass
                     return False, "File verification failed - checksums don't match"
             
-            self.logger.info(f"Successfully moved file: {source} -> {destination}")
+            self.logger.info("Successfully moved file", extra={"source": source, "destination": destination})
             return True, "File moved successfully"
             
         except Exception as e:
@@ -160,7 +170,7 @@ class FileOperations:
                         pass
                     return False, "File verification failed - checksums don't match"
             
-            self.logger.info(f"Successfully copied file: {source} -> {destination}")
+            self.logger.info("Successfully copied file", extra={"source": source, "destination": destination})
             return True, "File copied successfully"
             
         except Exception as e:

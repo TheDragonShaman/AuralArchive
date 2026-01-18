@@ -1,9 +1,21 @@
+"""
+Module Name: audnexus_service.py
+Author: TheDragonShaman
+Created: August 26, 2025
+Last Modified: December 24, 2025
+Description:
+    Access the Audnexus API for author and book metadata with structured logging and fallbacks.
+Location:
+    /services/audnexus/audnexus_service.py
+
+"""
+
 import requests
-import logging
-from utils.logger import get_module_logger
 import threading
 from typing import List, Dict, Optional, Any
 from datetime import datetime
+
+from utils.logger import get_module_logger
 
 class AudnexusService:
     """
@@ -22,16 +34,16 @@ class AudnexusService:
                     cls._instance = super().__new__(cls)
         return cls._instance
     
-    def __init__(self):
+    def __init__(self, logger=None):
         if not self._initialized:
             with self._lock:
                 if not self._initialized:
-                    self.logger = get_module_logger("AudnexusService")
+                    self.logger = logger or get_module_logger("Service.Audnexus.Service")
                     self.base_url = "https://api.audnex.us"
                     # Keep connect/read timeouts short so UI doesn't hang on upstream slowness
                     self.request_timeout = (5, 8)  # (connect, read)
                     self.session = self._setup_session()
-                    self.logger.info("AudnexusService initialized successfully")
+                    self.logger.success("Audnexus service started successfully")
                     AudnexusService._initialized = True
     
     def _setup_session(self) -> requests.Session:
@@ -57,7 +69,7 @@ class AudnexusService:
             List of author objects with basic information
         """
         try:
-            self.logger.info(f"Searching authors for: {name}")
+            self.logger.info("Searching authors", extra={"author_name": name, "region": region})
             
             params = {
                 "name": name,
@@ -72,11 +84,11 @@ class AudnexusService:
             
             if response.status_code == 200:
                 authors = response.json()
-                self.logger.info(f"Found {len(authors)} authors for: {name}")
+                self.logger.info("Author search succeeded", extra={"author_name": name, "result_count": len(authors)})
                 # Limit results to num_results for compatibility
                 return authors[:num_results] if num_results else authors
             elif response.status_code == 400:
-                self.logger.warning(f"Bad request for author search: {name}")
+                self.logger.warning("Bad request for author search", extra={"author_name": name, "region": region})
                 return []
             else:
                 body_preview = response.text[:200] if response.text else ''
@@ -90,8 +102,11 @@ class AudnexusService:
                 )
                 return []
                 
-        except Exception as e:
-            self.logger.error(f"Error searching authors for '{name}': {e}")
+        except Exception as exc:
+            self.logger.error(
+                "Error searching authors",
+                extra={"author_name": name, "exc": exc}
+            )
             return []
     
     def get_author_details(self, asin: str, region: str = "us", update: bool = False) -> Optional[Dict]:
@@ -107,7 +122,7 @@ class AudnexusService:
             Author object with full details
         """
         try:
-            self.logger.info(f"Getting author details for ASIN: {asin}")
+            self.logger.info("Getting author details", extra={"author_asin": asin, "region": region, "force_update": update})
             
             params = {
                 "region": region,
@@ -122,10 +137,10 @@ class AudnexusService:
             
             if response.status_code == 200:
                 author = response.json()
-                self.logger.info(f"Retrieved author details for: {author.get('name', asin)}")
+                self.logger.info("Author details retrieved", extra={"author_asin": asin, "author_name": author.get("name", asin)})
                 return author
             elif response.status_code == 404:
-                self.logger.warning(f"Author not found: {asin}")
+                self.logger.warning("Author not found", extra={"author_asin": asin})
                 return None
             else:
                 body_preview = response.text[:200] if response.text else ''
@@ -139,8 +154,11 @@ class AudnexusService:
                 )
                 return None
                 
-        except Exception as e:
-            self.logger.error(f"Error getting author details for '{asin}': {e}")
+        except Exception as exc:
+            self.logger.error(
+                "Error getting author details",
+                extra={"author_asin": asin, "exc": exc}
+            )
             return None
     
     def get_book_details(self, asin: str, region: str = "us", seed_authors: bool = True, update: bool = False) -> Optional[Dict]:
@@ -157,7 +175,7 @@ class AudnexusService:
             Book object with full details
         """
         try:
-            self.logger.info(f"Getting book details for ASIN: {asin}")
+            self.logger.info("Getting book details", extra={"book_asin": asin, "region": region, "seed_authors": seed_authors, "force_update": update})
             
             params = {
                 "region": region,
@@ -173,10 +191,10 @@ class AudnexusService:
             
             if response.status_code == 200:
                 book = response.json()
-                self.logger.info(f"Retrieved book details for: {book.get('title', asin)}")
+                self.logger.info("Book details retrieved", extra={"book_asin": asin, "title": book.get("title", asin)})
                 return book
             elif response.status_code == 404:
-                self.logger.warning(f"Book not found: {asin}")
+                self.logger.warning("Book not found", extra={"book_asin": asin})
                 return None
             else:
                 body_preview = response.text[:200] if response.text else ''
@@ -189,9 +207,11 @@ class AudnexusService:
                     }
                 )
                 return None
-                
-        except Exception as e:
-            self.logger.error(f"Error getting book details for '{asin}': {e}")
+        except Exception as exc:
+            self.logger.error(
+                "Error getting book details",
+                extra={"book_asin": asin, "exc": exc}
+            )
             return None
     
     def get_book_chapters(self, asin: str, region: str = "us", update: bool = False) -> Optional[Dict]:
@@ -207,7 +227,7 @@ class AudnexusService:
             Chapter data with timing information
         """
         try:
-            self.logger.info(f"Getting chapters for book ASIN: {asin}")
+            self.logger.info("Getting chapters", extra={"book_asin": asin, "region": region, "force_update": update})
             
             params = {
                 "region": region,
@@ -222,10 +242,10 @@ class AudnexusService:
             
             if response.status_code == 200:
                 chapters = response.json()
-                self.logger.info(f"Retrieved chapters for book: {asin}")
+                self.logger.info("Chapters retrieved", extra={"book_asin": asin})
                 return chapters
             elif response.status_code == 404:
-                self.logger.warning(f"Chapters not found for book: {asin}")
+                self.logger.warning("Chapters not found", extra={"book_asin": asin})
                 return None
             else:
                 body_preview = response.text[:200] if response.text else ''
@@ -239,8 +259,11 @@ class AudnexusService:
                 )
                 return None
                 
-        except Exception as e:
-            self.logger.error(f"Error getting chapters for '{asin}': {e}")
+        except Exception as exc:
+            self.logger.error(
+                "Error getting chapters",
+                extra={"book_asin": asin, "exc": exc}
+            )
             return None
     
     def find_author_by_name(self, author_name: str, region: str = "us") -> Optional[Dict]:
@@ -281,8 +304,11 @@ class AudnexusService:
             
             return target_author
             
-        except Exception as e:
-            self.logger.error(f"Error finding author '{author_name}': {e}")
+        except Exception as exc:
+            self.logger.error(
+                "Error finding author",
+                extra={"author_name": author_name, "exc": exc}
+            )
             return None
     
     def format_author_for_compatibility(self, author_data: Dict) -> Dict:
@@ -310,8 +336,11 @@ class AudnexusService:
             
             return formatted
             
-        except Exception as e:
-            self.logger.error(f"Error formatting author data: {e}")
+        except Exception as exc:
+            self.logger.error(
+                "Error formatting author data",
+                extra={"exc": exc}
+            )
             return author_data
     
     def format_book_for_compatibility(self, book_data: Dict) -> Dict:
@@ -378,14 +407,17 @@ class AudnexusService:
             
             return formatted
             
-        except Exception as e:
-            self.logger.error(f"Error formatting book data: {e}")
+        except Exception as exc:
+            self.logger.error(
+                "Error formatting book data",
+                extra={"exc": exc}
+            )
             return book_data
     
     def test_connection(self) -> tuple[bool, str]:
         """Test connection to Audnexus API"""
         try:
-            self.logger.info("Testing Audnexus API connection...")
+            self.logger.info("Testing Audnexus API connection")
             
             # Simple test search
             response = self.session.get(
@@ -396,15 +428,24 @@ class AudnexusService:
             
             if response.status_code == 200:
                 data = response.json()
-                self.logger.info("Audnexus API connection test successful")
+                self.logger.info(
+                    "Audnexus API connection test successful",
+                    extra={"author_count": len(data)}
+                )
                 return True, f"API accessible - found {len(data)} authors"
             else:
-                self.logger.error(f"Audnexus API test failed with status {response.status_code}")
+                self.logger.error(
+                    "Audnexus API test failed",
+                    extra={"status_code": response.status_code}
+                )
                 return False, f"API returned status {response.status_code}"
                 
-        except Exception as e:
-            self.logger.error(f"Audnexus API connection test error: {e}")
-            return False, f"Connection error: {str(e)}"
+        except Exception as exc:
+            self.logger.error(
+                "Audnexus API connection test error",
+                extra={"exc": exc}
+            )
+            return False, f"Connection error: {exc}"
     
     def get_service_status(self) -> Dict:
         """Get comprehensive service status"""
@@ -425,9 +466,12 @@ class AudnexusService:
                 }
             }
             
-        except Exception as e:
-            self.logger.error(f"Error getting service status: {e}")
-            return {'error': str(e)}
+        except Exception as exc:
+            self.logger.error(
+                "Error getting service status",
+                extra={"exc": exc}
+            )
+            return {'error': str(exc)}
     
     def reset_service(self):
         """Reset the service (for testing or troubleshooting)"""

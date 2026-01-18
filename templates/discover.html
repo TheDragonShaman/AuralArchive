@@ -4,60 +4,152 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/search.css') }}">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+    .discover-hero {
+        background: radial-gradient(circle at 20% 20%, rgba(66, 153, 225, 0.14), transparent 35%),
+                    radial-gradient(circle at 80% 10%, rgba(245, 166, 35, 0.16), transparent 32%),
+                    linear-gradient(135deg, #111827, #0b1220 60%, #0a1628);
+        padding: 2.75rem 1.5rem 1.5rem;
+        color: #e2e8f0;
+    }
+
+    .discover-hero__shell {
+        max-width: 1600px;
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+
+    .discover-hero__copy {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        font-family: 'Space Grotesk', 'Inter', system-ui, -apple-system, sans-serif;
+    }
+
+    .discover-hero__eyebrow {
+        display: none;
+    }
+
+    .discover-hero__title {
+        font-size: clamp(2.1rem, 3vw, 2.6rem);
+        font-weight: 700;
+        letter-spacing: -0.02em;
+    }
+
+    .discover-hero__subtitle {
+        color: rgba(226, 232, 240, 0.78);
+        max-width: 720px;
+        line-height: 1.6;
+    }
+
+    .discover-hero__actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+    }
+
+    .discover-hero__cta {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .discover-toggle-group {
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        padding: 0.25rem;
+        border-radius: 999px;
+        box-shadow: 0 12px 36px rgba(0, 0, 0, 0.25);
+    }
+
+    .discover-panel {
+        max-width: 3000px;
+        width: 100%;
+        margin-bottom: 1.5rem;
+    }
+
+    .discover-panel__shell {
+        background: transparent;
+        border: none;
+        border-radius: 0;
+        padding: 2.25rem 2.25rem 2.25rem;
+        box-shadow: none;
+    }
+
+    #recommendationStatus {
+        display: none;
+    }
+
+    #discover-empty {
+        margin-top: 2.5rem;
+    }
+
+    @media (max-width: 640px) {
+        .discover-hero {
+            padding: 2rem 1rem 1rem;
+        }
+
+        .discover-panel__shell {
+            padding: 1.1rem;
+        }
+    }
+</style>
 {% endblock %}
 
 {% block content %}
-<section class="search-page mx-auto px-6 py-8">
-    <div class="card bg-base-300/40 border border-base-content/10 shadow-lg">
-        <div class="card-body gap-6">
-            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                <div class="space-y-1">
-                    <h1 class="text-3xl font-bold tracking-tight">Recommended For You</h1>
-                    <p class="text-base-content/70">Refresh curated picks or toggle between familiar grid, list, and table layouts.</p>
-                </div>
-                <div class="flex flex-wrap items-center gap-3">
-                    <div class="btn-group">
-                        <button id="discover-view-grid" type="button" class="btn btn-sm btn-ghost view-toggle-btn is-active" aria-label="Grid view">
-                            <i class="fas fa-grip"></i>
-                            <span class="hidden sm:inline">Grid</span>
-                        </button>
-                        <button id="discover-view-list" type="button" class="btn btn-sm btn-ghost view-toggle-btn" aria-label="List view">
-                            <i class="fas fa-list"></i>
-                            <span class="hidden sm:inline">List</span>
-                        </button>
-                        <button id="discover-view-table" type="button" class="btn btn-sm btn-ghost view-toggle-btn" aria-label="Table view">
-                            <i class="fas fa-table"></i>
-                            <span class="hidden sm:inline">Table</span>
-                        </button>
-                    </div>
-                    <button id="refreshRecommendationsBtn" class="btn btn-primary btn-sm">
-                        <i class="fas fa-rotate-right mr-2"></i>
-                        Refresh Picks
-                    </button>
-                    <span id="recommendationStatus" class="badge badge-outline badge-sm capitalize">{{ 'Ready' if recommendations_configured else 'Unavailable' }}</span>
-                </div>
-            </div>
-
-            {% if recommendations_configured %}
-            <div id="discover-results" class="search-results-container hidden" aria-live="polite" data-view="grid"></div>
-            <div id="discover-empty" class="search-empty hidden">
-                <div class="empty-state card bg-base-200 border border-base-content/10 shadow-lg">
-                    <div class="card-body items-center text-center gap-4">
-                        <p class="text-base-content/70 max-w-md">Tap refresh to pull fresh picks from Audible, or verify your discovery sources in settings if nothing appears.</p>
-                        <button id="discover-empty-refresh" class="btn btn-primary btn-sm" type="button">Refresh Recommendations</button>
-                    </div>
-                </div>
-            </div>
-            {% else %}
-            <div class="flex flex-col items-center justify-center text-center py-10 space-y-4">
-                <i class="fas fa-circle-info text-4xl text-base-content/40"></i>
-                <div class="space-y-2">
-                    <h3 class="text-lg font-semibold">Recommendations Not Configured</h3>
-                    <p class="text-base-content/70">Connect your Audible credentials and enable discovery harvesting under <a class="link link-primary" href="/settings/audible">Settings &gt; Audible</a> to unlock tailored picks.</p>
-                </div>
-            </div>
-            {% endif %}
+<section class="discover-hero">
+    <div class="discover-hero__shell">
+        <div class="discover-hero__copy">
+            <div class="discover-hero__eyebrow">Audible-powered picks</div>
+            <h1 class="discover-hero__title">Recommended For You</h1>
+            <p class="discover-hero__subtitle">A refreshed shelf of curated titles tailored to your listening habits.</p>
         </div>
+        <div class="discover-hero__actions">
+            <div class="btn-group discover-toggle-group">
+                <button id="discover-view-grid" type="button" class="btn btn-sm btn-ghost view-toggle-btn is-active" aria-label="Grid view">
+                    <i class="fas fa-grip"></i>
+                    <span class="hidden sm:inline">Grid</span>
+                </button>
+                <button id="discover-view-list" type="button" class="btn btn-sm btn-ghost view-toggle-btn" aria-label="List view">
+                    <i class="fas fa-list"></i>
+                    <span class="hidden sm:inline">List</span>
+                </button>
+                <button id="discover-view-table" type="button" class="btn btn-sm btn-ghost view-toggle-btn" aria-label="Table view">
+                    <i class="fas fa-table"></i>
+                    <span class="hidden sm:inline">Table</span>
+                </button>
+            </div>
+            <div class="discover-hero__cta">
+                <button id="refreshRecommendationsBtn" class="btn btn-primary btn-sm">
+                    <i class="fas fa-rotate-right mr-2"></i>
+                    Refresh Picks
+                </button>
+                <span id="recommendationStatus" class="sr-only">{{ 'Ready' if recommendations_configured else 'Unavailable' }}</span>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="discover-panel mx-auto px-6 pb-10">
+    <div class="discover-panel__shell">
+        {% if recommendations_configured %}
+        <div id="discover-results" class="search-results-container hidden" aria-live="polite" data-view="grid"></div>
+        {% else %}
+        <div class="flex flex-col items-center justify-center text-center py-10 space-y-4">
+            <i class="fas fa-circle-info text-4xl text-base-content/40"></i>
+            <div class="space-y-2">
+                <h3 class="text-lg font-semibold">Recommendations Not Configured</h3>
+                <p class="text-base-content/70">Connect your Audible credentials and enable discovery harvesting under <a class="link link-primary" href="/settings/audible">Settings &gt; Audible</a> to unlock tailored picks.</p>
+            </div>
+        </div>
+        {% endif %}
     </div>
 </section>
 {% endblock %}

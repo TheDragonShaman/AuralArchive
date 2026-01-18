@@ -1,17 +1,14 @@
 """
-Quality Manager - Conversion Service Helper
+Module Name: quality_manager.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Manages audiobook conversion quality presets, validation, and recommendations.
 
-Manages audiobook conversion quality settings with configurable presets.
-Settings can be configured via the settings menu and saved to config.
+Location:
+    /services/conversion_service/quality_manager.py
 
-Features:
-- Predefined quality presets based on audiobook best practices
-- User-configurable settings
-- Quality validation and recommendations
-- Integration with config service
-
-Author: AuralArchive Development Team
-Created: September 28, 2025
 """
 
 from typing import Dict, Any, List, Optional
@@ -20,9 +17,9 @@ from utils.logger import get_module_logger
 
 class QualityManager:
     """Manager for conversion quality settings and presets"""
-    
-    def __init__(self):
-        self.logger = get_module_logger("QualityManager")
+
+    def __init__(self, *, logger=None):
+        self.logger = logger or get_module_logger("Service.Conversion.QualityManager")
         
         # Quality presets based on research and m4b-tool best practices
         self.quality_presets = self._initialize_quality_presets()
@@ -303,7 +300,7 @@ class QualityManager:
             }
             
         except Exception as e:
-            self.logger.error(f'Error optimizing settings: {e}')
+            self.logger.exception('Error optimizing settings', extra={'error': str(e)})
             return {
                 'optimized_settings': self.quality_presets['standard_quality'].copy(),
                 'optimizations_applied': [],

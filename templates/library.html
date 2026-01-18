@@ -3,25 +3,35 @@
 {% block title %}Library - AuralArchive{% endblock %}
 
 {% block content %}
-<div class="w-full">
-    
+<div class="w-full space-y-4">
     <!-- Top Control Bar -->
-    <div class="bg-base-200 border-y border-base-content/10 px-4 sm:px-6 lg:px-10 py-5 -mt-px">
-        <div class="flex flex-wrap items-center gap-4">
+    <div class="library-panel">
+        <div class="library-panel__header">
+            <div class="library-panel__actions">
+                <button type="button" class="btn btn-ghost btn-sm" id="clearFiltersBtn">
+                    <i class="fas fa-rotate-left"></i>
+                    <span class="hidden sm:inline">Clear filters</span>
+                    <span class="sm:hidden">Reset</span>
+                </button>
+                <button type="button" class="btn btn-soft btn-primary" id="selectModeBtn">
+                    <i class="fas fa-check-square"></i>
+                    <span class="hidden sm:inline">Select Books</span>
+                    <span class="sm:hidden">Select</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="library-toolbar" role="group" aria-label="Library filters">
             <!-- Search Library -->
-            <div class="flex-1 min-w-[200px] max-w-md">
-                <label for="searchInput" class="text-xs font-semibold uppercase tracking-wider text-base-content/60 block mb-1">
-                    Search Library
-                </label>
-                <input type="text" id="searchInput" placeholder="Search books by title, author, or series..." 
+            <div class="form-control library-field library-field--wide">
+                <label for="searchInput" class="library-label">Search Library</label>
+                <input type="text" id="searchInput" placeholder="Search by title, author, or series" 
                        class="input input-sm input-bordered w-full bg-base-100">
             </div>
 
             <!-- Status Filter -->
-            <div class="min-w-[140px]">
-                <label for="statusFilter" class="text-xs font-semibold uppercase tracking-wider text-base-content/60 block mb-1">
-                    Status
-                </label>
+            <div class="form-control library-field">
+                <label for="statusFilter" class="library-label">Status</label>
                 <select id="statusFilter" class="select select-sm select-bordered w-full bg-base-100">
                     <option value="">All Status</option>
                     <option value="owned">Owned</option>
@@ -32,10 +42,8 @@
             </div>
 
             <!-- Genre Filter -->
-            <div class="min-w-[140px]">
-                <label for="genreFilter" class="text-xs font-semibold uppercase tracking-wider text-base-content/60 block mb-1">
-                    Genre
-                </label>
+            <div class="form-control library-field">
+                <label for="genreFilter" class="library-label">Genre</label>
                 <select id="genreFilter" class="select select-sm select-bordered w-full bg-base-100">
                     <option value="">All Genres</option>
                     <option value="fiction">Fiction</option>
@@ -47,10 +55,8 @@
             </div>
 
             <!-- Sort By -->
-            <div class="min-w-[120px]">
-                <label for="sortFilter" class="text-xs font-semibold uppercase tracking-wider text-base-content/60 block mb-1">
-                    Sort By
-                </label>
+            <div class="form-control library-field">
+                <label for="sortFilter" class="library-label">Sort By</label>
                 <select id="sortFilter" class="select select-sm select-bordered w-full bg-base-100">
                     <option value="title">Title</option>
                     <option value="author">Author</option>
@@ -59,22 +65,10 @@
                 </select>
             </div>
 
-            <!-- Actions -->
-            <div class="min-w-[140px]">
-                <label class="text-xs font-semibold uppercase tracking-wider text-base-content/60 block mb-1">
-                    Actions
-                </label>
-                <button class="btn btn-soft btn-primary w-full" id="selectModeBtn">
-                    <i class="fas fa-check-square"></i> Select Books
-                </button>
-            </div>
-
             <!-- Size Slider -->
-            <div class="min-w-[180px]">
-                <label for="sizeSlider" class="text-xs font-semibold uppercase tracking-wider text-base-content/60 block mb-1">
-                    Size
-                </label>
-                <div class="flex items-center gap-2">
+            <div class="library-size" aria-label="Adjust card size">
+                <label for="sizeSlider" class="library-label">Card Density</label>
+                <div class="library-size__control">
                     <i class="fas fa-image text-xs text-base-content/60"></i>
                     <input type="range" id="sizeSlider" min="0" max="100" value="50" 
                            class="range range-primary range-xs flex-1" step="1">
@@ -84,14 +78,13 @@
         </div>
     </div>
 
-
     <!-- Selection Toolbar (Hidden by default) -->
-    <div class="alert shadow-lg bg-primary/10 border-l-4 border-primary px-6 py-3 hidden" id="selectionToolbar">
+    <div class="alert shadow-lg bg-primary/10 border border-primary/40 selection-toolbar hidden" id="selectionToolbar">
         <div class="flex-1">
             <i class="fas fa-check-square text-primary"></i>
             <span id="selectedCount" class="font-semibold">0 books selected</span>
         </div>
-        <div class="flex gap-2">
+        <div class="flex flex-wrap gap-2 justify-end">
             <button class="btn btn-soft" id="selectAllBtn">
                 <i class="fas fa-check-double"></i> Select All
             </button>
@@ -111,8 +104,8 @@
     </div>
 
     <!-- Books Grid -->
-    <div class="p-6">
-        <div class="grid gap-4 size-md" id="booksGrid"></div>
+    <div class="library-grid-panel">
+        <div class="grid gap-4 size-md library-grid" id="booksGrid"></div>
 
         <div id="emptyState" class="hidden col-span-full text-center py-24">
             <i class="fas fa-books text-6xl text-base-content/20 mb-4"></i>

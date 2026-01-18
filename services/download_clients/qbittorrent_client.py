@@ -1,4 +1,15 @@
-"""qBittorrent client implementation for the download subsystem."""
+"""
+Module Name: qbittorrent_client.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+	qBittorrent client implementation for the download subsystem.
+
+Location:
+	/services/download_clients/qbittorrent_client.py
+
+"""
 
 from __future__ import annotations
 
@@ -20,7 +31,7 @@ from requests.exceptions import RequestException
 from .base_torrent_client import BaseTorrentClient, TorrentState
 from utils.logger import get_module_logger
 
-logger = get_module_logger("DownloadClients.QBittorrent")
+_QB_LOGGER = get_module_logger("Service.DownloadClients.QBittorrent")
 
 
 class QBittorrentError(RuntimeError):
@@ -77,8 +88,9 @@ class QBittorrentClient(BaseTorrentClient):
 		"stalled": "stalled",
 	}
 
-	def __init__(self, config: Dict[str, Any]):
-		super().__init__(config)
+	def __init__(self, config: Dict[str, Any], *, logger=None):
+		super().__init__(config, logger=logger)
+		self.logger = logger or _QB_LOGGER
 		self._session: Optional[Session] = None
 		self.timeout = float(config.get("timeout", self.DEFAULT_TIMEOUT))
 		self.verify_cert = bool(config.get("verify_cert", True))
@@ -90,7 +102,7 @@ class QBittorrentClient(BaseTorrentClient):
 		self._seed_ratio_limit: Optional[float] = None
 		self._seed_time_limit_seconds: Optional[int] = None
 
-		logger.debug("Initialized QBittorrentClient for %s", self.base_url)
+		self.logger.debug("Initialized QBittorrentClient for %s", self.base_url)
 
 	@property
 	def session(self) -> Optional[Session]:
@@ -111,7 +123,7 @@ class QBittorrentClient(BaseTorrentClient):
 			self.connected = True
 			self._refresh_preferences()
 			self._clear_error()
-			logger.debug("Authenticated with qBittorrent at %s", self.base_url)
+			self.logger.debug("Authenticated with qBittorrent at %s", self.base_url)
 			return True
 		except QBittorrentError as exc:
 			self._teardown_session()
@@ -159,7 +171,7 @@ class QBittorrentClient(BaseTorrentClient):
 		expected_hash = self._normalize_info_hash(explicit_hash) or self._derive_info_hash(torrent_data)
 		known_hashes = self._get_existing_hashes()
 		if expected_hash and expected_hash in known_hashes:
-			logger.info("Torrent %s already present in qBittorrent", expected_hash)
+			self.logger.info("Torrent %s already present in qBittorrent", expected_hash)
 			return {
 				"success": True,
 				"hash": expected_hash,
@@ -197,7 +209,7 @@ class QBittorrentClient(BaseTorrentClient):
 				duplicate_hash = expected_hash
 
 			if duplicate_hash:
-				logger.info("qBittorrent reported duplicate torrent %s", duplicate_hash)
+				self.logger.info("qBittorrent reported duplicate torrent %s", duplicate_hash)
 				return {
 					"success": True,
 					"hash": duplicate_hash,
@@ -259,7 +271,7 @@ class QBittorrentClient(BaseTorrentClient):
 			self._request("POST", "torrents/setLocation", data=data)
 			return True
 		except QBittorrentError as exc:
-			logger.warning(
+			self.logger.warning(
 				"Failed to set qBittorrent save path for %s to %s: %s",
 				torrent_hash,
 				location,
@@ -364,7 +376,7 @@ class QBittorrentClient(BaseTorrentClient):
 			raise QBittorrentRequestError(f"HTTP {method} {endpoint} failed: {exc}") from exc
 
 		if response.status_code == 403:
-			logger.debug("Session cookie expired, re-authenticating")
+			self.logger.debug("Session cookie expired, re-authenticating")
 			self._login(force=True)
 			try:
 				response = self._session.request(method, url, timeout=self.timeout, **kwargs)
@@ -397,13 +409,13 @@ class QBittorrentClient(BaseTorrentClient):
 			self._preferences = prefs
 			self._seed_ratio_limit = self._extract_ratio_limit(prefs)
 			self._seed_time_limit_seconds = self._extract_time_limit_seconds(prefs)
-			logger.debug(
+			self.logger.debug(
 				"Loaded qBittorrent preferences: ratio_limit=%s, time_limit=%s",
 				self._seed_ratio_limit,
 				self._seed_time_limit_seconds,
 			)
 		except QBittorrentError as exc:
-			logger.warning("Unable to load qBittorrent preferences: %s", exc)
+			self.logger.warning("Unable to load qBittorrent preferences: %s", exc)
 			if self._seed_ratio_limit is None and self._seed_time_limit_seconds is None:
 				self._seed_ratio_limit = 2.0
 				self._seed_time_limit_seconds = 168 * 3600
@@ -473,6 +485,19 @@ class QBittorrentClient(BaseTorrentClient):
 		if value <= 0:
 			return None
 		return value
+
+	def _extract_seeding_time(self, data: Dict[str, Any]) -> int:
+		"""Prefer client-reported seeding_time; fall back to time_active."""
+		candidates = [data.get("seeding_time"), data.get("time_active"), 0]
+		for candidate in candidates:
+			try:
+				seconds = int(candidate)
+			except (TypeError, ValueError):
+				continue
+			if seconds < 0:
+				continue
+			return seconds
+		return 0
 
 	@staticmethod
 	def _minutes_to_seconds(raw_value: Any) -> Any:
@@ -793,7 +818,7 @@ class QBittorrentClient(BaseTorrentClient):
 			"save_path": data.get("save_path"),
 			"added_on": data.get("added_on"),
 			"completed_on": data.get("completion_on") or data.get("completed_on"),
-			"seeding_time": data.get("seeding_time"),
+			"seeding_time": self._extract_seeding_time(data),
 			"num_seeds": data.get("num_seeds"),
 			"num_leechs": data.get("num_leechs"),
 			"availability": data.get("availability"),
@@ -824,7 +849,7 @@ class QBittorrentClient(BaseTorrentClient):
 			return isinstance(value, (int, float)) and value > 0
 
 		if state_enum == TorrentState.ERROR:
-			logger.warning(
+			_QB_LOGGER.warning(
 				"Torrent %s entered error state '%s' while seeding; treating as complete",
 				torrent_hash,
 				state_str,
@@ -842,7 +867,7 @@ class QBittorrentClient(BaseTorrentClient):
 		specified_goals = _limit_enabled(seed_ratio_limit) or _limit_enabled(seed_time_limit)
 
 		if ratio_reached or time_reached:
-			logger.info(
+			_QB_LOGGER.info(
 				"Torrent %s met qBittorrent share goals (ratio %.2f/%s, time %ss/%s)",
 				torrent_hash,
 				ratio,
@@ -854,13 +879,13 @@ class QBittorrentClient(BaseTorrentClient):
 
 		if state_str in paused_states | completed_states:
 			if not specified_goals:
-				logger.info(
+				_QB_LOGGER.info(
 					"Torrent %s reported qBittorrent state '%s' with no seeding goals configured; treating as complete",
 					torrent_hash,
 					state_str,
 				)
 				return True
-			logger.debug(
+			_QB_LOGGER.debug(
 				"Torrent %s reported qBittorrent state '%s' but share goals unmet (ratio %.2f/%s, time %ss/%s); continuing to seed",
 				torrent_hash,
 				state_str,
@@ -873,12 +898,12 @@ class QBittorrentClient(BaseTorrentClient):
 
 		if state_enum == TorrentState.COMPLETE:
 			if not specified_goals:
-				logger.info(
+				_QB_LOGGER.info(
 					"Torrent %s in COMPLETE state with no seeding goals; assuming qBittorrent finalized seeding",
 					torrent_hash,
 				)
 				return True
-			logger.debug(
+			_QB_LOGGER.debug(
 				"Torrent %s in COMPLETE state but share goals unmet (ratio %.2f/%s, time %ss/%s); waiting",
 				torrent_hash,
 				ratio,

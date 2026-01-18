@@ -1,9 +1,15 @@
 """
-Indexers Module
-===============
+Module Name: __init__.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Indexer package exposing Torznab (Jackett) and direct provider
+    implementations for audiobook searches.
 
-Real indexer implementations for searching torrent trackers.
-Supports Torznab for unified audiobook searching.
+Location:
+    /services/indexers/__init__.py
+
 """
 
 from .base_indexer import BaseIndexer, IndexerProtocol, IndexerType

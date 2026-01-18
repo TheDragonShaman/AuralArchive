@@ -1,31 +1,25 @@
 """
-FFmpeg Handler - Universal AAX/AAXC Conversion Service Helper
+Module Name: ffmpeg_handler.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Builds and executes FFmpeg commands for audiobook conversion workflows,
+    including voucher handling for AAX/AAXC formats.
 
-Handles FFmpeg command building, execution, and validation for audiobook conversion.
-Supports both AAX (activation bytes) and AAXC (voucher keys) formats with automatic detection.
+Location:
+    /services/conversion_service/ffmpeg_handler.py
 
-Features:
-- Universal AAX/AAXC format detection and decryption
-- Voucher file discovery and key extraction
-- Fallback conversion methods with retry logic
-- Command building for various input/output formats
-- Progress parsing from FFmpeg output
-- Codec and installation validation
-
-Author: AuralArchive Development Team
-Created: September 28, 2025
-Updated: October 20, 2025 - Universal AAX/AAXC Support
 """
 
 import base64
-import subprocess
-import re
-import os
 import json
-import logging
+import os
+import re
+import subprocess
 from hashlib import sha256
-from typing import List, Dict, Any, Optional, Tuple, Union
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import audible
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -36,9 +30,9 @@ from utils.logger import get_module_logger
 
 class FFmpegHandler:
     """Universal Handler for FFmpeg operations supporting AAX and AAXC formats"""
-    
-    def __init__(self):
-        self.logger = get_module_logger("FFmpegHandler")
+
+    def __init__(self, *, logger=None):
+        self.logger = logger or get_module_logger("Service.Conversion.FFmpegHandler")
     
     # ============================================================================
     # FORMAT DETECTION AND KEY EXTRACTION
@@ -55,7 +49,7 @@ class FFmpegHandler:
             else:
                 return 'other'
         except Exception as e:
-            self.logger.error(f"Error detecting format for {input_file}: {e}")
+            self.logger.exception("Error detecting format", extra={"input_file": input_file, "error": str(e)})
             return 'unknown'
     
     def find_voucher_file(self, aaxc_file: str) -> Optional[str]:
@@ -75,7 +69,7 @@ class FFmpegHandler:
             for pattern in patterns:
                 if os.path.exists(pattern):
                     if self.is_valid_voucher(pattern):
-                        self.logger.info(f"Found voucher file: {pattern}")
+                        self.logger.info("Found voucher file", extra={"voucher_file": pattern, "aaxc_file": aaxc_file})
                         return pattern
             
             # Strategy 2: Content-based discovery in same directory
@@ -86,14 +80,14 @@ class FFmpegHandler:
                         if self.is_valid_voucher(voucher_path):
                             # Check if ASIN matches (if available)
                             if self.voucher_matches_file(voucher_path, aaxc_file):
-                                self.logger.info(f"Found matching voucher by content: {voucher_path}")
+                                self.logger.info("Found matching voucher by content", extra={"voucher_file": voucher_path, "aaxc_file": aaxc_file})
                                 return voucher_path
 
-            self.logger.debug(f"No voucher file discovered automatically for {aaxc_file}")
+            self.logger.debug("No voucher file discovered automatically", extra={"aaxc_file": aaxc_file})
             return None
             
         except Exception as e:
-            self.logger.error(f"Error finding voucher file for {aaxc_file}: {e}")
+            self.logger.exception("Error finding voucher file", extra={"aaxc_file": aaxc_file, "error": str(e)})
             return None
     
     def is_valid_voucher(self, file_path: str) -> bool:
@@ -116,7 +110,7 @@ class FFmpegHandler:
             return has_key and has_iv
             
         except Exception as e:
-            self.logger.debug(f"File {file_path} is not a valid voucher: {e}")
+            self.logger.debug("File is not a valid voucher", extra={"voucher_file": file_path, "error": str(e)})
             return False
     
     def voucher_matches_file(self, voucher_path: str, aaxc_file: str) -> bool:
@@ -143,7 +137,7 @@ class FFmpegHandler:
             return True
             
         except Exception as e:
-            self.logger.debug(f"Error checking voucher match: {e}")
+            self.logger.debug("Error checking voucher match", extra={"voucher_file": voucher_path, "aaxc_file": aaxc_file, "error": str(e)})
             return True  # Default to assuming match
     
     def extract_voucher_keys(self, voucher_file: str) -> Tuple[str, str]:
@@ -172,7 +166,7 @@ class FFmpegHandler:
                 iv = license_response['iv']
                 if not key or not iv:
                     raise ValueError("Key or IV is empty in voucher file")
-                self.logger.debug(f"Extracted keys from voucher JSON: key={key[:8]}..., iv={iv[:8]}...")
+                self.logger.debug("Extracted keys from voucher JSON", extra={"voucher_file": voucher_file, "key_prefix": key[:8], "iv_prefix": iv[:8]})
                 return key, iv
 
             if not isinstance(license_response, str):
@@ -189,7 +183,7 @@ class FFmpegHandler:
             if not key or not iv:
                 raise ValueError("Decrypted voucher did not contain key/iv")
 
-            self.logger.debug(f"Decrypted keys from voucher: key={key[:8]}..., iv={iv[:8]}...")
+            self.logger.debug("Decrypted keys from voucher", extra={"voucher_file": voucher_file, "key_prefix": key[:8], "iv_prefix": iv[:8]})
             return key, iv
 
         except KeyError as e:
@@ -257,24 +251,24 @@ class FFmpegHandler:
         format_type = self.detect_audio_format(input_file)
         
         if format_type == 'aax':
-            self.logger.info("AAX file detected - will use activation bytes")
+            self.logger.info("AAX file detected - using activation bytes", extra={"input_file": input_file})
             return 'activation_bytes', None
         
         elif format_type == 'aaxc':
             voucher_file = self.find_voucher_file(input_file)
             if voucher_file:
-                self.logger.debug("AAXC voucher detected during discovery")
+                self.logger.debug("AAXC voucher detected during discovery", extra={"input_file": input_file, "voucher_file": voucher_file})
                 return 'voucher_keys', voucher_file
             else:
-                self.logger.debug("AAXC voucher not discovered; will try activation bytes fallback if provided")
+                self.logger.debug("AAXC voucher not discovered; will try activation bytes fallback if provided", extra={"input_file": input_file})
                 return 'activation_bytes_fallback', None
         
         elif format_type == 'other':
-            self.logger.info("Non-DRM audio file detected - no decryption needed")
+            self.logger.info("Non-DRM audio file detected - no decryption needed", extra={"input_file": input_file})
             return 'no_drm', None
         
         else:
-            self.logger.error(f"Unknown audio format: {input_file}")
+            self.logger.error("Unknown audio format", extra={"input_file": input_file})
             return 'unknown', None
     
     def validate_installation(self) -> Dict[str, Any]:
@@ -372,15 +366,14 @@ class FFmpegHandler:
         if voucher_file and method != 'voucher_keys':
             if voucher_to_use and os.path.exists(voucher_to_use):
                 self.logger.info(
-                    "Explicit voucher supplied for %s; forcing voucher-based conversion",
-                    os.path.basename(input_file)
+                    "Explicit voucher supplied; forcing voucher-based conversion",
+                    extra={"input_file": input_file, "voucher_file": voucher_to_use}
                 )
                 method = 'voucher_keys'
             else:
                 self.logger.warning(
-                    "Voucher path provided but not found (%s); keeping detected method %s",
-                    voucher_file,
-                    method
+                    "Voucher path provided but not found; keeping detected method",
+                    extra={"input_file": input_file, "voucher_file": voucher_file, "method": method}
                 )
         
         # Build command with appropriate method
@@ -390,7 +383,7 @@ class FFmpegHandler:
                 method, activation_bytes, voucher_to_use, metadata
             )
         except Exception as e:
-            self.logger.error(f"Failed to build conversion command: {e}")
+            self.logger.exception("Failed to build conversion command", extra={"input_file": input_file, "output_file": output_file, "error": str(e)})
             raise
     
     def _build_command_for_method(
@@ -412,23 +405,23 @@ class FFmpegHandler:
             if not activation_bytes:
                 raise ValueError("Activation bytes required for AAX conversion but not provided")
             cmd.extend(['-activation_bytes', activation_bytes])
-            self.logger.debug("Using activation bytes for AAX decryption")
+            self.logger.debug("Using activation bytes for AAX decryption", extra={"input_file": input_file})
             
         elif method == 'voucher_keys':
             if not voucher_file:
                 raise ValueError("Voucher file required for AAXC conversion but not found")
             key, iv = self.extract_voucher_keys(voucher_file)
             cmd.extend(['-audible_key', key, '-audible_iv', iv])
-            self.logger.debug(f"Using voucher keys for AAXC decryption: {os.path.basename(voucher_file)}")
+            self.logger.debug("Using voucher keys for AAXC decryption", extra={"input_file": input_file, "voucher_file": voucher_file})
             
         elif method == 'activation_bytes_fallback':
             if not activation_bytes:
                 raise ValueError("Activation bytes required for AAXC fallback but not provided")
             cmd.extend(['-activation_bytes', activation_bytes])
-            self.logger.warning("Using activation bytes fallback for AAXC (voucher missing)")
+            self.logger.warning("Using activation bytes fallback for AAXC (voucher missing)", extra={"input_file": input_file})
             
         elif method == 'no_drm':
-            self.logger.debug("No DRM decryption needed")
+            self.logger.debug("No DRM decryption needed", extra={"input_file": input_file})
             
         else:
             raise ValueError(f"Unknown conversion method: {method}")
@@ -445,7 +438,7 @@ class FFmpegHandler:
             cmd.extend(['-c', 'copy'])  # Copy all compatible streams
             cmd.extend(['-map_metadata', '0'])  # Preserve metadata
             cmd.extend(['-map_chapters', '0'])   # Preserve chapters
-            self.logger.debug("Using stream copy for M4B/M4A output (fast conversion)")
+            self.logger.debug("Using stream copy for M4B/M4A output (fast conversion)", extra={"output_file": output_file})
             
         else:
             # Other formats - re-encode as needed
@@ -471,7 +464,7 @@ class FFmpegHandler:
             if quality_settings.get('preserve_chapters', True):
                 cmd.extend(['-map_chapters', '0'])
                 
-            self.logger.debug(f"Using re-encoding: {codec} at {bitrate}")
+            self.logger.debug("Using re-encoding", extra={"codec": codec, "bitrate": bitrate, "output_file": output_file})
         
         # Custom metadata if provided
         if metadata:
@@ -529,14 +522,14 @@ class FFmpegHandler:
         
         if not methods_to_try:
             error_msg = f"No conversion methods available for {input_file}"
-            self.logger.error(error_msg)
+            self.logger.error("No conversion methods available", extra={"input_file": input_file})
             return False, 'none', []
         
         # Try each method in sequence
         last_error = ""
         for method, method_voucher in methods_to_try:
             try:
-                self.logger.debug(f"Attempting conversion with method: {method}")
+                self.logger.debug("Attempting conversion with method", extra={"input_file": input_file, "method": method, "voucher_file": method_voucher})
                 
                 cmd = self._build_command_for_method(
                     input_file, output_file, quality_settings,
@@ -544,17 +537,17 @@ class FFmpegHandler:
                 )
                 
                 # Test command (don't actually run here - that's handled by caller)
-                self.logger.debug(f"Built command for method {method}: {' '.join(cmd[:8])}...")
+                self.logger.debug("Built command for method", extra={"method": method, "command_preview": ' '.join(cmd[:8])})
                 return True, method, cmd
                 
             except Exception as e:
                 last_error = str(e)
-                self.logger.warning(f"Method {method} failed during command building: {e}")
+                self.logger.warning("Method failed during command building", extra={"method": method, "error": str(e)})
                 continue
         
         # All methods failed
         error_msg = f"All conversion methods failed. Last error: {last_error}"
-        self.logger.error(error_msg)
+        self.logger.error("All conversion methods failed", extra={"input_file": input_file, "last_error": last_error})
         return False, 'failed', []
     
     def _get_ffmpeg_metadata_mapping(self) -> Dict[str, str]:
@@ -589,11 +582,11 @@ class FFmpegHandler:
                 duration_str = result.stdout.strip()
                 return float(duration_str) if duration_str else 0.0
             else:
-                self.logger.warning(f"Could not get duration for {input_file}: {result.stderr}")
+                self.logger.warning("Could not get duration", extra={"input_file": input_file, "stderr": result.stderr})
                 return 0.0
                 
         except Exception as e:
-            self.logger.error(f"Error getting duration for {input_file}: {e}")
+            self.logger.exception("Error getting duration", extra={"input_file": input_file, "error": str(e)})
             return 0.0
     
     def parse_progress(self, ffmpeg_line: str, total_duration: float) -> int:
@@ -617,7 +610,7 @@ class FFmpegHandler:
             return 0
             
         except Exception as e:
-            self.logger.debug(f"Error parsing progress: {e}")
+            self.logger.debug("Error parsing progress", extra={"error": str(e)})
             return 0
     
     def extract_metadata(self, input_file: str) -> Dict[str, Any]:
@@ -654,11 +647,11 @@ class FFmpegHandler:
                     'streams': probe_data.get('streams', [])
                 }
             else:
-                self.logger.warning(f"Could not extract metadata from {input_file}: {result.stderr}")
+                self.logger.warning("Could not extract metadata", extra={"input_file": input_file, "stderr": result.stderr})
                 return {}
                 
         except Exception as e:
-            self.logger.error(f"Error extracting metadata from {input_file}: {e}")
+            self.logger.exception("Error extracting metadata", extra={"input_file": input_file, "error": str(e)})
             return {}
     
     def validate_output_file(self, output_file: str) -> Dict[str, Any]:

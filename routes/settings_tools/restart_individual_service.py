@@ -1,11 +1,13 @@
 """
-Restart Individual Service Route - AuralArchive
+Module Name: restart_individual_service.py
+Author: TheDragonShaman
+Created: August 6, 2025
+Last Modified: December 23, 2025
+Description:
+    Settings helper to restart specific backend services from the UI.
+Location:
+    /routes/settings_tools/restart_individual_service.py
 
-Allows restarting a specific backend service (database, Audible, etc.) from the
-settings UI.
-
-Author: AuralArchive Development Team
-Updated: December 2, 2025
 """
 
 from datetime import datetime
@@ -22,7 +24,7 @@ from services.service_manager import (
 )
 from utils.logger import get_module_logger
 
-logger = get_module_logger("Route.Settings.RestartService")
+logger = get_module_logger("Routes.Settings.RestartService")
 
 def handle_restart_individual_service(service_name):
     """Restart a specific service."""

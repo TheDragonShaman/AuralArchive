@@ -1,4 +1,16 @@
-"""Base interfaces for direct provider adapters."""
+"""
+Module Name: base.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Base interfaces and request spec for direct provider adapters used by
+    DirectIndexer.
+
+Location:
+    /services/indexers/providers/base.py
+
+"""
 
 from __future__ import annotations
 

@@ -1,13 +1,23 @@
 """
-Audible Download Queue API - AuralArchive
+Module Name: streaming_download_api.py
+Author: TheDragonShaman
+Created: August 18, 2025
+Last Modified: December 23, 2025
+Description:
+    Audible download queue API routed through the unified download queue
+    instead of separate streaming downloads.
 
-Unified download queue integration for Audible books.
-Routes Audible download requests through the main download queue system
-instead of using separate streaming downloads.
+Location:
+    /api/streaming_download_api.py
 
-Author: AuralArchive Development Team  
-Created: September 19, 2025
-Updated: November 4, 2025 - Migrated to unified download queue
+Streaming Download API
+======================
+
+Endpoints:
+- POST   /api/stream-download              - Queue Audible download
+- GET    /api/stream-download/status      - Status of Audible downloads
+- GET    /api/stream-download/<id>        - Status of a specific download
+- GET    /api/test-socketio               - Test SocketIO connectivity
 """
 
 from flask import Blueprint, request, jsonify
@@ -77,7 +87,7 @@ def start_streaming_download():
 
         if not owned_via_audible:
             reason = ownership_details.get('reason') if ownership_details else 'Ownership verification failed.'
-            logger.warning(f"Blocked Audible queue request for ASIN {asin}: {reason}")
+            logger.warning("Blocked Audible queue request for ASIN %s: %s", asin, reason)
             return jsonify({
                 'success': False,
                 'error': 'Audible ownership verification failed',
@@ -136,9 +146,8 @@ def start_streaming_download():
                 'success': False,
                 'error': result.get('message', 'Failed to queue download')
             }), 400
-        
     except Exception as e:
-        logger.error(f"Error queueing Audible download: {str(e)}", exc_info=True)
+        logger.error("Error queueing Audible download: %s", e, exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e),
@@ -191,7 +200,7 @@ def get_streaming_downloads_status():
         })
         
     except Exception as e:
-        logger.error(f"Error getting download status: {str(e)}")
+        logger.error("Error getting download status: %s", e)
         return jsonify({
             'success': False,
             'error': str(e),
@@ -235,7 +244,7 @@ def get_download_status(download_id):
         })
         
     except Exception as e:
-        logger.error(f"Error getting download status: {str(e)}")
+        logger.error("Error getting download status: %s", e)
         return jsonify({
             'success': False,
             'error': str(e)
@@ -270,7 +279,7 @@ def test_socketio():
         })
         
     except Exception as e:
-        logger.error(f"SocketIO test error: {str(e)}")
+        logger.error("SocketIO test error: %s", e)
         return jsonify({
             'success': False,
             'error': str(e)

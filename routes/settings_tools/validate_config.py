@@ -1,10 +1,13 @@
 """
-Validate Configuration Route - AuralArchive
+Module Name: validate_config.py
+Author: TheDragonShaman
+Created: August 10, 2025
+Last Modified: December 23, 2025
+Description:
+    Settings helper to validate configuration and return detailed results.
+Location:
+    /routes/settings_tools/validate_config.py
 
-Runs configuration validation and surfaces results in the settings UI.
-
-Author: AuralArchive Development Team
-Updated: December 2, 2025
 """
 
 from datetime import datetime
@@ -14,7 +17,7 @@ from flask import jsonify
 from services.service_manager import get_config_service
 from utils.logger import get_module_logger
 
-logger = get_module_logger("Route.Settings.ValidateConfig")
+logger = get_module_logger("Routes.Settings.ValidateConfig")
 
 def handle_validate_configuration():
     """Validate all configuration settings with detailed results - FIXED."""

@@ -1,11 +1,13 @@
 """
-Library Routes - AuralArchive
+Module Name: library.py
+Author: TheDragonShaman
+Created: July 22, 2025
+Last Modified: December 23, 2025
+Description:
+    Library routes for book views, detail APIs, metadata refresh, and ABS sync.
+Location:
+    /routes/library.py
 
-Handles the library views, book detail APIs, metadata refresh, and AudiobookShelf
-sync integrations.
-
-Author: AuralArchive Development Team
-Updated: December 2, 2025
 """
 
 from typing import Any, Dict, List, Optional
@@ -21,7 +23,7 @@ from services.service_manager import (
 from utils.logger import get_module_logger
 
 library_bp = Blueprint('library', __name__)
-logger = get_module_logger("Route.Library")
+logger = get_module_logger("Routes.Library")
 
 def format_book_for_template(book):
     """Format book data for MediaVault template with cached cover images."""
@@ -165,7 +167,7 @@ def library_page():
                                downloading_count=downloading_count)
     
     except Exception as e:
-        logger.error(f"Error loading library page: {e}")
+        logger.error("Error loading library page: %s", e)
     return render_template('library.html',
                    title='Library',
                    books=[],
@@ -199,7 +201,7 @@ def get_book_details_by_asin(asin):
             return jsonify({'error': 'Book not found'}), 404
     
     except Exception as e:
-        logger.error(f"Error fetching book details by ASIN: {e}")
+        logger.error("Error fetching book details by ASIN: %s", e)
         return jsonify({'error': 'Failed to fetch book details'}), 500
 
 @library_bp.route('/book/<int:book_id>')
@@ -215,7 +217,7 @@ def get_book_details(book_id):
             return jsonify({'error': 'Book not found'}), 404
     
     except Exception as e:
-        logger.error(f"Error fetching book details: {e}")
+        logger.error("Error fetching book details: %s", e)
         return jsonify({'error': 'Failed to fetch book details'}), 500
 
 @library_bp.route('/book/<int:book_id>/status', methods=['PUT'])
@@ -233,7 +235,7 @@ def update_book_status(book_id):
             return jsonify({'error': 'Failed to update status'}), 500
     
     except Exception as e:
-        logger.error(f"Error updating book status: {e}")
+        logger.error("Error updating book status: %s", e)
         return jsonify({'error': 'Failed to update status'}), 500
 
 @library_bp.route('/book/<int:book_id>', methods=['DELETE'])
@@ -241,14 +243,57 @@ def delete_book(book_id):
     """Delete a book from the library."""
     try:
         db_service = get_database_service()
+        logger.info("Delete request received for book ID %s", book_id)
         if db_service.delete_book(book_id):
+            logger.info("Book deleted (library route) ID=%s", book_id)
             return jsonify({'success': True, 'message': 'Book deleted'})
         else:
+            logger.warning("Book delete failed (library route) ID=%s", book_id)
             return jsonify({'error': 'Failed to delete book'}), 500
     
     except Exception as e:
-        logger.error(f"Error deleting book: {e}")
+        logger.error("Error deleting book: %s", e)
         return jsonify({'error': 'Failed to delete book'}), 500
+
+@library_bp.route('/books/bulk-delete', methods=['POST'])
+def bulk_delete_books():
+    """Delete multiple books from the library."""
+    try:
+        db_service = get_database_service()
+        payload = request.get_json(silent=True) or {}
+        book_ids = payload.get('book_ids') or payload.get('ids') or []
+
+        if not isinstance(book_ids, list) or not book_ids:
+            return jsonify({'error': 'book_ids list is required'}), 400
+
+        deleted = []
+        failed = []
+
+        logger.info("Bulk delete requested for %s book(s)", len(book_ids))
+
+        for raw_id in book_ids:
+            try:
+                book_id = int(raw_id)
+            except (TypeError, ValueError):
+                failed.append({'id': raw_id, 'error': 'invalid id'})
+                continue
+
+            if db_service.delete_book(book_id):
+                logger.info("Book deleted (bulk) ID=%s", book_id)
+                deleted.append(book_id)
+            else:
+                logger.warning("Book delete failed (bulk) ID=%s", book_id)
+                failed.append({'id': book_id, 'error': 'delete_failed'})
+
+        return jsonify({
+            'success': True,
+            'deleted_ids': deleted,
+            'failed': failed
+        })
+
+    except Exception as e:
+        logger.error(f"Error in bulk delete: {e}")
+        return jsonify({'error': 'Failed to delete books'}), 500
 
 # ============================================================================
 # METADATA UPDATE ROUTES - REFACTORED FOR NEW SERVICE ARCHITECTURE

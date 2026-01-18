@@ -1,11 +1,13 @@
 """
-Series Routes - AuralArchive
+Module Name: series.py
+Author: TheDragonShaman
+Created: July 25, 2025
+Last Modified: December 23, 2025
+Description:
+    Series routes for views and APIs that sync Audible metadata and missing books.
+Location:
+    /routes/series.py
 
-Provides Flask views and JSON endpoints for displaying audiobook series,
-syncing metadata from Audible, and coordinating missing book searches.
-
-Author: AuralArchive Development Team
-Updated: December 2, 2025
 """
 from collections import Counter
 from flask import Blueprint, render_template, jsonify, request
@@ -13,7 +15,7 @@ from services.service_manager import get_database_service
 from services.audible.audible_service_manager import get_audible_manager
 from utils.logger import get_module_logger
 
-logger = get_module_logger("SeriesRoute")
+logger = get_module_logger("Routes.Series")
 
 series_bp = Blueprint('series', __name__)
 
@@ -38,7 +40,7 @@ def _analyze_series_authors(books):
         return primary_author, candidates
 
     except Exception as exc:
-        logger.debug(f"Author analysis failed: {exc}")
+        logger.debug("Author analysis failed: %s", exc)
         return None, []
 
 @series_bp.route('/')
@@ -48,7 +50,7 @@ def series_list():
         logger.info("Series list page accessed")
         return render_template('series.html')
     except Exception as e:
-        logger.error(f"Error loading series list page: {e}")
+        logger.error("Error loading series list page: %s", e)
         return render_template('error.html', error=str(e)), 500
 
 
@@ -56,10 +58,10 @@ def series_list():
 def series_detail(series_asin):
     """Display details of a specific series"""
     try:
-        logger.info(f"Series detail page accessed: {series_asin}")
+        logger.info("Series detail page accessed: %s", series_asin)
         return render_template('series_detail.html', series_asin=series_asin)
     except Exception as e:
-        logger.error(f"Error loading series detail page: {e}")
+        logger.error("Error loading series detail page: %s", e)
         return render_template('error.html', error=str(e)), 500
 
 
@@ -72,9 +74,9 @@ def api_series_list():
         # Sync series library status before returning results
         try:
             updated = db_service.series.sync_library_status()
-            logger.debug(f"Synced series library status: {updated} records updated")
+            logger.debug("Synced series library status: %s records updated", updated)
         except Exception as e:
-            logger.warning(f"Failed to sync series library status: {e}")
+            logger.warning("Failed to sync series library status: %s", e)
         
         # Get all series using the new series operations
         series_list = db_service.series.get_all_series()
@@ -86,7 +88,7 @@ def api_series_list():
         })
         
     except Exception as e:
-        logger.error(f"Error fetching series list: {e}")
+        logger.error("Error fetching series list: %s", e)
         return jsonify({
             'success': False,
             'error': str(e)
@@ -99,14 +101,14 @@ def api_series_books(series_asin):
     try:
         db_service = get_database_service()
         
-        logger.info(f"Fetching series books for: {series_asin}")
+        logger.info("Fetching series books for: %s", series_asin)
         
         # Sync series library status before returning results
         try:
             updated = db_service.series.sync_library_status()
-            logger.debug(f"Synced series library status: {updated} records updated")
+            logger.debug("Synced series library status: %s records updated", updated)
         except Exception as e:
-            logger.warning(f"Failed to sync series library status: {e}")
+            logger.warning("Failed to sync series library status: %s", e)
         
         series_metadata = db_service.series.get_series_by_asin(series_asin)
         logger.debug("Series metadata loaded", extra={
@@ -151,7 +153,7 @@ def api_series_books(series_asin):
         })
         
     except Exception as e:
-        logger.error(f"Error fetching series books: {e}", exc_info=True)
+        logger.error("Error fetching series books: %s", e, exc_info=True)
         return jsonify({
             'success': False,
             'error': str(e)
@@ -178,7 +180,7 @@ def api_search_missing_books():
         # TODO: Implement search functionality
         # This would integrate with your search service to find missing books
         
-        logger.info(f"Search initiated for {len(missing_books)} missing books in series: {series_asin}")
+        logger.info("Search initiated for %s missing books in series: %s", len(missing_books), series_asin)
         
         return jsonify({
             'success': True,
@@ -188,7 +190,7 @@ def api_search_missing_books():
         })
         
     except Exception as e:
-        logger.error(f"Error searching for missing books: {e}")
+        logger.error("Error searching for missing books: %s", e)
         return jsonify({
             'success': False,
             'error': str(e)
@@ -257,7 +259,7 @@ def api_sync_book_series():
                             )
                 
         except Exception as e:
-            logger.error(f"Error fetching book metadata from Audible: {e}")
+            logger.error("Error fetching book metadata from Audible: %s", e)
             return jsonify({
                 'success': False,
                 'error': f'Failed to fetch book metadata: {str(e)}'
@@ -271,7 +273,7 @@ def api_sync_book_series():
             return jsonify(result), 500
         
     except Exception as e:
-        logger.error(f"Error syncing book series: {e}")
+        logger.error("Error syncing book series: %s", e)
         return jsonify({
             'success': False,
             'error': str(e)
@@ -288,7 +290,7 @@ def api_refresh_series(series_asin):
                 'error': 'Series ASIN is required'
             }), 400
         
-        logger.info(f"Series refresh requested: {series_asin}")
+        logger.info("Series refresh requested: %s", series_asin)
         
         audible_manager = get_audible_manager()
         db_service = get_database_service()
@@ -307,7 +309,7 @@ def api_refresh_series(series_asin):
             return jsonify(result), 500
         
     except Exception as e:
-        logger.error(f"Error refreshing series: {e}")
+        logger.error("Error refreshing series: %s", e)
         return jsonify({
             'success': False,
             'error': str(e)
@@ -338,7 +340,7 @@ def api_sync_all_series():
         return jsonify(result)
         
     except Exception as e:
-        logger.error(f"Error in batch series sync: {e}")
+        logger.error("Error in batch series sync: %s", e)
         return jsonify({
             'success': False,
             'error': str(e)
@@ -362,7 +364,7 @@ def api_sync_library_status():
         })
         
     except Exception as e:
-        logger.error(f"Error syncing library status: {e}")
+        logger.error("Error syncing library status: %s", e)
         return jsonify({
             'success': False,
             'error': str(e)

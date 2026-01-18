@@ -1,11 +1,13 @@
 """
-Settings Routes - AuralArchive
+Module Name: settings.py
+Author: TheDragonShaman
+Created: July 26, 2025
+Last Modified: December 23, 2025
+Description:
+    Settings dashboard routes with tabbed AJAX views and diagnostics helpers.
+Location:
+    /routes/settings.py
 
-Powers the settings dashboard, tabbed AJAX views, and helper endpoints for
-download clients, caching, indexing, and diagnostics.
-
-Author: AuralArchive Development Team
-Updated: December 2, 2025
 """
 
 import json
@@ -31,7 +33,7 @@ from services.service_manager import (
 )
 from utils.logger import get_module_logger
 
-logger = get_module_logger("Route.Settings")
+logger = get_module_logger("Routes.Settings")
 
 
 def test_client_connection(client_key: str, client_config: dict) -> dict:
@@ -631,7 +633,9 @@ def get_audiobookshelf_tab_data():
                 'auto_match_books': abs_config.get('abs_sync_metadata', 'true').lower() in ['true', '1'],
                 'import_progress': abs_config.get('abs_sync_only_owned', 'true').lower() in ['true', '1'],
                 'import_ratings': abs_config.get('abs_auto_sync', 'false').lower() in ['true', '1'],
-                'library_id': abs_config.get('abs_library_id', '')
+                'library_id': abs_config.get('abs_library_id', ''),
+                'auto_match_imports': abs_config.get('abs_auto_match_imports', 'false').lower() in ['true', '1'],
+                'auto_match_delay_seconds': int(abs_config.get('abs_auto_match_delay_seconds', 10) or 10),
             }
         except Exception as e:
             logger.error(f"Error processing AudioBookShelf config: {e}")
@@ -645,7 +649,9 @@ def get_audiobookshelf_tab_data():
                 'auto_match_books': True,
                 'import_progress': True,
                 'import_ratings': False,
-                'library_id': ''
+                'library_id': '',
+                'auto_match_imports': False,
+                'auto_match_delay_seconds': 10,
             }
         
         # Get available libraries if connected
@@ -847,18 +853,13 @@ def get_download_management_tab_data():
         return {
             # Seeding
             'seeding_enabled': to_bool(dm_config.get('seeding_enabled'), 'true'),
-            'keep_torrent_active': to_bool(dm_config.get('seeding_keep_torrent_after_import'), 'true'),
-            'wait_for_seeding_completion': to_bool(dm_config.get('seeding_wait_for_client_completion'), 'true'),
             
             # Cleanup
             'delete_source_after_import': to_bool(dm_config.get('delete_source_after_import'), 'false'),
-            'delete_temp_files': to_bool(dm_config.get('delete_temp_files_after_conversion'), 'true'),
-            'retention_days': int(dm_config.get('failed_download_retention_days', '7')),
             
             # Paths
             'temp_download_path': dm_config.get('temp_download_path', '/tmp/auralarchive/downloads'),
             'temp_conversion_path': dm_config.get('temp_conversion_path', '/tmp/auralarchive/converting'),
-            'temp_failed_path': dm_config.get('temp_failed_path', '/tmp/auralarchive/failed'),
             
             # Retry
             'retry_search_max': int(dm_config.get('retry_search_max', '3')),
@@ -874,8 +875,7 @@ def get_download_management_tab_data():
             
             # Queue
             'max_concurrent_downloads': int(dm_config.get('max_concurrent_downloads', '3')),
-            'queue_priority_default': int(dm_config.get('default_priority', '5')),
-            'auto_process_queue': to_bool(dm_config.get('auto_process_queue'), 'true')
+            'queue_priority_default': int(dm_config.get('default_priority', '5'))
         }
     
     except Exception as e:
@@ -883,14 +883,9 @@ def get_download_management_tab_data():
         # Return defaults on error
         return {
             'seeding_enabled': True,
-            'keep_torrent_active': True,
-            'wait_for_seeding_completion': True,
             'delete_source_after_import': False,
-            'delete_temp_files': True,
-            'retention_days': 7,
             'temp_download_path': '/tmp/auralarchive/downloads',
             'temp_conversion_path': '/tmp/auralarchive/converting',
-            'temp_failed_path': '/tmp/auralarchive/failed',
             'retry_search_max': 3,
             'retry_download_max': 2,
             'retry_conversion_max': 1,
@@ -900,8 +895,7 @@ def get_download_management_tab_data():
             'auto_start_monitoring': True,
             'monitor_seeding': True,
             'max_concurrent_downloads': 3,
-            'queue_priority_default': 5,
-            'auto_process_queue': True
+            'queue_priority_default': 5
         }
 
 
@@ -2488,6 +2482,7 @@ def get_media_management_config():
                 'verify_after_import': import_config.get('verify_after_import', True),
                 'create_backup_on_error': import_config.get('create_backup_on_error', True),
                 'delete_source_after_import': import_config.get('delete_source_after_import', False),
+                'overwrite_existing_files': coerce_bool(import_config.get('overwrite_existing_files'), False),
                 'audible_downloads': {
                     'format': (audible_config.get('download_format') or 'aaxc') if audible_config else 'aaxc',
                     'quality': (audible_config.get('download_quality') or 'best') if audible_config else 'best',
@@ -2556,6 +2551,7 @@ def save_media_management_config():
             'import.verify_after_import': to_bool_str(data.get('verify_after_import'), True),
             'import.create_backup_on_error': to_bool_str(data.get('create_backup_on_error'), True),
             'import.delete_source_after_import': to_bool_str(data.get('delete_source_after_import'), False),
+            'import.overwrite_existing_files': to_bool_str(data.get('overwrite_existing_files'), False),
             # Audible download defaults
             'audible.download_format': (audible_payload.get('format') or 'aaxc'),
             'audible.download_quality': (audible_payload.get('quality') or 'best'),
@@ -2783,18 +2779,13 @@ def get_download_management_config():
             'config': {
                 # Seeding
                 'seeding_enabled': get_bool('seeding_enabled', True),
-                'keep_torrent_active': get_bool('keep_torrent_active', True),
-                'wait_for_seeding_completion': get_bool('wait_for_seeding_completion', True),
 
                 # Cleanup
                 'delete_source_after_import': get_bool('delete_source_after_import', False),
-                'delete_temp_files': get_bool('delete_temp_files', True),
-                'retention_days': get_int('retention_days', 7),
 
                 # Paths
                 'temp_download_path': get_str('temp_download_path', '/tmp/auralarchive/downloads'),
                 'temp_conversion_path': get_str('temp_conversion_path', '/tmp/auralarchive/converting'),
-                'temp_failed_path': get_str('temp_failed_path', '/tmp/auralarchive/failed'),
 
                 # Retry
                 'retry_search_max': get_int('retry_search_max', 3),
@@ -2810,8 +2801,7 @@ def get_download_management_config():
 
                 # Queue
                 'max_concurrent_downloads': get_int('max_concurrent_downloads', 3),
-                'queue_priority_default': get_int('queue_priority_default', 5),
-                'auto_process_queue': get_bool('auto_process_queue', True)
+                'queue_priority_default': get_int('queue_priority_default', 5)
             }
         })
     except Exception as e:
@@ -2830,18 +2820,13 @@ def save_download_management_config():
         updates = {
             # Seeding
             'download_management.seeding_enabled': str(data.get('seeding_enabled', True)).lower(),
-            'download_management.keep_torrent_active': str(data.get('keep_torrent_active', True)).lower(),
-            'download_management.wait_for_seeding_completion': str(data.get('wait_for_seeding_completion', True)).lower(),
             
             # Cleanup
             'download_management.delete_source_after_import': str(data.get('delete_source_after_import', False)).lower(),
-            'download_management.delete_temp_files': str(data.get('delete_temp_files', True)).lower(),
-            'download_management.retention_days': str(data.get('retention_days', 7)),
             
             # Paths
             'download_management.temp_download_path': data.get('temp_download_path', '/tmp/auralarchive/downloads'),
             'download_management.temp_conversion_path': data.get('temp_conversion_path', '/tmp/auralarchive/converting'),
-            'download_management.temp_failed_path': data.get('temp_failed_path', '/tmp/auralarchive/failed'),
             
             # Retry
             'download_management.retry_search_max': str(data.get('retry_search_max', 3)),
@@ -2857,8 +2842,7 @@ def save_download_management_config():
             
             # Queue
             'download_management.max_concurrent_downloads': str(data.get('max_concurrent_downloads', 3)),
-            'download_management.queue_priority_default': str(data.get('queue_priority_default', 5)),
-            'download_management.auto_process_queue': str(data.get('auto_process_queue', True)).lower()
+            'download_management.queue_priority_default': str(data.get('queue_priority_default', 5))
         }
         
         # Update configuration
@@ -2926,8 +2910,7 @@ def test_download_paths():
         
         paths = {
             'temp_download_path': data.get('temp_download_path'),
-            'temp_conversion_path': data.get('temp_conversion_path'),
-            'temp_failed_path': data.get('temp_failed_path')
+            'temp_conversion_path': data.get('temp_conversion_path')
         }
         
         results = {}
@@ -2967,14 +2950,9 @@ def reset_download_management_config():
         # Default values
         defaults = {
             'download_management.seeding_enabled': 'true',
-            'download_management.keep_torrent_active': 'true',
-            'download_management.wait_for_seeding_completion': 'true',
             'download_management.delete_source_after_import': 'false',
-            'download_management.delete_temp_files': 'true',
-            'download_management.retention_days': '7',
             'download_management.temp_download_path': '/tmp/auralarchive/downloads',
             'download_management.temp_conversion_path': '/tmp/auralarchive/converting',
-            'download_management.temp_failed_path': '/tmp/auralarchive/failed',
             'download_management.retry_search_max': '3',
             'download_management.retry_download_max': '2',
             'download_management.retry_conversion_max': '1',
@@ -2984,8 +2962,7 @@ def reset_download_management_config():
             'download_management.auto_start_monitoring': 'true',
             'download_management.monitor_seeding': 'true',
             'download_management.max_concurrent_downloads': '3',
-            'download_management.queue_priority_default': '5',
-            'download_management.auto_process_queue': 'true'
+            'download_management.queue_priority_default': '5'
         }
         
         success = config_service.update_multiple_config(defaults)
@@ -3013,4 +2990,4 @@ def reset_download_management_config():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-logger.info("Settings module initialized successfully with AJAX tab system")
+logger.success("Settings module started successfully")

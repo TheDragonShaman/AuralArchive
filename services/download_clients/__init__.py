@@ -1,9 +1,15 @@
 """
-Download Clients Module
-=======================
+Module Name: download_clients/__init__.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Download client implementations for torrent workflows with priority-based
+    selection and automatic failover.
 
-Download client implementations for torrent workflows.
-Supports multiple clients with priority-based selection and automatic failover.
+Location:
+    /services/download_clients/__init__.py
+
 """
 
 from .base_torrent_client import BaseTorrentClient, TorrentState

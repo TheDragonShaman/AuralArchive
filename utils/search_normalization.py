@@ -1,11 +1,32 @@
-"""Shared helpers for normalizing search terms across the app."""
+"""
+Module Name: search_normalization.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Normalizes title, author, and query strings for consistent search lookups.
+    Provides helpers to split combined title/author strings and drop subtitles
+    to improve match quality across indexers.
+
+Location:
+    /utils/search_normalization.py
+
+"""
+
+# Bottleneck: regex-heavy parsing per call; consider caching compiled patterns if hot.
+# Upgrade: add optional locale-aware normalization for non-ASCII titles.
 
 from __future__ import annotations
 
 import re
 from typing import Tuple
 
+from utils.logger import get_module_logger
+
 __all__ = ["normalize_search_terms", "strip_subtitle"]
+
+
+_LOGGER = get_module_logger("Utils.SearchNormalization")
 
 
 def split_title_author(text: str) -> Tuple[str, str]:
@@ -26,6 +47,10 @@ def strip_subtitle(text: str) -> str:
 
 
 def normalize_search_terms(query: str, title: str, author: str) -> Tuple[str, str, str]:
+    original_query = query
+    original_title = title
+    original_author = author
+
     query = (query or "").strip()
     title = (title or "").strip()
     author = (author or "").strip()
@@ -52,4 +77,18 @@ def normalize_search_terms(query: str, title: str, author: str) -> Tuple[str, st
     if not normalized_query:
         normalized_query = normalized_title or normalized_query_base or ""
 
-    return normalized_query.strip(), normalized_title, normalized_author
+    normalized_query = normalized_query.strip()
+
+    _LOGGER.debug(
+        "Normalized search terms",
+        extra={
+            "query": original_query,
+            "title": original_title,
+            "author": original_author,
+            "normalized_query": normalized_query,
+            "normalized_title": normalized_title,
+            "normalized_author": normalized_author,
+        },
+    )
+
+    return normalized_query, normalized_title, normalized_author

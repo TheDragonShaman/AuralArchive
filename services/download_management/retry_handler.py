@@ -1,12 +1,15 @@
 """
-Retry Handler
-=============
+Module Name: retry_handler.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Manages retry logic and limits for download pipeline failures across search,
+    download, conversion, and import stages.
 
-Manages retry logic for failed downloads:
-- Search: 3 attempts with different indexers
-- Download: 2 attempts with different sources
-- Conversion: 1 attempt (errors usually not transient)
-- Import: 2 attempts (may be connectivity issue)
+Location:
+    /services/download_management/retry_handler.py
+
 """
 
 from typing import Dict, Any
@@ -35,9 +38,9 @@ class RetryHandler:
         'IMPORT_FAILED': 2
     }
     
-    def __init__(self):
+    def __init__(self, *, logger=None):
         """Initialize retry handler."""
-        self.logger = get_module_logger("RetryHandler")
+        self.logger = logger or get_module_logger("Service.DownloadManagement.RetryHandler")
         self._queue_manager = None
         self._state_machine = None
         self.retry_backoff_seconds = 10

@@ -1,15 +1,23 @@
 """
-Path Sanitizer - Sanitizes file paths and names for cross-platform compatibility
-Handles character replacement, length limits, and invalid patterns
+Module Name: sanitizer.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Sanitizes file paths and names for cross-platform compatibility. Handles
+    character replacement, length limits, invalid patterns, and optional
+    Windows-safe substitutions.
 
-Location: services/file_naming/sanitizer.py
-Purpose: Ensure file paths are safe and compatible across operating systems
+Location:
+    /services/file_naming/sanitizer.py
+
 """
 
-import logging
 import re
 import unicodedata
-from typing import Dict
+from utils.logger import get_module_logger
+
+_LOGGER = get_module_logger("Service.FileNaming.Sanitizer")
 
 
 class PathSanitizer:
@@ -49,7 +57,7 @@ class PathSanitizer:
     # Maximum total path length on Linux
     MAX_PATH_LENGTH = 4096
     
-    def __init__(self, windows_compatible: bool = False):
+    def __init__(self, windows_compatible: bool = False, *, logger=None):
         """
         Initialize path sanitizer.
         
@@ -57,7 +65,7 @@ class PathSanitizer:
             windows_compatible: If True, apply Windows-compatible restrictions
                                (useful for network shares/compatibility)
         """
-        self.logger = logging.getLogger("FileNamingService.PathSanitizer")
+        self.logger = logger or _LOGGER
         self.windows_compatible = windows_compatible
         
         # Character replacement map for filenames (not paths)

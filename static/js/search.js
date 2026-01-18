@@ -188,7 +188,7 @@
   function renderGridView(items) {
     items.forEach((item) => {
       const el = document.createElement('article');
-      el.className = 'search-card search-result-item';
+      el.className = 'search-card';
       el.tabIndex = 0;
       const libraryStatus = getLibraryStatus(item);
       item.library_status = libraryStatus;
@@ -579,34 +579,101 @@
     const asin = escapeHtml(resolveAsin(item));
     const status = getLibraryStatus(item);
     const author = escapeHtml(item.author || 'Unknown Author');
-    const title = escapeHtml(item.title || 'Unknown Title');
-    const cover = buildClassicCover(item, title);
-    const downloadBadge = buildDownloadBadge(item);
-    const metaList = buildClassicMetaStack(item);
-    const actionButton = buildClassicLibraryButton(status, asin);
+    const rawTitle = item.title || 'Unknown Title';
+    const title = escapeHtml(rawTitle);
+    const cover = buildDiscoverCover(item, title);
+    const chipRow = item.download_available
+      ? '<span class="discover-chip discover-chip--accent"><i class="fas fa-download"></i> Ready</span>'
+      : '';
+
+    const statusLabels = {
+      in_library: 'In Library',
+      wanted: 'Wanted',
+      downloading: 'Downloading',
+      not_in_library: 'Not in Library'
+    };
+
+    const statusClass = status === 'in_library'
+      ? 'discover-status discover-status--success'
+      : status === 'wanted'
+        ? 'discover-status discover-status--warning'
+        : status === 'downloading'
+          ? 'discover-status discover-status--info'
+          : 'discover-status';
+
+    const actionButton = status === 'not_in_library' && asin
+      ? `<button class="discover-btn discover-btn--primary" type="button" data-action="add-to-library" data-asin="${asin}">+ Add to Library</button>`
+      : `<span class="${statusClass}">${statusLabels[status] || 'In Library'}</span>`;
+
+    const ratingValue = parseFloat(item.rating);
+    const ratingCount = Number(item.num_ratings || item.rating_count || 0);
+     const ratingMarkup = !Number.isNaN(ratingValue) && ratingValue > 0
+      ? `<div class="discover-rating">
+          <span class="discover-rating__star">★</span>
+          <span class="discover-rating__value">${ratingValue.toFixed(1)}</span>
+          ${ratingCount > 0 ? `<span class="discover-rating__count">(${formatRatingsCount(ratingCount)})</span>` : ''}
+        </div>`
+      : '';
+
+    const seriesLabel = buildSeriesLabel(item);
+    const seriesMeta = seriesLabel
+      ? `<div class="discover-meta-item"><i class="fas fa-layer-group"></i><span>${escapeHtml(seriesLabel)}</span></div>`
+      : '';
+
+    const narrator = getPrimaryNarrator(item.narrator);
+    const narratorMeta = narrator
+      ? `<div class="discover-meta-item"><i class="fas fa-microphone"></i><span>${escapeHtml(narrator)}</span></div>`
+      : '';
+
+    const runtime = resolveRuntime(item);
+    const runtimeMeta = runtime
+      ? `<div class="discover-meta-item"><i class="fas fa-clock"></i><span>${escapeHtml(runtime)}</span></div>`
+      : '';
 
     return `
-      <div class="search-book-cover search-book-cover--square">
-        ${cover}
-        ${downloadBadge}
-      </div>
-      <div class="search-book-info">
-        <h3 class="search-book-title">${title}</h3>
-        <p class="search-book-author">${author}</p>
-  ${metaList}
-      </div>
-      <div class="search-book-actions">
-        <button class="search-action-btn details-btn" data-action="view-details" data-asin="${asin}">
-          <i class="fas fa-info-circle"></i>
-          Details
-        </button>
-        <button class="search-action-btn details-btn" data-action="find-similar" data-author="${author}">
-          <i class="fas fa-search"></i>
-          Similar
-        </button>
-        ${actionButton}
+      <div class="discover-card">
+        <div class="discover-media">
+          <div class="discover-cover">
+            ${cover}
+            ${chipRow ? `<div class="discover-chip-row">${chipRow}</div>` : ''}
+          </div>
+        </div>
+        <div class="discover-body">
+          <div class="discover-title">${title}</div>
+          <div class="discover-author">${author}</div>
+          <div class="discover-meta-list">
+            ${seriesMeta}
+            ${narratorMeta}
+            ${runtimeMeta}
+          </div>
+          <div class="discover-rating-row">${ratingMarkup}</div>
+        </div>
+        <div class="discover-actions">
+          <button class="discover-btn" type="button" data-action="view-details" data-asin="${asin}">Details</button>
+          <button class="discover-btn discover-btn--ghost" type="button" data-action="find-similar" data-author="${author}">Similar</button>
+          ${actionButton}
+        </div>
       </div>
     `;
+  }
+
+  function buildDiscoverCover(item, title) {
+    if (item.cover_image) {
+      return `<img src="${escapeHtml(item.cover_image)}" alt="${title}" loading="lazy" class="discover-cover__img">`;
+    }
+    return '<div class="discover-cover__img" style="display:flex;align-items:center;justify-content:center;background:var(--b1);color:var(--bc, #cbd5e1);font-size:0.75rem;">No Cover</div>';
+  }
+
+  function buildSeriesLabel(item) {
+    const series = item.series;
+    if (!series || series === 'N/A') {
+      return '';
+    }
+    const sequence = item.sequence;
+    if (sequence && sequence !== 'N/A') {
+      return `${series} · Book ${sequence}`;
+    }
+    return series;
   }
 
   function buildClassicLibraryButton(status, asin) {
@@ -617,44 +684,6 @@
       return '<button class="search-action-btn in-library-btn" disabled><i class="fas fa-star"></i> Wanted</button>';
     }
     return `<button class="search-action-btn add-btn" data-action="add-to-library" data-asin="${asin}"><i class="fas fa-plus"></i> Add to Library</button>`;
-  }
-
-  function buildClassicMetaStack(item) {
-    const rows = [];
-
-    if (item.series && item.series !== 'N/A') {
-      const sub = item.sequence ? `Book ${item.sequence}` : '';
-      rows.push(metaRow('bookmark', item.series, sub));
-    }
-
-    if (item.runtime) {
-      rows.push(metaRow('clock', item.runtime));
-    }
-
-    const rating = parseFloat(item.rating);
-    if (!Number.isNaN(rating) && rating > 0) {
-      const count = Number(item.num_ratings || item.rating_count || 0);
-      const sub = count > 0 ? `${formatRatingsCount(count)} reviews` : '';
-      rows.push(metaRow('star', rating.toFixed(1), sub));
-    }
-
-    if (item.release_date) {
-      const label = resolveReleaseYear(item) || item.release_date;
-      rows.push(metaRow('calendar', label));
-    }
-
-    const narrator = getPrimaryNarrator(item.narrator);
-    if (narrator) {
-      rows.push(metaRow('microphone', narrator));
-    }
-
-    return rows.length ? `<div class="search-book-meta">${rows.join('')}</div>` : '';
-  }
-
-  function metaRow(icon, primary, secondary = '') {
-    const safePrimary = escapeHtml(String(primary || ''));
-    const safeSecondary = secondary ? `<small>${escapeHtml(String(secondary))}</small>` : '';
-    return `<div class="meta-row"><i class="fas fa-${icon}" aria-hidden="true"></i><div class="meta-row-text"><span>${safePrimary}</span>${safeSecondary}</div></div>`;
   }
 
   function buildClassicCover(item, title) {

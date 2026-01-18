@@ -1,16 +1,34 @@
 """
-Quality Assessor - Quality scoring system for audiobook search results
-Assesses format preferences, bitrate, source reputation, and metadata completeness
+Module Name: quality_assessor.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Quality scoring system for audiobook search results. Assesses format
+    preferences, bitrate, source reputation, metadata completeness, and
+    relevance to rank search results.
 
-Location: services/search_engine/quality_assessor.py
-Purpose: Evaluate and rank search results by quality metrics
+Location:
+    /services/search_engine/quality_assessor.py
+
+Notes:
+    - Follow PEP 8 for code style.
+    - Keep descriptions concise but informative.
+    - Bottleneck: heavy relevance scoring and fuzzy matching per result; consider
+      caching normalized tokens or batching.
+    - Upgrade: tune weights and add telemetry for scoring decisions.
 """
 
-from typing import Dict, List, Any, Optional, Tuple
-import logging
 from dataclasses import dataclass
 import re
+from typing import Any, Dict, List, Optional, Tuple
+
+from utils.logger import get_module_logger
+
 from .fuzzy_matcher import FuzzyMatcher
+
+
+_LOGGER = get_module_logger("Service.SearchEngine.QualityAssessor")
 
 
 @dataclass
@@ -38,9 +56,9 @@ class QualityAssessor:
     - Weighted quality calculation
     """
     
-    def __init__(self):
+    def __init__(self, *, logger=None):
         """Initialize the quality assessor."""
-        self.logger = logging.getLogger("SearchEngineService.QualityAssessor")
+        self.logger = logger or _LOGGER
         
         # Format preferences (higher score = better)
         self.format_scores = {
@@ -75,7 +93,7 @@ class QualityAssessor:
     def _initialize(self):
         """Initialize the quality assessor."""
         try:
-            self.logger.debug("Initializing QualityAssessor...")
+            self.logger.debug("Initializing QualityAssessor")
             
             # Initialize fuzzy matcher for relevance scoring
             self.fuzzy_matcher = FuzzyMatcher()
@@ -88,7 +106,11 @@ class QualityAssessor:
             self.logger.debug("QualityAssessor initialized successfully")
             
         except Exception as e:
-            self.logger.error(f"Failed to initialize QualityAssessor: {e}")
+            self.logger.error(
+                "Failed to initialize QualityAssessor",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
             self.initialized = False
 
     @staticmethod
@@ -111,7 +133,14 @@ class QualityAssessor:
             QualityScore with relevance-weighted assessment
         """
         try:
-            self.logger.info(f"⚙️ assess_result_quality called: search_title='{search_title}', search_author='{search_author}', result_title='{result.get('title', 'N/A')}'")
+            self.logger.debug(
+                "Assessing result quality",
+                extra={
+                    "search_title": search_title,
+                    "search_author": search_author,
+                    "result_title": result.get('title', 'N/A'),
+                },
+            )
             
             # Extract result data
             format_str = result.get('format', 'unknown').lower()
@@ -139,7 +168,14 @@ class QualityAssessor:
             if ('audiobookbay' in indexer_name or 'audiobookbay' in source_tag) and seeders <= 1:
                 availability_score = 8.0  # treat as healthy to avoid low-seeder penalties
             
-            self.logger.info(f"Quality scores for '{result_title}': relevance={relevance_score:.1f}, format={format_score:.1f}, confidence will be calculated")
+            self.logger.debug(
+                "Quality scores computed",
+                extra={
+                    "result_title": result_title,
+                    "relevance_score": round(relevance_score, 1),
+                    "format_score": round(format_score, 1),
+                },
+            )
             
             # Calculate weighted total
             total_score = (
@@ -180,9 +216,11 @@ class QualityAssessor:
             )
             
         except Exception as e:
-            import traceback
-            self.logger.error(f"Quality assessment failed: {e}")
-            self.logger.error(f"Traceback: {traceback.format_exc()}")
+            self.logger.error(
+                "Quality assessment failed",
+                extra={"error": str(e), "search_title": search_title, "search_author": search_author},
+                exc_info=True,
+            )
             return QualityScore(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, {})
     
     def _assess_relevance(self, result_title: str, result_author: str, 
@@ -244,13 +282,19 @@ class QualityAssessor:
             search_author_norm = self.fuzzy_matcher.normalize_author(search_author)
             result_author_norm = self.fuzzy_matcher.normalize_author(result_author)
             
-            self.logger.debug(f"Author norm: search='{search_author_norm}' result='{result_author_norm}'")
+            self.logger.debug(
+                "Author normalization",
+                extra={"search_author_norm": search_author_norm, "result_author_norm": result_author_norm},
+            )
             
             # Check if search author is CONTAINED in result author (handles extra text in result)
             if search_author_norm in result_author_norm or result_author_norm in search_author_norm:
                 # Normalized substring match!
                 author_score = 6.0
-                self.logger.debug(f"✓ Author EXACT normalized match (substring): {author_score}/6.0")
+                self.logger.debug(
+                    "Author normalized substring match",
+                    extra={"author_score": author_score},
+                )
             else:
                 # Strategy 2: Token set overlap (handles multiple authors)
                 # Tokenize using normalized titles first
@@ -270,37 +314,49 @@ class QualityAssessor:
                         
                         if overlap >= 0.5:  # 50%+ overlap is good
                             author_score = 6.0 * overlap
-                            self.logger.debug(f"✓ Author TOKEN overlap ({overlap:.0%}): {author_score:.1f}/6.0")
+                            self.logger.debug(
+                                "Author token overlap",
+                                extra={"overlap": overlap, "author_score": author_score},
+                            )
                         else:
                             # Strategy 3: Fuzzy character match (handles typos)
                             author_match = self.fuzzy_matcher.fuzzy_match(result_author, search_author)
                             
                             if author_match.score >= 0.7:  # Lowered from 0.95
                                 author_score = 6.0 * author_match.score
-                                self.logger.debug(f"✓ Author FUZZY match ({author_match.score:.0%}): {author_score:.1f}/6.0")
+                                self.logger.debug(
+                                    "Author fuzzy match",
+                                    extra={"match_score": author_match.score, "author_score": author_score},
+                                )
                     else:
                         # No token overlap, try fuzzy
                         author_match = self.fuzzy_matcher.fuzzy_match(result_author, search_author)
                         if author_match.score >= 0.7:
                             author_score = 6.0 * author_match.score
-                            self.logger.debug(f"✓ Author FUZZY match ({author_match.score:.0%}): {author_score:.1f}/6.0")
+                            self.logger.debug(
+                                "Author fuzzy match",
+                                extra={"match_score": author_match.score, "author_score": author_score},
+                            )
                 else:
                     # Fallback to fuzzy match
                     author_match = self.fuzzy_matcher.fuzzy_match(result_author, search_author)
                     if author_match.score >= 0.7:
                         author_score = 6.0 * author_match.score
-                        self.logger.debug(f"✓ Author FUZZY match ({author_match.score:.0%}): {author_score:.1f}/6.0")
+                        self.logger.debug(
+                            "Author fuzzy match",
+                            extra={"match_score": author_match.score, "author_score": author_score},
+                        )
             
             if author_score == 0.0:
-                self.logger.debug(f"✗ Author NO match: 0.0/6.0")
+                self.logger.debug("Author match not found", extra={"author_score": author_score})
         elif search_author:
             # Author was searched but result has no author - penalty
             author_score = 0.0
-            self.logger.debug(f"✗ Author missing in result: 0.0/6.0")
+            self.logger.debug("Author missing in result", extra={"author_score": author_score})
         else:
             # No author search, give neutral score
             author_score = 3.0
-            self.logger.debug(f"○ Author not searched (neutral): 3.0/6.0")
+            self.logger.debug("Author not searched (neutral)", extra={"author_score": author_score})
         
         meta['author']['score'] = author_score
         if not search_author:
@@ -317,9 +373,15 @@ class QualityAssessor:
         search_series = self._extract_series_from_title(search_title)
         
         # Debug: Log what was extracted
-        self.logger.debug(f"📚 Series extraction:")
-        self.logger.debug(f"  Search '{search_title}' → series='{search_series['series_name']}' book#={search_series['book_number']}")
-        self.logger.debug(f"  Result '{result_title}' → series='{result_series['series_name']}' book#={result_series['book_number']}")
+        self.logger.debug(
+            "Series extraction",
+            extra={
+                "search_title": search_title,
+                "result_title": result_title,
+                "search_series": search_series,
+                "result_series": result_series,
+            },
+        )
         
         # ========================================
         # TITLE MATCHING (25% = 2.5 points max)
@@ -341,7 +403,10 @@ class QualityAssessor:
             else:
                 search_title_core = search_title_norm
             
-            self.logger.debug(f"Title norm: search='{search_title_core}' result='{result_title_core}'")
+            self.logger.debug(
+                "Title normalization",
+                extra={"search_title_core": search_title_core, "result_title_core": result_title_core},
+            )
             
             # Strategy 1: Tokenize and check if ALL search tokens are in result
             search_tokens = self.fuzzy_matcher.tokenize(search_title_core)
@@ -352,14 +417,20 @@ class QualityAssessor:
                 if search_tokens.issubset(result_tokens):
                     # Perfect token match!
                     title_score = 2.5
-                    self.logger.debug(f"✓ Title ALL tokens match: {title_score}/2.5")
+                    self.logger.debug(
+                        "Title tokens match",
+                        extra={"title_score": title_score, "search_tokens": list(search_tokens)},
+                    )
                 else:
                     # Strategy 2: Token set overlap (partial match)
                     overlap = self.fuzzy_matcher.token_set_overlap(search_tokens, result_tokens)
                     
                     if overlap >= 0.7:  # 70%+ words match
                         title_score = 2.5 * overlap
-                        self.logger.debug(f"✓ Title TOKEN overlap ({overlap:.0%}): {title_score:.1f}/2.5")
+                        self.logger.debug(
+                            "Title token overlap",
+                            extra={"overlap": overlap, "title_score": title_score},
+                        )
                     else:
                         # Strategy 3: Substring check (handles split titles like "Secrets and Strife" + "An Isekai")
                         if (search_title_core in result_title_core or 
@@ -367,24 +438,30 @@ class QualityAssessor:
                             search_title_norm in result_title_norm or 
                             result_title_norm in search_title_norm):
                             title_score = 2.5
-                            self.logger.debug(f"✓ Title SUBSTRING match: {title_score}/2.5")
+                            self.logger.debug("Title substring match", extra={"title_score": title_score})
                         else:
                             # Strategy 4: Fuzzy character match (last resort)
                             title_match = self.fuzzy_matcher.fuzzy_match(result_title_core, search_title_core)
                             
                             if title_match.score >= 0.7:  # Lowered from 0.8
                                 title_score = 2.5 * title_match.score
-                                self.logger.debug(f"✓ Title FUZZY match ({title_match.score:.0%}): {title_score:.1f}/2.5")
+                                self.logger.debug(
+                                    "Title fuzzy match",
+                                    extra={"match_score": title_match.score, "title_score": title_score},
+                                )
             else:
                 # No tokens, fall back to substring/fuzzy
                 if search_title_core in result_title_core or result_title_core in search_title_core:
                     title_score = 2.5
-                    self.logger.debug(f"✓ Title SUBSTRING match: {title_score}/2.5")
+                    self.logger.debug("Title substring match", extra={"title_score": title_score})
                 else:
                     title_match = self.fuzzy_matcher.fuzzy_match(result_title_core, search_title_core)
                     if title_match.score >= 0.7:
                         title_score = 2.5 * title_match.score
-                        self.logger.debug(f"✓ Title FUZZY match ({title_match.score:.0%}): {title_score:.1f}/2.5")
+                        self.logger.debug(
+                            "Title fuzzy match",
+                            extra={"match_score": title_match.score, "title_score": title_score},
+                        )
             
             # CRITICAL: Check book number alignment using strict matching
             search_numbers = self._extract_numbers(search_title)
@@ -398,19 +475,22 @@ class QualityAssessor:
                         title_score = min(title_score + 0.75, 2.5)
                         meta['book_number_status'] = 'match'
                         self.logger.debug(
-                            f"✓ Book number MATCH (search: {search_numbers}, result: {result_numbers})"
+                            "Book number match",
+                            extra={"search_numbers": search_numbers, "result_numbers": result_numbers},
                         )
                     else:
                         title_score = 0.0
                         meta['book_number_status'] = 'mismatch'
                         self.logger.debug(
-                            f"✗ Book number MISMATCH (search: {search_numbers} vs result: {result_numbers})"
+                            "Book number mismatch",
+                            extra={"search_numbers": search_numbers, "result_numbers": result_numbers},
                         )
                 else:
                     title_score *= 0.2  # retain a hint of relevance but heavily penalize
                     meta['book_number_status'] = 'result_missing'
                     self.logger.debug(
-                        f"⚠ Book number missing in result (wanted {search_numbers})"
+                        "Book number missing in result",
+                        extra={"search_numbers": search_numbers, "result_numbers": result_numbers},
                     )
             elif result_numbers:
                 meta['book_number_status'] = 'search_missing'
@@ -418,15 +498,15 @@ class QualityAssessor:
                 meta['book_number_status'] = 'not_applicable'
             
             if title_score == 0.0:
-                self.logger.debug(f"✗ Title NO match: 0.0/2.5")
+                self.logger.debug("Title match not found", extra={"title_score": title_score})
         elif search_title:
             # Title was searched but result has no title
             title_score = 0.0
-            self.logger.debug(f"✗ Title missing in result: 0.0/2.5")
+            self.logger.debug("Title missing in result", extra={"title_score": title_score})
         else:
             # No title search, give neutral score
             title_score = 1.25
-            self.logger.debug(f"○ Title not searched (neutral): 1.25/2.5")
+            self.logger.debug("Title not searched (neutral)", extra={"title_score": title_score})
         
         meta['title']['score'] = title_score
         if not search_title:
@@ -449,7 +529,14 @@ class QualityAssessor:
                 search_series['series_name']
             )
             
-            self.logger.debug(f"Series match: '{result_series['series_name']}' vs '{search_series['series_name']}' = {series_match.score:.2f}")
+            self.logger.debug(
+                "Series match",
+                extra={
+                    "result_series": result_series['series_name'],
+                    "search_series": search_series['series_name'],
+                    "match_score": series_match.score,
+                },
+            )
             
             # More lenient series matching
             if series_match.exact or series_match.score >= 0.8:  # Lowered from 0.9
@@ -466,7 +553,10 @@ class QualityAssessor:
             if (result_series['book_number'] and search_series['book_number'] and 
                 result_series['book_number'] == search_series['book_number']):
                 series_score = min(series_score + 0.3, 1.5)  # Cap at max
-                self.logger.debug(f"Book number match bonus: {result_series['book_number']}")
+                self.logger.debug(
+                    "Series book number bonus",
+                    extra={"book_number": result_series['book_number']},
+                )
         elif search_series['series_name'] and not result_series['series_name']:
             # Search specified series but result doesn't have it - slight penalty
             series_score = 0.0
@@ -474,7 +564,10 @@ class QualityAssessor:
             # Result has series, check if series name appears in search query
             if search_series['series_name'].lower() in search_title.lower():
                 series_score = 1.0
-                self.logger.debug(f"Series name found in search query: {result_series['series_name']}")
+                self.logger.debug(
+                    "Series name found in search query",
+                    extra={"series_name": result_series['series_name']},
+                )
         else:
             # No series matching needed, give neutral score
             series_score = 0.75
@@ -489,7 +582,15 @@ class QualityAssessor:
 
         score += series_score
         
-        self.logger.debug(f"🎯 FINAL relevance: {score:.1f}/10 (author: {author_score:.1f}/6, title: {title_score:.1f}/2.5, series: {series_score:.1f}/1.5)")
+        self.logger.debug(
+            "Final relevance computed",
+            extra={
+                "total": score,
+                "author_score": author_score,
+                "title_score": title_score,
+                "series_score": series_score,
+            },
+        )
         meta['combined_score'] = min(score, 10.0)
         return min(score, 10.0), meta
     
@@ -506,65 +607,59 @@ class QualityAssessor:
         Returns:
             Dict with series_name, book_number, and full_series string
         """
-        import re
-        
         result = {
             'series_name': None,
             'book_number': None,
             'full_series': None
         }
-        
+
         if not title:
             return result
-        
+
         # Pattern 1: "Title: Series Name, Book 3" or "Title Series Name, Book 3"
         match = re.search(r'[:\s]([^,:]+),\s*(?:Book|#)\s*(\d+)', title, re.IGNORECASE)
         if match:
             result['series_name'] = match.group(1).strip()
             result['book_number'] = match.group(2)
-            result['full_series'] = match.group(0).strip(':, ')
+            result['full_series'] = match.group(0)
             return result
-        
-        # Pattern 2: "Title (Series Name #3)" or "Title [Series Name 3]"
-        match = re.search(r'[\(\[]([^)\]]+?)\s*[#\s](\d+)[\)\]]', title)
+
+        # Pattern 2: "Title (Series Name, #3)"
+        match = re.search(r'\(([^()]+),\s*(?:Book|#)\s*(\d+)\)', title, re.IGNORECASE)
         if match:
             result['series_name'] = match.group(1).strip()
             result['book_number'] = match.group(2)
             result['full_series'] = match.group(0)
             return result
-        
-        # Pattern 3: "Series Name: Title" (series first)
-        match = re.search(r'^([^:]+):\s*(.+)', title)
+
+        # Pattern 3: "Title [Series Name 3]"
+        match = re.search(r'\[([^\]]+)\s+(\d+)\]', title, re.IGNORECASE)
         if match:
-            # Check if first part looks like a series (contains "series", "saga", etc)
-            first_part = match.group(1).strip()
-            if any(word in first_part.lower() for word in ['series', 'saga', 'chronicles', 'trilogy']):
-                result['series_name'] = first_part
-                result['full_series'] = first_part + ':'
-                return result
-        
-        # Pattern 4: "Title, Book 3" (series name might be in title itself)
-        match = re.search(r',\s*(?:Book|#)\s*(\d+)', title, re.IGNORECASE)
-        if match:
-            result['book_number'] = match.group(1)
-            result['full_series'] = match.group(0).strip(', ')
+            result['series_name'] = match.group(1).strip()
+            result['book_number'] = match.group(2)
+            result['full_series'] = match.group(0)
             return result
-        
+
+        # Pattern 4: "Series Name: Title" (treat prefix as series name)
+        match = re.search(r'^([^:]+):\s*(.+)$', title)
+        if match:
+            first_part = match.group(1).strip()
+            if len(first_part.split()) >= 2:  # require at least two words to avoid false positives
+                result['series_name'] = first_part
+                result['full_series'] = first_part
+                return result
+
         # Pattern 5: "Title Name 8" or "Title Name Book 8" (book number at end)
-        # Handles: "Mark of the Fool 8", "Foundation Book 7", etc.
         match = re.search(r'^(.+?)\s+(?:Book\s+)?(\d+)$', title, re.IGNORECASE)
         if match:
-            # Extract potential series name (everything before the number)
             potential_series = match.group(1).strip()
             book_num = match.group(2)
-            
-            # Only treat as series if title is long enough (avoid "Book 8" alone)
-            if len(potential_series.split()) >= 2:  # At least 2 words
+            if len(potential_series.split()) >= 2:
                 result['series_name'] = potential_series
                 result['book_number'] = book_num
                 result['full_series'] = f"{potential_series} {book_num}"
                 return result
-        
+
         return result
     
     def _assess_format_quality(self, format_str: str) -> float:
@@ -738,7 +833,11 @@ class QualityAssessor:
             return True
             
         except Exception as e:
-            self.logger.error(f"Error checking user preferences: {e}")
+            self.logger.error(
+                "Error checking user preferences",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
             return False
     
     def rank_results_by_quality(self, results: List[Dict[str, Any]], 
@@ -756,24 +855,41 @@ class QualityAssessor:
             Sorted list with quality_assessment added to each result
         """
         try:
-            self.logger.info(f"🎯 rank_results_by_quality called with {len(results)} results, search_title='{search_title}', search_author='{search_author}'")
+            self.logger.info(
+                "Ranking results by quality",
+                extra={"result_count": len(results), "search_title": search_title, "search_author": search_author},
+            )
             scored_results = []
             
             for i, result in enumerate(results):
-                self.logger.info(f"  📊 Assessing result {i+1}/{len(results)}: '{result.get('title', 'NO TITLE')}'")
+                self.logger.info(
+                    "Assessing result",
+                    extra={"index": i + 1, "total": len(results), "result_title": result.get('title', 'NO TITLE')},
+                )
                 query_title = result.get('_search_query_used') or search_title
                 quality_score = self.assess_result_quality(result, query_title, search_author)
                 result_copy = result.copy()
                 result_copy['quality_assessment'] = quality_score
                 scored_results.append(result_copy)
-                self.logger.info(f"  ✓ Result scored: total={quality_score.total_score:.2f}, confidence={quality_score.confidence:.1f}%")
+                self.logger.info(
+                    "Result scored",
+                    extra={
+                        "total_score": round(quality_score.total_score, 2),
+                        "confidence": round(quality_score.confidence, 1),
+                    },
+                )
             
             scored_results.sort(key=lambda x: x['quality_assessment'].total_score, reverse=True)
-            self.logger.info(f"🏁 Ranking complete, returning {len(scored_results)} sorted results")
+            self.logger.info(
+                "Ranking complete",
+                extra={"result_count": len(scored_results)},
+            )
             return scored_results
             
         except Exception as e:
-            import traceback
-            self.logger.error(f"❌ Failed to rank results by quality: {e}")
-            self.logger.error(f"Traceback: {traceback.format_exc()}")
+            self.logger.error(
+                "Failed to rank results by quality",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
             return results

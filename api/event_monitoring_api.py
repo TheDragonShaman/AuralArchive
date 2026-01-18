@@ -1,14 +1,35 @@
 """
+Module Name: event_monitoring_api.py
+Author: TheDragonShaman
+Created: July 28, 2025
+Last Modified: December 23, 2025
+Description:
+    Event system monitoring API stub. The legacy event bus/service coordinator
+    has been removed; these endpoints return stubbed responses for compatibility.
+
+Location:
+    /api/event_monitoring_api.py
+
 Event System Monitoring API
-Provides endpoints to monitor inter-service communication
+===========================
+
+Endpoints:
+- GET    /api/events/status         - Event system status (stub)
+- GET    /api/events/history        - Recent event history (stub)
+- GET    /api/events/subscriptions  - Service subscriptions (stub)
+- GET    /api/events/workflows/<id> - Workflow status (stub)
+- GET    /api/events/workflows      - All workflows (stub)
+- POST   /api/events/publish        - Publish test event (stub)
 """
 from flask import Blueprint, jsonify, request
 import logging
 from functools import wraps
 from datetime import datetime, timedelta
+from utils.logger import get_module_logger
 
 # Create blueprint
 event_monitoring_bp = Blueprint('event_monitoring', __name__)
+logger = get_module_logger("API.Event.Monitoring")
 
 def handle_errors(f):
     """Decorator to handle API errors"""
@@ -17,7 +38,7 @@ def handle_errors(f):
         try:
             return f(*args, **kwargs)
         except Exception as e:
-            logging.error(f"API Error in {f.__name__}: {e}")
+            logger.error(f"API Error in {f.__name__}: {e}")
             return jsonify({'error': str(e), 'success': False}), 500
     return decorated_function
 

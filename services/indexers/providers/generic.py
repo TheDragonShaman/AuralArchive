@@ -1,4 +1,16 @@
-"""Generic JSON direct provider adapter."""
+"""
+Module Name: generic.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Generic JSON adapter for direct providers returning simple JSON search
+    payloads.
+
+Location:
+    /services/indexers/providers/generic.py
+
+"""
 
 from __future__ import annotations
 

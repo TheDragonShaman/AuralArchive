@@ -1,5 +1,14 @@
-# Services package for AuralArchive Flask app
-# Clean modular structure - all services are now in subdirectories
+"""
+Module Name: __init__.py
+Author: TheDragonShaman
+Created: August 11, 2025
+Last Modified: December 23, 2025
+Description:
+    Exposes core service entry points and the service manager.
+Location:
+    /services/__init__.py
+
+"""
 
 # Import from modular service directories that exist
 from .database import DatabaseService
@@ -14,12 +23,12 @@ from .service_manager import ServiceManager, service_manager
 __all__ = [
     # Core services
     'DatabaseService',
-    'AudibleService', 
+    'AudibleService',
     'AudioBookShelfService',
     'ConfigService',
     'MetadataUpdateService',
-    
+
     # Service manager
     'ServiceManager',
-    'service_manager'
+    'service_manager',
 ]

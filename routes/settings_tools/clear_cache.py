@@ -1,11 +1,13 @@
 """
-Clear Cache Route - AuralArchive
+Module Name: clear_cache.py
+Author: TheDragonShaman
+Created: July 28, 2025
+Last Modified: December 23, 2025
+Description:
+    Settings helper that clears cached data and bytecode artifacts from the system.
+Location:
+    /routes/settings_tools/clear_cache.py
 
-Removes cached data, __pycache__ directories, and temporary files so admins can
-reset the runtime environment from the settings UI.
-
-Author: AuralArchive Development Team
-Updated: December 2, 2025
 """
 
 import glob
@@ -18,7 +20,7 @@ from flask import jsonify
 
 from utils.logger import get_module_logger
 
-logger = get_module_logger("Route.Settings.ClearCache")
+logger = get_module_logger("Routes.Settings.ClearCache")
 
 def handle_clear_cache():
     """Clear application cache."""

@@ -1,13 +1,27 @@
+"""
+Module Name: connection.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Manages SQLite connections and applies performance pragmas.
+
+Location:
+    /services/database/connection.py
+
+"""
+
 import sqlite3
-import logging
 from typing import Tuple
+from utils.logger import get_module_logger
+
 
 class DatabaseConnection:
-    """Handles database connection management and optimization"""
-    
-    def __init__(self, db_file: str):
+    """Handles database connection management and optimization."""
+
+    def __init__(self, db_file: str, *, logger=None):
         self.db_file = db_file
-        self.logger = logging.getLogger("DatabaseService.Connection")
+        self.logger = logger or get_module_logger("Service.Database.Connection")
     
     def connect_db(self) -> Tuple[sqlite3.Connection, sqlite3.Cursor]:
         """Connect to the SQLite database with optimized settings for concurrent access."""
@@ -19,11 +33,17 @@ class DatabaseConnection:
             # Optimize for concurrent access
             self._apply_optimizations(cursor)
             
-            self.logger.debug(f"Database connection established: {self.db_file}")
+            self.logger.debug(
+                "Database connection established",
+                extra={"database_file": self.db_file},
+            )
             return conn, cursor
         
-        except Exception as e:
-            self.logger.error(f"Failed to connect to database {self.db_file}: {e}")
+        except Exception as exc:
+            self.logger.exception(
+                "Failed to connect to database",
+                extra={"database_file": self.db_file},
+            )
             raise
     
     def _apply_optimizations(self, cursor: sqlite3.Cursor):
@@ -39,9 +59,15 @@ class DatabaseConnection:
         for pragma, description in optimizations:
             try:
                 cursor.execute(pragma)
-                self.logger.debug(f"Applied optimization: {pragma} ({description})")
-            except Exception as e:
-                self.logger.warning(f"Failed to apply optimization {pragma}: {e}")
+                self.logger.debug(
+                    "Applied database optimization",
+                    extra={"pragma": pragma, "description": description, "database_file": self.db_file},
+                )
+            except Exception as exc:
+                self.logger.warning(
+                    "Failed to apply database optimization",
+                    extra={"pragma": pragma, "database_file": self.db_file, "error": str(exc)},
+                )
     
     def test_connection(self) -> bool:
         """Test database connection and return success status"""
@@ -59,8 +85,11 @@ class DatabaseConnection:
             
             return success
         
-        except Exception as e:
-            self.logger.error(f"Database connection test failed: {e}")
+        except Exception as exc:
+            self.logger.exception(
+                "Database connection test failed",
+                extra={"database_file": self.db_file},
+            )
             return False
     
     def get_database_info(self) -> dict:
@@ -83,6 +112,9 @@ class DatabaseConnection:
                     'exists': False
                 }
         
-        except Exception as e:
-            self.logger.error(f"Error getting database info: {e}")
-            return {'error': str(e)}
+        except Exception as exc:
+            self.logger.exception(
+                "Error getting database info",
+                extra={"database_file": self.db_file},
+            )
+            return {'error': str(exc)}

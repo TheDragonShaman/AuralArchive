@@ -1,29 +1,21 @@
 """
-Audible Metadata Sync Service - AuralArchive
+Module Name: audible_metadata_sync_service.py
+Author: TheDragonShaman
+Created: August 26, 2025
+Last Modified: December 23, 2025
+Description:
+    Synchronize Audible library metadata to the database with API-based fetch, enrichment, and batching.
+Location:
+    /services/audible/audible_metadata_sync_service/audible_metadata_sync_service.py
 
-Handles efficient synchronization of Audible library metadata to database
-with parallel processing and intelligent caching.
-
-Features:
-- Database-first architecture with SQLite storage
-- Uses Audible Python API for library data, MetadataUpdateService for full metadata
-- Parallel processing with ThreadPoolExecutor
-- Intelligent image caching with "audible" cache type
-- Progress tracking with SocketIO events
-- Automatic sync scheduling (6-hour intervals)
-
-Author: AuralArchive Development Team
-Created: 2025-09-18
-Updated: 2025-10-28 - Replaced CLI with Python API
 """
 
-import json
 import threading
 import time
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Any, Optional, Tuple, Callable
-import logging
+from utils.logger import get_module_logger
 
 from services.database.database_service import DatabaseService
 from services.image_cache.image_cache_service import ImageCacheService
@@ -83,7 +75,7 @@ class AudibleMetadataSyncService:
                 self.socketio = socketio
             return
             
-        self.logger = logger or logging.getLogger("AudibleMetadataSync")
+        self.logger = logger or get_module_logger("Service.Audible.MetadataSync")
         self.socketio = socketio
         
         # Initialize dependencies
@@ -160,11 +152,11 @@ class AudibleMetadataSyncService:
             
             # Step 1: Get books to process based on sync mode
             if mode == SyncMode.QUICK:
-                self.logger.info("Quick Sync: Fetching only outdated books...")
+                self.logger.info("Quick Sync: Fetching only outdated books")
                 basic_library = self._get_quick_sync_books()
                 sync_type = "Quick Sync"
             else:
-                self.logger.info("Full Sync: Fetching complete library from Audible API...")
+                self.logger.info("Full Sync: Fetching complete library from Audible API")
                 basic_library = self.api_helper.get_library_list()
                 sync_type = "Full Sync"
             
@@ -200,7 +192,10 @@ class AudibleMetadataSyncService:
                     'stats': self._sync_progress.copy()
                 }
             
-            self.logger.info(f"Processing {len(basic_library)} books with {self.max_workers} workers...")
+            self.logger.info(
+                "Processing books",
+                extra={"book_count": len(basic_library), "max_workers": self.max_workers}
+            )
             
             # Step 2: Process books in parallel batches with metadata enrichment
             processed_books = []
@@ -243,10 +238,59 @@ class AudibleMetadataSyncService:
                 self._sync_progress['message'] = f'Saving {len(processed_books)} books to database...'
                 self._emit_progress_update()
                 
-                self.logger.info(f"Saving {len(processed_books)} books to main books table...")
+                self.logger.info(
+                    "Saving books to database",
+                    extra={"books": len(processed_books)}
+                )
+                # Persist a minimal audible_library row (includes purchase_date) for ownership validation
+                try:
+                    library_rows = []
+                    for book in processed_books:
+                        asin_value = book.get('asin')
+                        if not asin_value:
+                            continue
+                        library_rows.append({
+                            'asin': asin_value,
+                            'title': book.get('title'),
+                            'author': book.get('author'),
+                            'authors': book.get('authors'),
+                            'narrator': book.get('narrator'),
+                            'narrators': book.get('narrators'),
+                            'series_title': book.get('series_title'),
+                            'series_sequence': book.get('series_sequence'),
+                            'publisher': book.get('publisher'),
+                            'release_date': book.get('release_date'),
+                            'runtime_length_min': book.get('runtime_length_min'),
+                            'summary': book.get('summary') or book.get('description'),
+                            'genres': book.get('genres'),
+                            'language': book.get('language'),
+                            'rating': book.get('rating'),
+                            'num_ratings': book.get('num_ratings'),
+                            'purchase_date': book.get('purchase_date'),
+                            'cover_image_url': book.get('cover_image_url'),
+                            'local_cover_path': book.get('local_cover_path'),
+                            'metadata_source': book.get('metadata_source'),
+                            'sync_status': book.get('sync_status') or 'completed',
+                        })
+                    if library_rows:
+                        try:
+                            self.db_service.audible_library.bulk_insert_or_update_books(library_rows)
+                        except Exception as lib_exc:
+                            self.logger.debug(
+                                "Audible library upsert skipped",
+                                extra={"exc": lib_exc}
+                            )
+                except Exception as lib_wrap_exc:
+                    self.logger.debug(
+                        "Audible library row prep failed",
+                        extra={"exc": lib_wrap_exc}
+                    )
                 successful_db, failed_db = self.db_service.books.bulk_insert_or_update_books(processed_books)
                 
-                self.logger.info(f"Database operations: {successful_db} successful, {failed_db} failed")
+                self.logger.info(
+                    "Database operations completed",
+                    extra={"successful": successful_db, "failed": failed_db}
+                )
             
             # Final results
             end_time = datetime.now()
@@ -279,19 +323,25 @@ class AudibleMetadataSyncService:
                 'failed_asins': [f.get('asin') for f in failed_books if f.get('asin')]
             }
             
-            self.logger.info(f"Sync completed: {result['stats']}")
+            self.logger.info(
+                "Sync completed",
+                extra=result['stats']
+            )
             return result
             
-        except Exception as e:
-            self.logger.error(f"Library sync failed: {e}")
+        except Exception as exc:
+            self.logger.error(
+                "Library sync failed",
+                extra={"exc": exc}
+            )
             self._sync_progress['status'] = 'failed'
-            self._sync_progress['error'] = str(e)
-            self._sync_progress['message'] = f'Sync failed: {str(e)}'
+            self._sync_progress['error'] = str(exc)
+            self._sync_progress['message'] = f'Sync failed: {exc}'
             self._emit_progress_update()
             
             return {
                 'success': False,
-                'error': str(e),
+                'error': str(exc),
                 'progress': self._sync_progress.copy()
             }
         finally:
@@ -323,12 +373,15 @@ class AudibleMetadataSyncService:
                 try:
                     result = future.result()
                     results.append(result)
-                except Exception as e:
-                    self.logger.error(f"Failed to process book {book.get('asin', 'Unknown')}: {e}")
+                except Exception as exc:
+                    self.logger.error(
+                        "Failed to process book",
+                        extra={"asin": book.get('asin'), "exc": exc}
+                    )
                     results.append({
                         'success': False,
                         'asin': book.get('asin'),
-                        'error': str(e)
+                        'error': str(exc)
                     })
         
         return results
@@ -376,7 +429,10 @@ class AudibleMetadataSyncService:
                         pass
             
             # Use MetadataUpdateService to get full metadata
-            self.logger.debug(f"Getting metadata for ASIN {asin}: {title}")
+            self.logger.debug(
+                "Getting metadata",
+                extra={"asin": asin, "title": title}
+            )
             
             # Ensure metadata service dependencies
             self.metadata_service._ensure_dependencies()
@@ -390,11 +446,19 @@ class AudibleMetadataSyncService:
             
             if not metadata:
                 # Fallback to basic book info if metadata service fails
-                self.logger.warning(f"No metadata found for ASIN {asin}, using basic info")
+                self.logger.warning(
+                    "No metadata found; using basic info",
+                    extra={"asin": asin}
+                )
                 normalized_book = self.metadata_processor.create_basic_book_entry(basic_book)
             else:
                 # Convert metadata to database format
                 normalized_book = self.metadata_processor.normalize_metadata_to_db_format(metadata, asin)
+
+            # Preserve purchase_date from the library payload for ownership validation
+            purchase_date = basic_book.get('purchase_date')
+            if purchase_date and 'purchase_date' not in normalized_book:
+                normalized_book['purchase_date'] = self.metadata_processor._normalize_date(purchase_date)
             
             # Cache cover image if available
             cover_url = normalized_book.get('cover_image_url')
@@ -403,9 +467,15 @@ class AudibleMetadataSyncService:
                     cached_cover_path = self.image_cache.get_cached_image_url(cover_url)
                     if cached_cover_path:
                         normalized_book['local_cover_path'] = cached_cover_path
-                        self.logger.debug(f"Cached cover for {asin}: {cached_cover_path}")
-                except Exception as e:
-                    self.logger.warning(f"Failed to cache cover for {asin}: {e}")
+                        self.logger.debug(
+                            "Cached cover image",
+                            extra={"asin": asin, "cover_path": cached_cover_path}
+                        )
+                except Exception as exc:
+                    self.logger.warning(
+                        "Failed to cache cover",
+                        extra={"asin": asin, "exc": exc}
+                    )
             
             # Add sync metadata
             normalized_book['last_updated'] = datetime.now().isoformat()
@@ -421,12 +491,15 @@ class AudibleMetadataSyncService:
                 'cached': False
             }
             
-        except Exception as e:
-            self.logger.error(f"Error processing book {basic_book.get('asin', 'Unknown')}: {e}")
+        except Exception as exc:
+            self.logger.error(
+                "Error processing book",
+                extra={"asin": basic_book.get('asin'), "exc": exc}
+            )
             return {
                 'success': False,
                 'asin': basic_book.get('asin'),
-                'error': str(e)
+                'error': str(exc)
             }
     
     def _get_quick_sync_books(self) -> List[Dict[str, Any]]:
@@ -441,14 +514,20 @@ class AudibleMetadataSyncService:
             # Get all books from API
             full_library = self.api_helper.get_library_list()
             if not full_library:
-                self.logger.warning("API returned empty library - may not be available. Quick sync will skip new books and only refresh outdated ones.")
+                self.logger.warning(
+                    "API returned empty library; quick sync will refresh only outdated books",
+                    extra={"cache_hours": self.cache_duration_hours}
+                )
                 
                 # If API is not available, we can still do a limited quick sync
                 # by just getting books from database that need refresh
                 outdated_asins = self.db_service.audible_library.get_outdated_books(self.cache_duration_hours)
                 
                 if not outdated_asins:
-                    self.logger.info("No outdated books found in database. Quick sync complete.")
+                    self.logger.info(
+                        "No outdated books found in database. Quick sync complete.",
+                        extra={"cache_hours": self.cache_duration_hours}
+                    )
                     return []
                 
                 # Get the outdated books from database to refresh their metadata
@@ -464,7 +543,10 @@ class AudibleMetadataSyncService:
                         }
                         outdated_books.append(api_format)
                 
-                self.logger.info(f"Quick sync will refresh {len(outdated_books)} outdated books from database")
+                self.logger.info(
+                    "Quick sync will refresh outdated books",
+                    extra={"count": len(outdated_books)}
+                )
                 return outdated_books
             
             # Get outdated ASINs from database (books older than cache_duration_hours)
@@ -484,14 +566,22 @@ class AudibleMetadataSyncService:
                 if asin not in existing_asins or asin in outdated_asins:
                     books_to_sync.append(book)
             
-            self.logger.info(f"Quick sync will process {len(books_to_sync)} books "
-                           f"({len(full_library) - len(existing_asins)} new, "
-                           f"{len(outdated_asins)} outdated)")
+            self.logger.info(
+                "Quick sync book selection",
+                extra={
+                    "to_process": len(books_to_sync),
+                    "new": len(full_library) - len(existing_asins),
+                    "outdated": len(outdated_asins)
+                }
+            )
             
             return books_to_sync
             
-        except Exception as e:
-            self.logger.error(f"Failed to get quick sync books: {e}")
+        except Exception as exc:
+            self.logger.error(
+                "Failed to get quick sync books",
+                extra={"exc": exc}
+            )
             return []
     
     def _reset_progress(self):
@@ -513,8 +603,11 @@ class AudibleMetadataSyncService:
         if self.socketio:
             try:
                 self.socketio.emit('audible_sync_progress', self._sync_progress)
-            except Exception as e:
-                self.logger.warning(f"Failed to emit progress update: {e}")
+            except Exception as exc:
+                self.logger.warning(
+                    "Failed to emit progress update",
+                    extra={"exc": exc}
+                )
     
     def get_sync_progress(self) -> Dict[str, Any]:
         """Get current sync progress."""
@@ -539,6 +632,9 @@ class AudibleMetadataSyncService:
             # Check if any books are outdated
             outdated_asins = self.db_service.audible_library.get_outdated_books(self.cache_duration_hours)
             return len(outdated_asins) > 0
-        except Exception as e:
-            self.logger.error(f"Error checking sync status: {e}")
+        except Exception as exc:
+            self.logger.error(
+                "Error checking sync status",
+                extra={"exc": exc}
+            )
             return True  # Default to needing sync if we can't determine

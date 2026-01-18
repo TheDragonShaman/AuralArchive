@@ -1,11 +1,13 @@
-"""Automatic Download Service
-=============================
+"""
+Module Name: automatic_download_service.py
+Author: TheDragonShaman
+Created: August 26, 2025
+Last Modified: December 24, 2025
+Description:
+    Coordinate automatic download scheduling for books marked as Wanted, respecting configuration and queue limits.
+Location:
+    /services/automation/automatic_download_service.py
 
-Background coordinator that watches the library for books marked as
-"Wanted" and feeds them into the download management pipeline. The
-service keeps queue additions in sync with configuration toggles and
-respects an upper bound on active search operations (enforced inside the
-DownloadManagementService).
 """
 
 from __future__ import annotations
@@ -26,18 +28,18 @@ class AutomaticDownloadService:
     _lock = threading.Lock()
     _initialized = False
 
-    def __new__(cls):
+    def __new__(cls, *args, **kwargs):
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
                     cls._instance = super().__new__(cls)
         return cls._instance
 
-    def __init__(self):
+    def __init__(self, *, logger=None):
         if not self._initialized:
             with self._lock:
                 if not self._initialized:
-                    self.logger = get_module_logger("AutomaticDownloadService")
+                    self.logger = logger or get_module_logger("Service.Automation.AutomaticDownload")
                     self._database_service = None
                     self._download_service = None
                     self._config_service = None
@@ -100,7 +102,10 @@ class AutomaticDownloadService:
     def start(self) -> bool:
         with self._state_lock:
             if self.running:
-                self.logger.debug("Automatic download service already running")
+                self.logger.debug(
+                    "Automatic download service already running",
+                    extra={"running": True},
+                )
                 return True
 
             self._stop_event.clear()
@@ -112,13 +117,23 @@ class AutomaticDownloadService:
                 daemon=True,
             )
             self._thread.start()
-            self.logger.info("Automatic download service started")
+            self.logger.success(
+                "Automatic download service started successfully",
+                extra={
+                    "thread_name": self._thread.name,
+                    "scan_interval_seconds": self.config.get("scan_interval_seconds"),
+                    "max_batch_size": self.config.get("max_batch_size"),
+                },
+            )
             return True
 
     def stop(self) -> bool:
         with self._state_lock:
             if not self.running:
-                self.logger.debug("Automatic download service already stopped")
+                self.logger.debug(
+                    "Automatic download service already stopped",
+                    extra={"running": False},
+                )
                 return True
 
             self._stop_event.set()
@@ -127,7 +142,10 @@ class AutomaticDownloadService:
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=5)
 
-        self.logger.info("Automatic download service stopped")
+        self.logger.info(
+            "Automatic download service stopped",
+            extra={"joined": bool(self._thread)},
+        )
         return True
 
     def pause(self) -> bool:
@@ -135,7 +153,10 @@ class AutomaticDownloadService:
             if self.paused:
                 return True
             self.paused = True
-            self.logger.info("Automatic download service paused")
+            self.logger.info(
+                "Automatic download service paused",
+                extra={"paused": True},
+            )
         return True
 
     def resume(self) -> bool:
@@ -143,7 +164,10 @@ class AutomaticDownloadService:
             if not self.paused:
                 return True
             self.paused = False
-            self.logger.info("Automatic download service resumed")
+            self.logger.info(
+                "Automatic download service resumed",
+                extra={"paused": False},
+            )
         return True
 
     # ------------------------------------------------------------------
@@ -190,11 +214,17 @@ class AutomaticDownloadService:
                     try:
                         skip_ids.append(int(token_clean))
                     except ValueError:
-                        self.logger.debug("Skipping invalid skip_book_id token: %s", token_clean)
+                        self.logger.debug(
+                            "Skipping invalid skip_book_id token",
+                            extra={"token": token_clean},
+                        )
             self._skip_book_ids = skip_ids
 
         except Exception as exc:
-            self.logger.error("Failed to load automatic search configuration: %s", exc)
+            self.logger.error(
+                "Failed to load automatic search configuration",
+                extra={"error": str(exc)},
+            )
             self.last_error = str(exc)
 
     def update_configuration(self, updates: Dict[str, Any]) -> bool:
@@ -214,7 +244,10 @@ class AutomaticDownloadService:
         self._get_config_service().update_multiple_config({
             "auto_search.skip_book_ids": skip_value
         })
-        self.logger.debug("Persisted %s skipped book IDs", len(self._skip_book_ids))
+        self.logger.debug(
+            "Persisted skipped book IDs",
+            extra={"count": len(self._skip_book_ids)},
+        )
 
     # ------------------------------------------------------------------
     # Core loop
@@ -226,12 +259,18 @@ class AutomaticDownloadService:
                 self._load_configuration()
 
                 if not self.config.get("auto_download_enabled"):
-                    self.logger.debug("Automatic downloads disabled; sleeping")
+                    self.logger.debug(
+                        "Automatic downloads disabled; sleeping",
+                        extra={"auto_download_enabled": False},
+                    )
                     self._wait_interval()
                     continue
 
                 if self.paused:
-                    self.logger.debug("Automatic downloads paused; sleeping")
+                    self.logger.debug(
+                        "Automatic downloads paused; sleeping",
+                        extra={"paused": True},
+                    )
                     self._wait_interval()
                     continue
 
@@ -240,14 +279,23 @@ class AutomaticDownloadService:
                     self._queue_snapshot = pending_books
 
                     if not pending_books:
-                        self.logger.debug("No eligible 'Wanted' books found this cycle")
+                        self.logger.debug(
+                            "No eligible 'Wanted' books found this cycle",
+                            extra={"pending": 0},
+                        )
                     else:
                         queued = self._queue_books(pending_books)
                         if queued:
-                            self.logger.info("Queued %s books for automatic download", queued)
+                            self.logger.info(
+                                "Queued books for automatic download",
+                                extra={"queued": queued, "pending": len(pending_books)},
+                            )
                 except Exception as exc:
                     self.last_error = str(exc)
-                    self.logger.error("Automatic search cycle failed: %s", exc, exc_info=True)
+                    self.logger.exception(
+                        "Automatic search cycle failed",
+                        extra={"error": str(exc)},
+                    )
 
                 self._wait_interval()
         finally:
@@ -327,10 +375,12 @@ class AutomaticDownloadService:
                     pass
             else:
                 self.logger.warning(
-                    "Failed to queue book %s (%s): %s",
-                    book.get("title"),
-                    book.get("asin"),
-                    result.get("message"),
+                    "Failed to queue book",
+                    extra={
+                        "title": book.get("title"),
+                        "asin": book.get("asin"),
+                        "message": result.get("message"),
+                    },
                 )
 
         return queued

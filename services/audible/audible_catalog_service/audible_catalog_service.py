@@ -1,7 +1,19 @@
-import logging
-import threading
-from typing import List, Dict, Optional, Any, Set, Tuple
+"""
+Module Name: audible_catalog_service.py
+Author: TheDragonShaman
+Created: August 14, 2025
+Last Modified: December 23, 2025
+Description:
+    Search, fetch, and format Audible catalog data with shared helpers.
+Location:
+    /services/audible/audible_catalog_service/audible_catalog_service.py
 
+"""
+
+import threading
+from typing import Any, Dict, List, Optional, Set, Tuple
+
+from utils.logger import get_module_logger
 from .catalog_search import AudibleSearch
 from .formatting import AudibleFormatter
 from .cover_utils import CoverImageUtils
@@ -26,7 +38,7 @@ class AudibleService:
         if not self._initialized:
             with self._lock:
                 if not self._initialized:
-                    self.logger = logging.getLogger("AudibleService.Main")
+                    self.logger = get_module_logger("Service.Audible.Catalog")
                     
                     # Initialize modular components
                     self.search = AudibleSearch()
@@ -35,41 +47,41 @@ class AudibleService:
                     self.error_handler = AudibleErrorHandler()
                     self.author_scraper = AudibleAuthorScraper()
                     
-                    self.logger.info("AudibleService initialized successfully")
+                    self.logger.info("AudibleService initialized", extra={"instance_id": id(self)})
                     AudibleService._initialized = True
     
     def search_books(self, query: str, region: str = "us", num_results: int = 25) -> List[Dict]:
         """Search for books on Audible and return formatted results"""
         try:
-            self.logger.info(f"Starting book search for: {query}")
+            self.logger.info("Starting book search", extra={"query": query, "region": region, "requested": num_results})
             
             # Perform search using search module
             raw_results = self.search.search_books(query, region, num_results)
             
             if not raw_results:
-                self.logger.warning(f"No results found for query: {query}")
+                self.logger.warning("No results found for query", extra={"query": query, "region": region})
                 return []
             
             # Process results using formatter
             processed_books = self.formatter.process_search_results(raw_results, region)
             
-            self.logger.info(f"Successfully processed {len(processed_books)} books for query: {query}")
+            self.logger.info("Processed search results", extra={"query": query, "region": region, "count": len(processed_books)})
             return processed_books
             
         except Exception as e:
-            self.logger.error(f"Error in search_books for query '{query}': {e}")
+            self.logger.error("Error in search_books", extra={"query": query, "region": region, "error": str(e)})
             return []
     
     def get_book_details(self, asin: str, region: str = "us") -> Optional[Dict]:
         """Get detailed information for a specific book"""
         try:
-            self.logger.info(f"Getting book details for ASIN: {asin}")
+            self.logger.info("Getting book details", extra={"asin": asin, "region": region})
             
             # Get raw book data
             raw_book = self.search.get_book_details(asin, region)
             
             if not raw_book:
-                self.logger.warning(f"No book found for ASIN: {asin}")
+                self.logger.warning("No book found for ASIN", extra={"asin": asin, "region": region})
                 return None
             
             # Process single book result
@@ -77,48 +89,48 @@ class AudibleService:
             
             if processed_books:
                 book = processed_books[0]
-                self.logger.info(f"Successfully retrieved details for: {book.get('Title', 'Unknown')}")
+                self.logger.info("Retrieved book details", extra={"asin": asin, "title": book.get('Title', 'Unknown'), "region": region})
                 return book
             else:
-                self.logger.error(f"Failed to process book data for ASIN: {asin}")
+                self.logger.error("Failed to process book data", extra={"asin": asin, "region": region})
                 return None
             
         except Exception as e:
-            self.logger.error(f"Error getting book details for ASIN '{asin}': {e}")
+            self.logger.error("Error getting book details", extra={"asin": asin, "region": region, "error": str(e)})
             return None
     
     def search_by_author(self, author: str, region: str = "us", num_results: int = 25) -> List[Dict]:
         """Search for books by a specific author"""
         try:
-            self.logger.info(f"Searching books by author: {author}")
+            self.logger.info("Searching books by author", extra={"author": author, "region": region, "requested": num_results})
             
             # Use specialized author search
             raw_results = self.search.search_by_author(author, region, num_results)
             
             if not raw_results:
-                self.logger.warning(f"No books found for author: {author}")
+                self.logger.warning("No books found for author", extra={"author": author, "region": region})
                 return []
             
             # Process results
             processed_books = self.formatter.process_search_results(raw_results, region)
             
-            self.logger.info(f"Found {len(processed_books)} books by author: {author}")
+            self.logger.info("Found books by author", extra={"author": author, "region": region, "count": len(processed_books)})
             return processed_books
             
         except Exception as e:
-            self.logger.error(f"Error searching by author '{author}': {e}")
+            self.logger.error("Error searching by author", extra={"author": author, "region": region, "error": str(e)})
             return []
     
     def search_by_series(self, series: str, region: str = "us", num_results: int = 25) -> List[Dict]:
         """Search for books in a specific series"""
         try:
-            self.logger.info(f"Searching books in series: {series}")
+            self.logger.info("Searching books in series", extra={"series": series, "region": region, "requested": num_results})
             
             # Use specialized series search
             raw_results = self.search.search_by_series(series, region, num_results)
             
             if not raw_results:
-                self.logger.warning(f"No books found in series: {series}")
+                self.logger.warning("No books found in series", extra={"series": series, "region": region})
                 return []
             
             # Process results
@@ -127,11 +139,11 @@ class AudibleService:
             # Sort by sequence if available
             processed_books.sort(key=lambda x: self._parse_sequence(x.get('Sequence', 'N/A')))
             
-            self.logger.info(f"Found {len(processed_books)} books in series: {series}")
+            self.logger.info("Found books in series", extra={"series": series, "region": region, "count": len(processed_books)})
             return processed_books
             
         except Exception as e:
-            self.logger.error(f"Error searching by series '{series}': {e}")
+            self.logger.error("Error searching by series", extra={"series": series, "region": region, "error": str(e)})
             return []
     
     def get_cover_info(self, asin: str, book_data: Dict = None) -> Dict:
@@ -145,7 +157,7 @@ class AudibleService:
                 return self.cover_utils.get_cover_info(minimal_data, asin)
             
         except Exception as e:
-            self.logger.error(f"Error getting cover info for ASIN {asin}: {e}")
+            self.logger.error("Error getting cover info", extra={"asin": asin, "error": str(e)})
             return {
                 'primary_url': self.cover_utils._get_placeholder_url(),
                 'is_placeholder': True,
@@ -157,7 +169,7 @@ class AudibleService:
         try:
             return self.formatter.format_book_for_display(book_data)
         except Exception as e:
-            self.logger.error(f"Error formatting book for display: {e}")
+            self.logger.error("Error formatting book for display", extra={"error": str(e)})
             return book_data
     
     def get_service_status(self) -> Dict:
@@ -191,26 +203,26 @@ class AudibleService:
             return status
             
         except Exception as e:
-            self.logger.error(f"Error getting service status: {e}")
+            self.logger.error("Error getting service status", extra={"error": str(e)})
             return {'error': str(e)}
     
     def test_connection(self) -> tuple[bool, str]:
         """Test connection to Audible API"""
         try:
-            self.logger.info("Testing Audible API connection...")
+            self.logger.info("Testing Audible API connection")
             
             # Perform a minimal search to test connectivity
             test_results = self.search_books("test", num_results=1)
             
             if test_results is not None:  # Empty list is also a valid response
-                self.logger.info("Audible API connection test successful")
+                self.logger.info("Audible API connection test successful", extra={"results": len(test_results) if test_results is not None else 0})
                 return True, f"API accessible - test returned {len(test_results)} results"
             else:
                 self.logger.error("Audible API connection test failed")
                 return False, "API connection failed"
             
         except Exception as e:
-            self.logger.error(f"Audible API connection test error: {e}")
+            self.logger.error("Audible API connection test error", extra={"error": str(e)})
             return False, f"Connection error: {str(e)}"
     
     def _parse_sequence(self, sequence: str) -> float:
@@ -339,7 +351,7 @@ class AudibleService:
             return [], keyword_results
 
         except Exception as exc:
-            self.logger.error(f"Error fetching catalog for author {author_name}: {exc}")
+            self.logger.error("Error fetching catalog for author", extra={"author": author_name, "error": str(exc)})
             return [], []
 
     def _filter_buyable_products(self, products: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -351,7 +363,7 @@ class AudibleService:
             else:
                 asin = product.get('asin')
                 title = product.get('title') or product.get('product_title')
-                self.logger.debug(f"Skipping unbuyable catalog entry: {title} ({asin})")
+                self.logger.debug("Skipping unbuyable catalog entry", extra={"title": title, "asin": asin})
         return filtered
 
     def _is_product_buyable(self, product: Dict[str, Any]) -> bool:
@@ -383,7 +395,7 @@ class AudibleService:
             return True
 
         except Exception as exc:
-            self.logger.debug(f"Failed to evaluate catalog product purchasability: {exc}")
+            self.logger.debug("Failed to evaluate catalog product purchasability", extra={"error": str(exc), "asin": product.get('asin')})
             return True
     def get_author_books_from_audible(
         self,
@@ -416,13 +428,11 @@ class AudibleService:
             if limit is not None and formatted_books:
                 formatted_books = formatted_books[:limit]
 
-            self.logger.info(
-                f"Returning {len(formatted_books)} books for {author_name}"
-            )
+            self.logger.info("Returning author books", extra={"author": author_name, "count": len(formatted_books), "persisted": persist})
             return formatted_books
 
         except Exception as e:
-            self.logger.error(f"Error getting books for author {author_name}: {e}")
+            self.logger.error("Error getting books for author", extra={"author": author_name, "error": str(e)})
             return []
 
     def persist_author_catalog(
@@ -435,7 +445,7 @@ class AudibleService:
         try:
             from services.service_manager import get_database_service
         except Exception as import_error:
-            self.logger.debug(f"Database persistence skipped (service manager unavailable): {import_error}")
+            self.logger.debug("Database persistence skipped (service manager unavailable)", extra={"error": str(import_error)})
             return {'books_successful': 0, 'books_failed': 0, 'series_successful': 0, 'series_failed': 0}
 
         db_service = get_database_service()
@@ -449,12 +459,10 @@ class AudibleService:
         if books_for_db:
             try:
                 books_successful, books_failed = db_service.books.bulk_insert_or_update_books(books_for_db)
-                self.logger.info(
-                    f"Persisted {books_successful} author catalog entries for {author_name} (failed: {books_failed})"
-                )
+                self.logger.info("Persisted author catalog entries", extra={"author": author_name, "success": books_successful, "failed": books_failed})
             except Exception as db_error:
                 books_failed = len(books_for_db)
-                self.logger.warning(f"Failed to persist author catalog for {author_name}: {db_error}")
+                self.logger.warning("Failed to persist author catalog", extra={"author": author_name, "error": str(db_error)})
 
         series_entries = self._prepare_series_entries(raw_books, formatted_books)
         series_successful = 0

@@ -1,33 +1,31 @@
 """
-Audible Library Database Operations - AuralArchive
+Module Name: audible_library.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    CRUD and bulk operations for the audible_library table (ASIN primary key).
 
-Handles all database operations for the audible_library table with ASIN as primary key.
-Includes CRUD operations, bulk operations, and efficient data synchronization.
+Location:
+    /services/database/audible_library.py
 
-Author: AuralArchive Development Team
-Created: September 18, 2025
 """
 
 import sqlite3
-import logging
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timedelta
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from utils.logger import get_module_logger
 
 
 class AudibleLibraryOperations:
     """Database operations for Audible library books with ASIN primary key"""
-    
-    def __init__(self, connection_manager):
-        """
-        Initialize audible library database operations.
-        
-        Args:
-            connection_manager: Database connection manager instance
-        """
+
+    def __init__(self, connection_manager, *, logger=None):
+        """Initialize audible library database operations."""
         self.connection_manager = connection_manager
-        self.logger = logging.getLogger("DatabaseService.AudibleLibrary")
+        self.logger = logger or get_module_logger("Service.Database.AudibleLibrary")
         self._lock = threading.Lock()
     
     def get_all_books(self, include_metadata: bool = True) -> List[Dict[str, Any]]:

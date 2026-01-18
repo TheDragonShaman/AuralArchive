@@ -1,130 +1,94 @@
-import os
+"""
+Module Name: logger.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Configures Loguru-backed logging and provides standardized module logger
+    helpers for the application. Centralizes logger naming and setup.
+
+Location:
+    /utils/logger.py
+
+"""
+
+# Bottleneck: repeated setup_logger calls are guarded; minimal impact.
+# Upgrade: consider structured logging schema defaults.
+
 import logging
-from logging.handlers import RotatingFileHandler
-from datetime import datetime
+from typing import Optional
+
+from utils.loguru_config import setup_loguru
 
 
 _LOGGER_INITIALIZED = False
 
-def setup_logger(name="AuralArchiveLogger", log_file="auralarchive_web.log", level=logging.INFO):
-    """Set up parent logger for the Flask application (idempotent)."""
+# Ensure SUCCESS level exists for standard logging
+SUCCESS_LEVEL = 25
+logging.addLevelName(SUCCESS_LEVEL, "SUCCESS")
+
+
+def success(self, message, *args, **kws):
+    if self.isEnabledFor(SUCCESS_LEVEL):
+        self._log(SUCCESS_LEVEL, message, args, **kws)
+
+
+# Patch logging.Logger to include success (idempotent)
+logging.Logger.success = success
+
+
+def setup_logger(name: str = "AuralArchive", log_file: str = "auralarchive_web.log", level: int = logging.INFO):
+    """Initialize logging via Loguru while preserving the existing API."""
     global _LOGGER_INITIALIZED
-    
-    # Create logs directory if it doesn't exist
-    log_dir = os.path.join(os.path.dirname(__file__), '..', 'logs')
-    os.makedirs(log_dir, exist_ok=True)
-    
-    # Full path to log file
-    log_path = os.path.join(log_dir, log_file)
-    
-    # Create parent logger
-    parent_logger = logging.getLogger(name)
 
-    # If already configured, just adjust level if needed and exit
-    if _LOGGER_INITIALIZED and parent_logger.handlers:
-        parent_logger.setLevel(level)
-        return parent_logger
+    standardized_name = _standardize_name(name)
 
-    parent_logger.setLevel(level)
-    parent_logger.handlers.clear()
-    
-    # Create formatters
-    detailed_formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-    
-    simple_formatter = logging.Formatter(
-        '%(levelname)s - %(name)s - %(message)s'
-    )
-    
-    # File handler (rotating)
-    file_handler = RotatingFileHandler(
-        log_path, 
-        maxBytes=10*1024*1024,  # 10MB
-        backupCount=5,
-        encoding='utf-8'
-    )
-    file_handler.setLevel(level)
-    file_handler.setFormatter(detailed_formatter)
-    
-    # Console handler
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(level)
-    console_handler.setFormatter(detailed_formatter)
-    
-    # Add handlers to parent logger
-    parent_logger.addHandler(file_handler)
-    parent_logger.addHandler(console_handler)
-    
-    # Disable propagation to avoid duplicate logs
-    parent_logger.propagate = False
+    if not _LOGGER_INITIALIZED:
+        setup_loguru(log_level=level, log_file=log_file, logger_name=standardized_name)
+        _LOGGER_INITIALIZED = True
 
-    _LOGGER_INITIALIZED = True
+    logger = logging.getLogger(standardized_name)
+    logger.setLevel(level)
+    return logger
 
-    # Set up child logger configurations once
-    setup_child_loggers(level)
 
-    parent_logger.debug(f"Parent logger initialized - Log file: {log_path}")
-
-    return parent_logger
-
-def setup_child_loggers(level=logging.INFO):
-    """Configure child loggers to inherit from parent but maintain their names."""
-    
-    # Define child logger patterns for your providers and services
-    child_patterns = [
-        "JackettProvider",
-        "ProviderManager",
-        "DownloadService",
-        "qBittorrentClient",
-        "ClientManager",
-        "SearchProvider",
-        "DownloadsRoute",
-        "IndexerProvider.Jackett",
-        "DownloadClient.qBittorrent",
-        # Add more as needed for your other services
-    ]
-    
-    # Configure the root logger to ensure child inheritance works
+def setup_child_loggers(level: int = logging.INFO, name: str = "AuralArchive"):
+    """Maintain compatibility; child loggers propagate into Loguru interceptor."""
+    standardized_name = _standardize_name(name)
     root_logger = logging.getLogger()
     root_logger.setLevel(level)
-    
-    for pattern in child_patterns:
-        child_logger = logging.getLogger(pattern)
-        child_logger.setLevel(level)
-        # Clear any existing handlers to avoid duplicates
-        child_logger.handlers.clear()
-        # Enable propagation to inherit from root/parent
-        child_logger.propagate = True
-    
-    main_logger = logging.getLogger("AuralArchiveLogger")
-    if main_logger:
-        main_logger.debug(f"Configured {len(child_patterns)} child logger patterns")
+    logging.getLogger(standardized_name).setLevel(level)
+
+
+def _standardize_name(raw_name: Optional[str]) -> str:
+    """Normalize logger names to dotted, title-cased segments (Service.Audible.CatalogCover)."""
+    if not raw_name:
+        return "AuralArchive"
+
+    normalized = raw_name.replace("\\", ".").replace("/", ".").replace("_", ".").replace(" ", ".")
+    parts = [segment for segment in normalized.split(".") if segment]
+    return ".".join(part[:1].upper() + part[1:] for part in parts)
+
 
 def get_module_logger(module_name: str):
-    """Get a logger for a specific module that uses standardized configuration."""
-    # Get or create the main logger (this ensures setup_logger was called)
-    main_logger = logging.getLogger("AuralArchiveLogger")
-    
-    # If main logger has no handlers, set it up
-    if not main_logger.handlers:
+    """Return a standard logger; Loguru intercepts its output."""
+    if not _LOGGER_INITIALIZED:
         setup_logger()
-    
-    # Create module-specific logger
-    module_logger = logging.getLogger(module_name)
-    
-    # If this module logger doesn't have handlers, configure it
-    if not module_logger.handlers:
-        # Copy handlers from main logger
-        for handler in main_logger.handlers:
-            module_logger.addHandler(handler)
-        
-        module_logger.setLevel(main_logger.level)
-        module_logger.propagate = False  # Prevent duplicate logs
-    
-    return module_logger
 
-def get_logger(name="AuralArchiveLogger"):
-    """Get an existing logger instance."""
-    return logging.getLogger(name)
+    standardized = _standardize_name(module_name)
+    logger = logging.getLogger(standardized)
+    logger.success = logging.Logger.success.__get__(logger, logger.__class__)
+    logger.debug("Initialized module logger", extra={"logger_name": standardized})
+    return logger
+
+
+def get_logger(name: str = "AuralArchive"):
+    """Return the named logger (intercepted by Loguru)."""
+    if not _LOGGER_INITIALIZED:
+        setup_logger(name)
+
+    standardized = _standardize_name(name)
+    logger = logging.getLogger(standardized)
+    logger.success = logging.Logger.success.__get__(logger, logger.__class__)
+    logger.debug("Initialized named logger", extra={"logger_name": standardized})
+    return logger

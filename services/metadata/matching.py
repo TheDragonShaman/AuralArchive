@@ -1,11 +1,30 @@
-import logging
+"""
+Module Name: matching.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Implements matching and similarity scoring helpers used by the metadata
+    service to select the best search results.
+
+Location:
+    /services/metadata/matching.py
+
+"""
+
 from typing import List, Dict, Optional
+
+from utils.logger import get_module_logger
+
+
+_LOGGER = get_module_logger("Service.Metadata.Matching")
 
 class MetadataMatching:
     """Handles text matching and similarity algorithms for metadata updates"""
     
-    def __init__(self):
-        self.logger = logging.getLogger("MetadataUpdateService.Matching")
+    def __init__(self, *, logger=None):
+        # Fallback to direct getter if module logger is unavailable for any reason
+        self.logger = logger or _LOGGER if '_LOGGER' in globals() else get_module_logger("Service.Metadata.Matching")
     
     def find_best_match(self, search_results: List[Dict], target_title: str, target_author: str) -> Optional[Dict]:
         """Find the best matching book from search results"""
@@ -19,12 +38,22 @@ class MetadataMatching:
             best_match = None
             best_score = 0
             
-            self.logger.debug(f"Matching against target: '{target_title}' by '{target_author}'")
+            self.logger.debug(
+                "Matching search results",
+                extra={"target_title": target_title, "target_author": target_author},
+            )
             
             for result in search_results:
                 score = self._calculate_match_score(result, target_title_lower, target_author_lower)
                 
-                self.logger.debug(f"Match score {score}: '{result.get('Title', 'Unknown')}' by '{result.get('Author', 'Unknown')}'")
+                self.logger.debug(
+                    "Match score computed",
+                    extra={
+                        "score": score,
+                        "result_title": result.get('Title', 'Unknown'),
+                        "result_author": result.get('Author', 'Unknown'),
+                    },
+                )
                 
                 if score > best_score:
                     best_score = score
@@ -32,18 +61,28 @@ class MetadataMatching:
             
             # Only return matches with reasonable confidence
             if best_score >= 10:
-                self.logger.info(f"Best match found with score {best_score}: '{best_match.get('Title')}'")
+                self.logger.info(
+                    "Best match found",
+                    extra={"score": best_score, "title": best_match.get('Title')},
+                )
                 return best_match
             
             # If no good match, return first result as fallback
             if search_results:
-                self.logger.info(f"No confident match (best score: {best_score}), using first result as fallback")
+                self.logger.info(
+                    "No confident match, using fallback",
+                    extra={"best_score": best_score},
+                )
                 return search_results[0]
             
             return None
             
         except Exception as e:
-            self.logger.error(f"Error finding best match: {e}")
+            self.logger.error(
+                "Error finding best match",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
             return search_results[0] if search_results else None
     
     def _calculate_match_score(self, result: Dict, target_title: str, target_author: str) -> float:
@@ -66,16 +105,26 @@ class MetadataMatching:
             # Bonus for exact matches
             if target_title == result_title:
                 score += 15
-                self.logger.debug(f"Exact title match bonus: +15")
+                self.logger.debug(
+                    "Exact title match bonus",
+                    extra={"bonus": 15},
+                )
             
             if target_author and target_author == result_author:
                 score += 10
-                self.logger.debug(f"Exact author match bonus: +10")
+                self.logger.debug(
+                    "Exact author match bonus",
+                    extra={"bonus": 10},
+                )
             
             return score
             
         except Exception as e:
-            self.logger.debug(f"Error calculating match score: {e}")
+            self.logger.error(
+                "Error calculating match score",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
             return 0
     
     def _calculate_title_score(self, target: str, candidate: str) -> float:
@@ -92,7 +141,7 @@ class MetadataMatching:
         # Substring match
         if target in candidate or candidate in target:
             score += 15
-            self.logger.debug(f"Title substring match: +15")
+            self.logger.debug("Title substring match bonus", extra={"bonus": 15})
         
         # Word-based similarity
         word_similarity = self._calculate_word_similarity(target, candidate)
@@ -102,7 +151,7 @@ class MetadataMatching:
         char_similarity = self._calculate_character_similarity(target, candidate)
         if char_similarity > 0.8:
             score += 5
-            self.logger.debug(f"High character similarity: +5")
+            self.logger.debug("High character similarity bonus", extra={"bonus": 5})
         
         return score
     
@@ -120,7 +169,7 @@ class MetadataMatching:
         # Substring match
         if target in candidate or candidate in target:
             score += 8
-            self.logger.debug(f"Author substring match: +8")
+            self.logger.debug("Author substring match bonus", extra={"bonus": 8})
         
         # Word-based similarity (authors often have different name orders)
         word_similarity = self._calculate_word_similarity(target, candidate)
@@ -145,12 +194,19 @@ class MetadataMatching:
             similarity = intersection / union if union > 0 else 0.0
             
             if similarity > 0.5:
-                self.logger.debug(f"Word similarity {similarity:.2f}: '{str1}' vs '{str2}'")
+                self.logger.debug(
+                    "Word similarity",
+                    extra={"similarity": round(similarity, 2), "first": str1, "second": str2},
+                )
             
             return similarity
             
         except Exception as e:
-            self.logger.debug(f"Error calculating word similarity: {e}")
+            self.logger.error(
+                "Error calculating word similarity",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
             return 0.0
     
     def _calculate_character_similarity(self, str1: str, str2: str) -> float:
@@ -184,7 +240,11 @@ class MetadataMatching:
             return similarity
             
         except Exception as e:
-            self.logger.debug(f"Error calculating character similarity: {e}")
+            self.logger.error(
+                "Error calculating character similarity",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
             return 0.0
     
     def _normalize_text(self, text: str) -> str:
@@ -210,7 +270,12 @@ class MetadataMatching:
         try:
             similarity = self._calculate_word_similarity(str1, str2)
             return similarity > threshold
-        except:
+        except Exception as e:
+            self.logger.error(
+                "Error comparing string similarity",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
             return False
     
     def find_exact_asin_match(self, search_results: List[Dict], target_asin: str) -> Optional[Dict]:
@@ -222,13 +287,20 @@ class MetadataMatching:
             for result in search_results:
                 result_asin = result.get('ASIN', '')
                 if result_asin == target_asin:
-                    self.logger.info(f"Found exact ASIN match: {target_asin}")
+                    self.logger.info(
+                        "Found exact ASIN match",
+                        extra={"target_asin": target_asin, "title": result.get('Title')},
+                    )
                     return result
             
             return None
             
         except Exception as e:
-            self.logger.debug(f"Error finding exact ASIN match: {e}")
+            self.logger.error(
+                "Error finding exact ASIN match",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
             return None
 
 # Global instance for easy access

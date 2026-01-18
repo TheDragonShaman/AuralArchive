@@ -1,12 +1,27 @@
+"""
+Module Name: validation.py
+Author: TheDragonShaman
+Created: August 26, 2025
+Last Modified: December 24, 2025
+Description:
+    Validate configuration sections for AuralArchive services.
+Location:
+    /services/config/validation.py
+
+"""
+
 import os
-import logging
 from typing import Dict
 
+from utils.logger import get_module_logger
+
+
 class ConfigValidation:
-    """Handles configuration validation for all AuralArchive services"""
-    
-    def __init__(self):
-        self.logger = logging.getLogger("ConfigService.Validation")
+    """Handle configuration validation for all AuralArchive services."""
+
+    def __init__(self, logger=None, **_kwargs):
+        # Accept extra kwargs defensively to avoid instantiation errors from legacy call sites
+        self.logger = logger or get_module_logger("Service.Config.Validation")
     
     def validate_config(self, config: Dict[str, Dict[str, str]]) -> Dict[str, bool]:
         """Validate configuration sections and return status."""
@@ -33,8 +48,11 @@ class ConfigValidation:
             audible_config = config.get('audible', {})
             validation_results['audible'] = self._validate_audible(audible_config)
             
-        except Exception as e:
-            self.logger.error(f"Error during configuration validation: {e}")
+        except Exception as exc:
+            self.logger.exception(
+                "Error during configuration validation",
+                extra={"config_sections": list(config.keys()) if config else []},
+            )
         
         return validation_results
     
@@ -52,9 +70,12 @@ class ConfigValidation:
             try:
                 if not os.path.exists(dir_path):
                     os.makedirs(dir_path, exist_ok=True)
-                    self.logger.info(f"Created directory: {dir_path}")
-            except Exception as e:
-                self.logger.error(f"Cannot create directory {dir_path}: {e}")
+                    self.logger.info("Created directory", extra={"path": dir_path})
+            except Exception as exc:
+                self.logger.exception(
+                    "Cannot create directory",
+                    extra={"path": dir_path},
+                )
                 return False
         
         self.logger.debug("Directory configuration validation passed")
@@ -67,12 +88,18 @@ class ConfigValidation:
         
         host = abs_config.get('abs_host', '')
         if not host:
-            self.logger.warning("AudioBookShelf host not configured")
+            self.logger.warning(
+                "AudioBookShelf host not configured",
+                extra={"abs_enabled": abs_config.get('abs_enabled')},
+            )
             return False
         
         # Basic URL validation
         if not (host.startswith('http://') or host.startswith('https://')):
-            self.logger.warning(f"Invalid AudioBookShelf URL format: {host}")
+            self.logger.warning(
+                "Invalid AudioBookShelf URL format",
+                extra={"abs_host": host},
+            )
             return False
         
         self.logger.debug("AudioBookShelf configuration validation passed")
@@ -86,16 +113,22 @@ class ConfigValidation:
         password = qb_config.get('qb_password', '')
         
         if not all([host, port, username, password]):
-            self.logger.warning("Incomplete qBittorrent configuration")
+            self.logger.warning("Incomplete qBittorrent configuration", extra=qb_config)
             return False
         
         try:
             port_int = int(port)
             if port_int < 1 or port_int > 65535:
-                self.logger.warning(f"Invalid qBittorrent port: {port}")
+                self.logger.warning(
+                    "Invalid qBittorrent port value",
+                    extra={"qb_port": port},
+                )
                 return False
         except ValueError:
-            self.logger.warning(f"Invalid qBittorrent port format: {port}")
+            self.logger.warning(
+                "Invalid qBittorrent port format",
+                extra={"qb_port": port},
+            )
             return False
         
         self.logger.debug("qBittorrent configuration validation passed")
@@ -107,12 +140,15 @@ class ConfigValidation:
         api_key = jackett_config.get('jackett_api_key', '')
         
         if not url or not api_key:
-            self.logger.warning("Incomplete Jackett configuration")
+            self.logger.warning("Incomplete Jackett configuration", extra=jackett_config)
             return False
         
         # Basic URL validation
         if not (url.startswith('http://') or url.startswith('https://')):
-            self.logger.warning(f"Invalid Jackett URL format: {url}")
+            self.logger.warning(
+                "Invalid Jackett URL format",
+                extra={"jackett_url": url},
+            )
             return False
         
         self.logger.debug("Jackett configuration validation passed")
@@ -126,15 +162,21 @@ class ConfigValidation:
         try:
             max_results_int = int(max_results)
             if max_results_int < 5 or max_results_int > 100:
-                self.logger.warning(f"Invalid max_results value: {max_results}")
+                self.logger.warning(
+                    "Invalid max_results value",
+                    extra={"max_results": max_results},
+                )
                 return False
         except ValueError:
-            self.logger.warning(f"Invalid max_results format: {max_results}")
+            self.logger.warning(
+                "Invalid max_results format",
+                extra={"max_results": max_results},
+            )
             return False
         
         valid_regions = ['us', 'uk', 'ca', 'au', 'de', 'fr', 'jp', 'in']
         if region not in valid_regions:
-            self.logger.warning(f"Invalid region: {region}")
+            self.logger.warning("Invalid region", extra={"region": region})
             return False
         
         self.logger.debug("Audible configuration validation passed")

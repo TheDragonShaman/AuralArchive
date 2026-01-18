@@ -1,6 +1,31 @@
 """
-Audiobook Services Settings API Routes
-Handles configuration management for audiobook services
+Module Name: audiobook_settings_api.py
+Author: TheDragonShaman
+Created: July 6, 2025
+Last Modified: December 23, 2025
+Description:
+    REST endpoints for audiobook services configuration: indexers, clients,
+    download coordination, file processing, validation, reload, and status.
+
+Location:
+    /api/audiobook_settings_api.py
+
+Audiobook Services Settings API
+===============================
+
+Endpoints:
+- GET    /api/audiobook-services/config                          - Full config
+- GET    /api/audiobook-services/config/indexers/<name>          - Indexer config
+- PUT    /api/audiobook-services/config/indexers/<name>          - Update indexer
+- GET    /api/audiobook-services/config/clients/<name>           - Client config
+- PUT    /api/audiobook-services/config/clients/<name>           - Update client
+- GET    /api/audiobook-services/config/download-coordination    - Coordination config
+- PUT    /api/audiobook-services/config/download-coordination    - Update coordination
+- GET    /api/audiobook-services/config/file-processing          - File processing config
+- PUT    /api/audiobook-services/config/file-processing          - Update file processing
+- POST   /api/audiobook-services/validate                        - Validate config
+- POST   /api/audiobook-services/reload                          - Reload config
+- GET    /api/audiobook-services/status                          - Service status
 """
 from flask import Blueprint, jsonify, request
 from functools import wraps
@@ -9,7 +34,7 @@ from utils.logger import get_module_logger
 
 # Create blueprint
 audiobook_settings_bp = Blueprint('audiobook_settings', __name__)
-logger = get_module_logger("API.AudiobookSettings")
+logger = get_module_logger("API.Audiobook.Settings")
 
 def handle_errors(f):
     """Decorator to handle API errors"""

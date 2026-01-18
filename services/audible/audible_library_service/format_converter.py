@@ -1,21 +1,22 @@
 """
-Audible Format Converter - AuralArchive
+Module Name: format_converter.py
+Author: TheDragonShaman
+Created: August 23, 2025
+Last Modified: December 23, 2025
+Description:
+    Convert Audible AAX/AAXC to open formats with progress tracking and quality presets.
+Location:
+    /services/audible/audible_library_service/format_converter.py
 
-Handles format conversion utilities for Audible audiobooks, including
-AAX/AAXC to open formats like M4B and MP3. Provides conversion progress
-tracking and quality management.
-
-Author: AuralArchive Development Team
-Created: September 16, 2025
 """
 
 import os
 import subprocess
 import tempfile
 from typing import Dict, List, Any, Optional, Callable
-import logging
 from pathlib import Path
 import re
+from utils.logger import get_module_logger
 
 
 class AudibleFormatConverter:
@@ -34,7 +35,7 @@ class AudibleFormatConverter:
         Args:
             logger: Logger instance for conversion operations
         """
-        self.logger = logger or logging.getLogger(__name__)
+        self.logger = logger or get_module_logger("Service.Audible.Library.FormatConverter")
         
         # Supported input and output formats
         self.supported_input_formats = ['.aax', '.aaxc']
@@ -106,7 +107,10 @@ class AudibleFormatConverter:
             if auth_file.exists():
                 requirements['auth_file'] = True
             else:
-                self.logger.debug("Audible auth file not found at %s", auth_file)
+                self.logger.debug(
+                    "Audible auth file not found",
+                    extra={"auth_file": str(auth_file)}
+                )
             
             # Overall conversion capability
             requirements['conversion_capable'] = (
@@ -119,12 +123,15 @@ class AudibleFormatConverter:
                 'message': 'Conversion capability check completed'
             }
             
-        except Exception as e:
-            self.logger.error(f"Error checking conversion requirements: {str(e)}")
+        except Exception as exc:
+            self.logger.error(
+                "Error checking conversion requirements",
+                extra={"exc": exc}
+            )
             return {
                 'success': False,
-                'error': str(e),
-                'message': f'Error checking conversion requirements: {str(e)}'
+                'error': str(exc),
+                'message': f'Error checking conversion requirements: {exc}'
             }
     
     def get_supported_formats(self) -> Dict[str, Any]:
@@ -228,19 +235,28 @@ class AudibleFormatConverter:
             }
             
             if validation_result['valid']:
-                self.logger.debug(f"Conversion request validated: {input_file} -> {output_format}")
+                self.logger.debug(
+                    "Conversion request validated",
+                    extra={"input_file": input_file, "output_format": output_format, "quality": quality}
+                )
             else:
-                self.logger.warning(f"Conversion request validation failed: {issues}")
+                self.logger.warning(
+                    "Conversion request validation failed",
+                    extra={"issues": issues, "input_file": input_file, "output_format": output_format}
+                )
             
             return validation_result
             
-        except Exception as e:
-            self.logger.error(f"Error validating conversion request: {str(e)}")
+        except Exception as exc:
+            self.logger.error(
+                "Error validating conversion request",
+                extra={"input_file": input_file, "output_format": output_format, "exc": exc}
+            )
             return {
                 'valid': False,
-                'issues': [f"Validation error: {str(e)}"],
+                'issues': [f"Validation error: {exc}"],
                 'warnings': [],
-                'error': str(e)
+                'error': str(exc)
             }
     
     def prepare_conversion_command(self, input_file: str, output_file: str, 
@@ -284,11 +300,17 @@ class AudibleFormatConverter:
             # Add output file and overwrite option
             cmd.extend(['-y', output_file])
             
-            self.logger.debug(f"Prepared conversion command: {' '.join(cmd[:5])}...")
+            self.logger.debug(
+                "Prepared conversion command",
+                extra={"input_file": input_file, "output_file": output_file, "preview": " ".join(cmd[:5])}
+            )
             return cmd
             
-        except Exception as e:
-            self.logger.error(f"Error preparing conversion command: {str(e)}")
+        except Exception as exc:
+            self.logger.error(
+                "Error preparing conversion command",
+                extra={"input_file": input_file, "output_file": output_file, "exc": exc}
+            )
             return []
     
     def convert_file(self, input_file: str, output_file: str, output_format: str,
@@ -324,7 +346,10 @@ class AudibleFormatConverter:
                     'error': 'Failed to prepare conversion command'
                 }
             
-            self.logger.info(f"Starting conversion: {input_file} -> {output_file}")
+            self.logger.info(
+                "Starting conversion",
+                extra={"input_file": input_file, "output_file": output_file, "output_format": output_format, "quality": quality}
+            )
             
             # Execute the conversion
             process = subprocess.Popen(
@@ -346,7 +371,10 @@ class AudibleFormatConverter:
                 # Verify output file was created
                 if os.path.exists(output_file):
                     output_size = os.path.getsize(output_file)
-                    self.logger.info(f"Conversion completed successfully: {output_size} bytes")
+                    self.logger.info(
+                        "Conversion completed successfully",
+                        extra={"input_file": input_file, "output_file": output_file, "output_size": output_size}
+                    )
                     
                     return {
                         'success': True,
@@ -364,7 +392,10 @@ class AudibleFormatConverter:
                         'stderr': stderr
                     }
             else:
-                self.logger.error(f"Conversion failed with return code {process.returncode}")
+                self.logger.error(
+                    "Conversion failed",
+                    extra={"input_file": input_file, "output_file": output_file, "return_code": process.returncode}
+                )
                 return {
                     'success': False,
                     'error': f'Conversion failed (exit code: {process.returncode})',
@@ -373,16 +404,22 @@ class AudibleFormatConverter:
                 }
                 
         except subprocess.TimeoutExpired:
-            self.logger.error("Conversion timed out")
+            self.logger.error(
+                "Conversion timed out",
+                extra={"input_file": input_file, "output_file": output_file}
+            )
             return {
                 'success': False,
                 'error': 'Conversion timed out'
             }
-        except Exception as e:
-            self.logger.error(f"Error during conversion: {str(e)}")
+        except Exception as exc:
+            self.logger.error(
+                "Error during conversion",
+                extra={"input_file": input_file, "output_file": output_file, "exc": exc}
+            )
             return {
                 'success': False,
-                'error': str(e)
+                'error': str(exc)
             }
     
     def _monitor_conversion_progress(self, process: subprocess.Popen, 
@@ -402,8 +439,11 @@ class AudibleFormatConverter:
                     if progress_info:
                         progress_callback(progress_info)
                         
-        except Exception as e:
-            self.logger.warning(f"Error monitoring conversion progress: {str(e)}")
+        except Exception as exc:
+            self.logger.warning(
+                "Error monitoring conversion progress",
+                extra={"exc": exc}
+            )
     
     def _parse_ffmpeg_progress(self, line: str) -> Optional[Dict[str, Any]]:
         """
@@ -487,9 +527,12 @@ class AudibleFormatConverter:
                 'note': 'Estimates are approximate and depend on hardware performance'
             }
             
-        except Exception as e:
-            self.logger.error(f"Error calculating conversion estimates: {str(e)}")
+        except Exception as exc:
+            self.logger.error(
+                "Error calculating conversion estimates",
+                extra={"input_file": input_file, "output_format": output_format, "exc": exc}
+            )
             return {
                 'success': False,
-                'error': str(e)
+                'error': str(exc)
             }

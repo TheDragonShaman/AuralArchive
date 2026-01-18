@@ -1,17 +1,21 @@
 """
-Audible Download Helper - AuralArchive
+Module Name: audible_download_helper.py
+Author: TheDragonShaman
+Created: August 20, 2025
+Last Modified: December 23, 2025
+Description:
+    Download Audible content with cooperative cancellation and progress reporting.
+Location:
+    /services/audible/audible_download_service/audible_download_helper.py
 
-Provides a Python-native implementation for downloading Audible content
-with cooperative cancellation and progress reporting.
 """
 
 import asyncio
 import json
-import logging
 import secrets
 from pathlib import Path
 from threading import Event
-from typing import Optional, Dict, Any, Callable
+from typing import Any, Callable, Dict, Optional
 from urllib.parse import urlencode
 
 import audible
@@ -41,7 +45,7 @@ class AudibleDownloadHelper:
             cancel_event: Optional event used to cooperatively cancel
                 in-flight downloads.
         """
-        self.logger = get_module_logger("AudibleDownloadHelper")
+        self.logger = get_module_logger("Service.Audible.DownloadHelper")
         self.auth_file = Path("auth/audible_auth.json")
         self.auth = None
         self.progress_callback = progress_callback
@@ -55,7 +59,7 @@ class AudibleDownloadHelper:
 
         try:
             self.auth = audible.Authenticator.from_file(self.auth_file)
-            self.logger.debug("Loaded Audible authentication from %s", self.auth_file)
+            self.logger.debug("Loaded Audible authentication", extra={"auth_file": str(self.auth_file)})
         except Exception as exc:
             raise Exception(f"Failed to load authentication: {exc}") from exc
 
@@ -117,7 +121,7 @@ class AudibleDownloadHelper:
         ]
 
         self._raise_if_cancelled()
-        self.logger.debug("Starting download to %s", output_path)
+        self.logger.debug("Starting download", extra={"output_path": str(output_path)})
 
         async with client.session.stream("GET", url, follow_redirects=True) as response:
             self._raise_if_cancelled()
@@ -125,7 +129,7 @@ class AudibleDownloadHelper:
 
             content_type = response.headers.get("Content-Type", "")
             if expected and content_type not in expected:
-                self.logger.warning("Unexpected content type: %s", content_type)
+                self.logger.warning("Unexpected content type", extra={"content_type": content_type})
 
             try:
                 total_size = int(response.headers.get("Content-Length", 0))
@@ -133,9 +137,11 @@ class AudibleDownloadHelper:
                 total_size = 0
 
             self.logger.debug(
-                "Download size: %s bytes (%.2f MB)",
-                total_size,
-                total_size / 1024 / 1024 if total_size else 0.0,
+                "Download size",
+                extra={
+                    "bytes": total_size,
+                    "mb": total_size / 1024 / 1024 if total_size else 0.0,
+                },
             )
 
             downloaded = 0
@@ -164,7 +170,7 @@ class AudibleDownloadHelper:
             self._raise_if_cancelled()
             if self.progress_callback and total_size > 0 and last_progress_reported < 100:
                 self.progress_callback(total_size, total_size, "100% complete")
-            self.logger.debug("Download complete: %s", output_path)
+            self.logger.debug("Download complete", extra={"output_path": str(output_path)})
 
         return True
 
@@ -242,7 +248,7 @@ class AudibleDownloadHelper:
             headers=headers,
         )
         self._raise_if_cancelled()
-        self.logger.info("AAXC license obtained for %s", asin)
+        self.logger.info("AAXC license obtained", extra={"asin": asin})
 
         content_metadata = license_response["content_license"]["content_metadata"]
         url = content_metadata["content_url"]["offline_url"]
@@ -262,11 +268,11 @@ class AudibleDownloadHelper:
                     license_payload = json.loads(license_payload)
                 except json.JSONDecodeError:
                     self.logger.warning(
-                        "Voucher payload for %s returned as string but could not be parsed; saving raw text",
-                        asin
+                        "Voucher payload returned as string but could not be parsed; saving raw text",
+                        extra={"asin": asin}
                     )
             voucher_path.write_text(json.dumps(license_payload, indent=4))
-            self.logger.info("Voucher saved to %s", voucher_path)
+            self.logger.info("Voucher saved", extra={"voucher_path": str(voucher_path)})
 
         return audio_path, voucher_path
 
@@ -300,7 +306,10 @@ class AudibleDownloadHelper:
                         raise
                     except Exception as exc:
                         if aax_fallback or format_preference == "aax-fallback":
-                            self.logger.info("AAX download failed, falling back to AAXC: %s", exc)
+                            self.logger.info(
+                                "AAX download failed; falling back to AAXC",
+                                extra={"asin": asin, "error": str(exc)}
+                            )
                         else:
                             raise
 
@@ -322,7 +331,7 @@ class AudibleDownloadHelper:
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                self.logger.error("Download failed for %s: %s", asin, exc)
+                self.logger.error("Download failed", extra={"asin": asin, "error": str(exc)})
                 return {
                     "success": False,
                     "error": str(exc),

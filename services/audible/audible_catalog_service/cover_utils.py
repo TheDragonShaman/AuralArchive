@@ -1,11 +1,25 @@
-import logging
+"""
+Module Name: cover_utils.py
+Author: TheDragonShaman
+Created: August 17, 2025
+Last Modified: December 23, 2025
+Description:
+    Extract and generate cover image URLs for Audible catalog items with fallbacks.
+Location:
+    /services/audible/audible_catalog_service/cover_utils.py
+
+"""
+
 from typing import List, Optional, Dict, Any
+
+from utils.logger import get_module_logger
+
 
 class CoverImageUtils:
     """Utilities for extracting and managing book cover images"""
     
     def __init__(self):
-        self.logger = logging.getLogger("AudibleService.CoverUtils")
+        self.logger = get_module_logger("Service.Audible.CatalogCover")
     
     def extract_cover_image(self, book_data: Dict[str, Any], asin: str) -> str:
         """Extract cover image from Audible API book data with multiple fallback strategies"""
@@ -13,27 +27,27 @@ class CoverImageUtils:
             # Strategy 1: Try to get from product_images in media response group
             cover_url = self._extract_from_product_images(book_data)
             if cover_url:
-                self.logger.debug(f"Found cover image from product_images for ASIN {asin}")
+                self.logger.debug("Found cover image from product_images", extra={"asin": asin})
                 return cover_url
             
             # Strategy 2: Try alternative image fields
             cover_url = self._extract_from_alternative_fields(book_data)
             if cover_url:
-                self.logger.debug(f"Found cover image from alternative fields for ASIN {asin}")
+                self.logger.debug("Found cover image from alternative field", extra={"asin": asin})
                 return cover_url
             
             # Strategy 3: Generate from ASIN
             if asin:
                 cover_url = self._generate_asin_based_url(asin)
-                self.logger.debug(f"Using generated cover URL for ASIN {asin}")
+                self.logger.debug("Using generated cover URL", extra={"asin": asin})
                 return cover_url
             
             # Final fallback
-            self.logger.warning(f"No cover image found for ASIN {asin}, using placeholder")
+            self.logger.warning("No cover image found, using placeholder", extra={"asin": asin})
             return self._get_placeholder_url()
             
         except Exception as e:
-            self.logger.error(f"Error extracting cover image for ASIN {asin}: {e}")
+            self.logger.exception("Error extracting cover image", extra={"asin": asin, "error": str(e)})
             return self._get_placeholder_url()
     
     def _extract_from_product_images(self, book_data: Dict[str, Any]) -> Optional[str]:
@@ -62,7 +76,7 @@ class CoverImageUtils:
             return None
         
         except Exception as e:
-            self.logger.debug(f"Error extracting from product_images: {e}")
+            self.logger.debug("Error extracting from product_images", extra={"error": str(e)})
             return None
     
     def _extract_from_alternative_fields(self, book_data: Dict[str, Any]) -> Optional[str]:
@@ -88,7 +102,7 @@ class CoverImageUtils:
             return None
         
         except Exception as e:
-            self.logger.debug(f"Error extracting from alternative fields: {e}")
+            self.logger.debug("Error extracting from alternative fields", extra={"error": str(e)})
             return None
     
     def _is_valid_image_url(self, url: Any) -> bool:
@@ -137,7 +151,7 @@ class CoverImageUtils:
             f"https://images-na.ssl-images-amazon.com/images/P/{asin}.01._SCLZZZZZZZ_.jpg"
         ]
         
-        self.logger.debug(f"Generated {len(patterns)} fallback URLs for ASIN {asin}")
+        self.logger.debug("Generated fallback cover URLs", extra={"asin": asin, "count": len(patterns)})
         return patterns
     
     def _get_placeholder_url(self) -> str:
@@ -155,7 +169,7 @@ class CoverImageUtils:
             return True
         
         except Exception as e:
-            self.logger.debug(f"Error validating cover URL {url}: {e}")
+            self.logger.debug("Error validating cover URL", extra={"url": url, "error": str(e)})
             return False
     
     def get_cover_info(self, book_data: Dict[str, Any], asin: str) -> Dict[str, Any]:
@@ -175,7 +189,7 @@ class CoverImageUtils:
             return info
         
         except Exception as e:
-            self.logger.error(f"Error getting cover info for ASIN {asin}: {e}")
+            self.logger.exception("Error getting cover info", extra={"asin": asin, "error": str(e)})
             return {
                 'primary_url': self._get_placeholder_url(),
                 'fallback_urls': [],

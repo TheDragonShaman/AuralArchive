@@ -1,24 +1,22 @@
 """
-Download Monitor
-================
+Module Name: download_monitor.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Polls download clients for progress and seeding updates, caching status
+    snapshots and triggering state transitions or cleanup when thresholds are
+    met. Emits SocketIO events through helper classes.
 
-Monitors active downloads and seeding torrents by polling download clients.
-Updates progress, speed, ETA in database and emits SocketIO events.
+Location:
+    /services/download_management/download_monitor.py
 
-Features:
-- Active download monitoring (DOWNLOADING state)
-- Seeding completion monitoring (SEEDING state)
-- Detects when client marks torrent as complete based on seeding goals
-- Triggers cleanup after seeding completes
 """
 
-import logging
 import os
 from typing import Dict, Any, Optional
 
 from utils.logger import get_module_logger
-
-logger = get_module_logger("DownloadManagement.DownloadMonitor")
 
 
 class DownloadMonitor:
@@ -44,9 +42,9 @@ class DownloadMonitor:
         "seeding",
     }
 
-    def __init__(self):
+    def __init__(self, *, logger=None):
         """Initialize download monitor."""
-        self.logger = logger
+        self.logger = logger or get_module_logger("Service.DownloadManagement.DownloadMonitor")
         self._queue_manager = None
         self._client_selector = None
         self._progress_tracker = None

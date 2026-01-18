@@ -202,7 +202,7 @@ function displayCompactView(series) {
                         <div class="flex items-center gap-4 text-sm text-base-content/60">
                             <span><i class="fas fa-books"></i> ${total} book${total !== 1 ? 's' : ''}</span>
                             <span class="text-success"><i class="fas fa-check"></i> ${owned} owned</span>
-                            ${missing > 0 ? `<span class="text-warning"><i class="fas fa-exclamation"></i> ${missing} missing</span>` : ''}
+                            ${missing > 0 ? `<span class="text-warning">${missing} missing</span>` : ''}
                         </div>
                     </div>
                     <div class="flex items-center gap-4">

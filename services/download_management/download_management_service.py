@@ -1,23 +1,33 @@
 """
-Download Management Service
-===========================
+Module Name: download_management_service.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Singleton coordinator for the full download pipeline and client orchestration.
+    Manages queueing, monitoring, conversion, import, and seeding workflows
+    across Audible and torrent/NZB downloads with retry logic and live updates.
 
-Main singleton service coordinating complete download workflow:
-QUEUED → SEARCHING → FOUND → DOWNLOADING → COMPLETE → 
-(Audible) CONVERTING → CONVERTED → IMPORTING → IMPORTED
-(Torrent/NZB) IMPORTING → IMPORTED
+Location:
+    /services/download_management/download_management_service.py
+
+Workflow:
+    QUEUED → SEARCHING → FOUND → DOWNLOADING → COMPLETE →
+    (Audible) CONVERTING → CONVERTED → IMPORTING → IMPORTED
+    (Torrent/NZB) IMPORTING → IMPORTED
 
 Features:
-- ASIN-based tracking with uniqueness enforcement
-- Automatic pipeline progression
-- Smart conversion detection (Audible only)
-- Seeding support for torrent clients
-- Configurable retry logic
-- Real-time progress monitoring
+    - ASIN-based tracking with uniqueness enforcement
+    - Automatic pipeline progression
+    - Smart conversion detection (Audible only)
+    - Seeding support for torrent clients
+    - Configurable retry logic
+    - Real-time progress monitoring
 
 Download Clients:
-- Currently supported: qBittorrent (torrents/magnets)
-- Coming soon: Deluge, Transmission
+    - Currently supported: qBittorrent (torrents/magnets)
+    - Coming soon: Deluge, Transmission
+
 """
 
 import asyncio
@@ -31,6 +41,7 @@ from datetime import datetime
 from urllib.parse import urlparse, urlunparse
 
 import requests
+from loguru import logger as loguru_logger
 
 from utils.logger import get_module_logger
 from services.audible.ownership_validator import (
@@ -39,7 +50,7 @@ from services.audible.ownership_validator import (
     merge_audible_records,
 )
 
-logger = get_module_logger("DownloadManagementService")
+_LOGGER = get_module_logger("Service.DownloadManagement.Service")
 
 
 class DownloadManagementService:
@@ -75,12 +86,13 @@ class DownloadManagementService:
                     cls._instance = super().__new__(cls)
         return cls._instance
     
-    def __init__(self):
+    def __init__(self, *_, logger=None, **__):
         """Initialize service components (only once)."""
         if not self._initialized:
             with self._lock:
                 if not self._initialized:
-                    logger.debug("Initializing DownloadManagementService...")
+                    self.logger = logger or _LOGGER
+                    self.logger.debug("Initializing DownloadManagementService...")
                     
                     # Initialize helper components
                     from .queue_manager import QueueManager
@@ -157,7 +169,7 @@ class DownloadManagementService:
                     self._initialize_service()
                     
                     DownloadManagementService._initialized = True
-                    logger.debug("Download management service ready")
+                    self.logger.debug("Download management service ready")
     
     def _initialize_service(self):
         """Initialize the download management service."""
@@ -167,9 +179,9 @@ class DownloadManagementService:
             self._configure_audible_concurrency()
             # Ensure the monitoring loop is running regardless of startup entrypoint
             self._ensure_monitor_running()
-            logger.debug("Download management service ready")
+            self.logger.debug("Download management service ready")
         except Exception as e:
-            logger.error(f"Error initializing download management service: {e}")
+            self.logger.error(f"Error initializing download management service: {e}")
             raise
     
     def _load_configuration(self):
@@ -230,7 +242,7 @@ class DownloadManagementService:
                     try:
                         backoff_seconds_value = int(backoff_seconds_raw)
                     except (TypeError, ValueError):
-                        logger.warning(f"Invalid retry_backoff_seconds value: {backoff_seconds_raw}")
+                        self.logger.warning(f"Invalid retry_backoff_seconds value: {backoff_seconds_raw}")
 
                 if backoff_seconds_value is None:
                     backoff_minutes_raw = dm_config.get('retry_backoff_minutes')
@@ -239,30 +251,30 @@ class DownloadManagementService:
                             minutes_int = int(backoff_minutes_raw)
                             backoff_seconds_value = minutes_int * 60
                         except (TypeError, ValueError):
-                            logger.warning(f"Invalid retry_backoff_minutes value: {backoff_minutes_raw}")
+                            self.logger.warning(f"Invalid retry_backoff_minutes value: {backoff_minutes_raw}")
 
                 if backoff_seconds_value is None or backoff_seconds_value <= 0:
                     backoff_seconds_value = 10
 
                 self.retry_backoff_seconds = max(10, backoff_seconds_value)
                 self.retry_handler.set_retry_backoff(self.retry_backoff_seconds)
-                logger.debug(f"Configured download retry backoff: {self.retry_backoff_seconds} seconds")
+                self.logger.debug(f"Configured download retry backoff: {self.retry_backoff_seconds} seconds")
                 
-                logger.debug(
+                self.logger.debug(
                     "Download management configuration loaded: seeding=%s, delete_source=%s, polling_interval=%ss",
                     self.seeding_enabled,
                     self.delete_source_after_import,
                     self.polling_interval
                 )
             else:
-                logger.warning("No [download_management] section in config - using defaults")
+                self.logger.warning("No [download_management] section in config - using defaults")
 
             # Align torrent save path with qBittorrent configuration when provided
             qbittorrent_cfg = {}
             try:
                 qbittorrent_cfg = self.client_selector.get_client_config('qbittorrent') or {}
             except Exception as cfg_error:
-                logger.warning(f"Unable to load qBittorrent configuration: {cfg_error}")
+                self.logger.warning(f"Unable to load qBittorrent configuration: {cfg_error}")
 
             self.qbittorrent_path_mappings = qbittorrent_cfg.get('path_mappings') or []
 
@@ -289,12 +301,12 @@ class DownloadManagementService:
                 try:
                     os.makedirs(local_root_abs, exist_ok=True)
                     self.torrent_download_root_local = local_root_abs
-                    logger.debug(
+                    self.logger.debug(
                         "Configured qBittorrent local save path: %s",
                         self.torrent_download_root_local,
                     )
                 except Exception as path_error:
-                    logger.warning(
+                    self.logger.warning(
                         "Failed to prepare qBittorrent local save path '%s': %s",
                         local_root_abs,
                         path_error,
@@ -306,12 +318,12 @@ class DownloadManagementService:
                     try:
                         os.makedirs(mapped_local, exist_ok=True)
                         self.torrent_download_root_local = mapped_local
-                        logger.debug(
+                        self.logger.debug(
                             "Derived qBittorrent local save path from remote mapping: %s",
                             self.torrent_download_root_local,
                         )
                     except Exception as map_error:
-                        logger.warning(
+                        self.logger.warning(
                             "Failed to prepare mapped qBittorrent local save path '%s': %s",
                             mapped_local,
                             map_error,
@@ -319,7 +331,7 @@ class DownloadManagementService:
 
             if remote_root_candidate:
                 self.torrent_download_root_remote = self._strip_trailing_separators(remote_root_candidate)
-                logger.debug(
+                self.logger.debug(
                     "Configured qBittorrent remote save path: %s",
                     self.torrent_download_root_remote,
                 )
@@ -329,7 +341,7 @@ class DownloadManagementService:
                 fallback_local = os.path.abspath(self.temp_download_path)
                 os.makedirs(fallback_local, exist_ok=True)
                 self.torrent_download_root_local = fallback_local
-                logger.debug(
+                self.logger.debug(
                     "Using temporary download directory for torrents: %s",
                     self.torrent_download_root_local,
                 )
@@ -351,7 +363,7 @@ class DownloadManagementService:
             elif isinstance(verify_value, bool):
                 self.jackett_verify_ssl = verify_value
             if self.jackett_download_base_url:
-                logger.debug(
+                self.logger.debug(
                     "Configured external Jackett base URL for torrent downloads: %s",
                     self.jackett_download_base_url,
                 )
@@ -359,7 +371,7 @@ class DownloadManagementService:
             self._load_direct_provider_sessions()
                 
         except Exception as e:
-            logger.error(f"Error loading download management configuration: {e}")
+            self.logger.error(f"Error loading download management configuration: {e}")
             # Keep defaults on error
     
     def _load_direct_provider_sessions(self) -> None:
@@ -371,7 +383,7 @@ class DownloadManagementService:
             config_service = self._get_config_service()
             indexers = config_service.list_indexers_config() or {}
         except Exception as exc:
-            logger.debug("Unable to load direct provider sessions: %s", exc)
+            self.logger.debug("Unable to load direct provider sessions: %s", exc)
             self.direct_provider_sessions = mapping
             return
 
@@ -414,7 +426,7 @@ class DownloadManagementService:
 
         self.direct_provider_sessions = mapping
         if mapping:
-            logger.debug(
+            self.logger.debug(
                 "Loaded %d direct provider session(s) for download bridge",
                 len(mapping),
             )
@@ -434,7 +446,7 @@ class DownloadManagementService:
                 raw_value = 1
             max_workers = int(raw_value)
         except Exception as exc:
-            logger.debug(f"Falling back to single Audible worker: {exc}")
+            self.logger.debug(f"Falling back to single Audible worker: {exc}")
             max_workers = 1
 
         if max_workers < 1:
@@ -443,7 +455,7 @@ class DownloadManagementService:
             max_workers = 8  # hard cap to avoid abuse
 
         if max_workers != self._audible_max_workers or self._audible_executor is None:
-            logger.debug(
+            self.logger.debug(
                 "Configuring Audible concurrency: previous=%s, new=%s",
                 self._audible_max_workers,
                 max_workers,
@@ -460,7 +472,7 @@ class DownloadManagementService:
                 try:
                     self._audible_executor.shutdown(wait=False)
                 except Exception as exc:
-                    logger.debug(f"Error shutting down Audible executor: {exc}")
+                    self.logger.debug(f"Error shutting down Audible executor: {exc}")
                 finally:
                     self._audible_executor = None
 
@@ -483,7 +495,7 @@ class DownloadManagementService:
             requested = 8
 
         self._reset_audible_executor(requested)
-        logger.debug("Audible concurrency updated to %s worker(s)", requested)
+        self.logger.debug("Audible concurrency updated to %s worker(s)", requested)
         return requested
 
     def _ensure_audible_executor(self) -> ThreadPoolExecutor:
@@ -512,7 +524,7 @@ class DownloadManagementService:
             try:
                 fut.result()
             except Exception as exc:  # pragma: no cover - executor callback logging
-                logger.error(f"Audible download task for {download_id} raised: {exc}")
+                self.logger.error(f"Audible download task for {download_id} raised: {exc}")
 
         future.add_done_callback(_log_future_done)
 
@@ -525,19 +537,19 @@ class DownloadManagementService:
         """Reload download management configuration without recreating the singleton."""
         with self._lock:
             try:
-                logger.debug("Reloading download management configuration...")
+                self.logger.debug("Reloading download management configuration...")
                 self._load_configuration()
                 self._configure_audible_concurrency()
 
                 if self.auto_start_monitoring:
                     self._ensure_monitor_running()
                 elif self.monitor_running:
-                    logger.debug("Auto-start disabled; stopping active monitor thread")
+                    self.logger.debug("Auto-start disabled; stopping active monitor thread")
                     self.stop_monitoring()
 
                 return True
             except Exception as exc:  # pragma: no cover - defensive safety net
-                logger.error(f"Failed to reload download management configuration: {exc}")
+                self.logger.error(f"Failed to reload download management configuration: {exc}")
                 return False
 
     def _extract_jackett_download_base(self, jackett_section: Dict[str, Any]) -> Optional[str]:
@@ -620,7 +632,7 @@ class DownloadManagementService:
             }
         """
         try:
-            logger.info(f"Adding book {book_asin} to download queue (priority={priority})")
+            self.logger.info(f"Adding book {book_asin} to download queue (priority={priority})")
 
             requested_type = (kwargs.get('download_type') or 'torrent').lower()
             ownership_details: Dict[str, Any] = kwargs.get('ownership_details') or {}
@@ -635,7 +647,7 @@ class DownloadManagementService:
 
                 if not owned_via_audible:
                     reason = assessed_details.get('reason') if assessed_details else 'Ownership verification failed.'
-                    logger.warning(
+                    self.logger.warning(
                         "Blocked Audible queue request for ASIN %s: %s",
                         book_asin,
                         reason
@@ -674,7 +686,7 @@ class DownloadManagementService:
             # Make sure the monitor loop is active so this item progresses
             self._ensure_monitor_running()
 
-            logger.info(f"Book {book_asin} added to queue with ID {download_id}")
+            self.logger.info(f"Book {book_asin} added to queue with ID {download_id}")
             return {
                 'success': True,
                 'download_id': download_id,
@@ -682,7 +694,7 @@ class DownloadManagementService:
             }
             
         except Exception as e:
-            logger.error(f"Error adding to queue: {e}")
+            self.logger.error(f"Error adding to queue: {e}")
             return {
                 'success': False,
                 'message': f'Failed to add to queue: {str(e)}'
@@ -701,6 +713,13 @@ class DownloadManagementService:
             List of download queue items
         """
         all_items = self.queue_manager.get_queue(status_filter)
+
+        # Refresh seeding metrics from the download client so the UI reflects
+        # the client's notion of seeding time/ratio even if the monitor tick is behind.
+        try:
+            self._overlay_seeding_metrics(all_items, self.client_selector.get_client)
+        except Exception as overlay_error:
+            self.logger.debug("Unable to overlay seeding metrics: %s", overlay_error)
         
         # Apply pagination if limit is specified
         if limit is not None:
@@ -709,6 +728,60 @@ class DownloadManagementService:
             return all_items[offset:]
         
         return all_items
+
+    @staticmethod
+    def _overlay_seeding_metrics(items: List[Dict[str, Any]], resolver) -> List[Dict[str, Any]]:
+        """Overlay live seeding metrics from the download client onto queue items.
+
+        Args:
+            items: Queue rows to enrich in place.
+            resolver: Callable that returns a client instance given its name.
+        """
+        if not items or not resolver:
+            return items
+
+        for item in items:
+            status = str(item.get('status') or '').upper()
+            if status not in {'SEEDING', 'SEEDING_COMPLETE'}:
+                continue
+
+            client_name = item.get('download_client')
+            client_id = item.get('download_client_id')
+            if not client_name or not client_id:
+                continue
+
+            client = resolver(client_name)
+            if not client:
+                continue
+
+            try:
+                status_data = client.get_status(client_id)
+            except Exception as exc:  # pragma: no cover - network errors
+                self.logger.debug("Skipping seeding overlay for %s: %s", item.get('id'), exc)
+                continue
+
+            if status_data is None:
+                continue
+
+            if 'seeding_time' in status_data:
+                try:
+                    item['seeding_time_seconds'] = int(status_data.get('seeding_time') or 0)
+                except (TypeError, ValueError):
+                    pass
+
+            if 'ratio' in status_data:
+                try:
+                    item['seeding_ratio'] = float(status_data.get('ratio') or 0.0)
+                except (TypeError, ValueError):
+                    pass
+
+            if 'seed_time_limit_seconds' in status_data:
+                item['seed_time_limit_seconds'] = status_data.get('seed_time_limit_seconds')
+
+            if 'seed_ratio_limit' in status_data:
+                item['seed_ratio_limit'] = status_data.get('seed_ratio_limit')
+
+        return items
     
     def cancel_download(self, download_id: int) -> Dict[str, Any]:
         """
@@ -725,7 +798,7 @@ class DownloadManagementService:
             if not download:
                 return {'success': False, 'message': 'Download not found'}
             
-            logger.info(f"Cancelling download {download_id} (ASIN: {download['book_asin']})")
+            self.logger.info(f"Cancelling download {download_id} (ASIN: {download['book_asin']})")
             
             # Stop monitoring if active
             status = (download.get('status') or '').upper()
@@ -754,7 +827,7 @@ class DownloadManagementService:
             return {'success': True, 'message': 'Download cancelled'}
             
         except Exception as e:
-            logger.error(f"Error cancelling download: {e}")
+            self.logger.error(f"Error cancelling download: {e}")
             return {'success': False, 'message': str(e)}
     
     def pause_download(self, download_id: int) -> Dict[str, Any]:
@@ -778,7 +851,7 @@ class DownloadManagementService:
                     'message': f"Cannot pause download in {download['status']} state"
                 }
             
-            logger.info(f"Pausing download {download_id}")
+            self.logger.info(f"Pausing download {download_id}")
             
             # Pause in client
             client = self.client_selector.get_client(download['download_client'])
@@ -794,7 +867,7 @@ class DownloadManagementService:
             return {'success': True, 'message': 'Download paused'}
             
         except Exception as e:
-            logger.error(f"Error pausing download: {e}")
+            self.logger.error(f"Error pausing download: {e}")
             return {'success': False, 'message': str(e)}
     
     def resume_download(self, download_id: int) -> Dict[str, Any]:
@@ -818,7 +891,7 @@ class DownloadManagementService:
                     'message': f"Cannot resume download in {download['status']} state"
                 }
             
-            logger.info(f"Resuming download {download_id}")
+            self.logger.info(f"Resuming download {download_id}")
             
             # Resume in client
             client = self.client_selector.get_client(download['download_client'])
@@ -834,7 +907,7 @@ class DownloadManagementService:
             return {'success': True, 'message': 'Download resumed'}
             
         except Exception as e:
-            logger.error(f"Error resuming download: {e}")
+            self.logger.error(f"Error resuming download: {e}")
             return {'success': False, 'message': str(e)}
 
     def clear_queue(self, include_active: bool = False,
@@ -881,7 +954,7 @@ class DownloadManagementService:
                 try:
                     queue_items = self.queue_manager.get_queue(status_filter=status)
                 except Exception as fetch_error:
-                    logger.error(f"Error fetching downloads for status {status}: {fetch_error}")
+                    self.logger.error(f"Error fetching downloads for status {status}: {fetch_error}")
                     errors.append({'status': status, 'error': str(fetch_error)})
                     continue
 
@@ -899,18 +972,18 @@ class DownloadManagementService:
                         if status in {'DOWNLOADING', 'AUDIBLE_DOWNLOADING'}:
                             self.download_monitor.stop_monitoring(download_id)
                     except Exception as monitor_error:
-                        logger.warning(f"Failed to stop monitoring download {download_id}: {monitor_error}")
+                        self.logger.warning(f"Failed to stop monitoring download {download_id}: {monitor_error}")
 
                     try:
                         self.cleanup_manager.cleanup_download_files(download_id)
                     except Exception as cleanup_error:
-                        logger.warning(f"Cleanup failed for download {download_id}: {cleanup_error}")
+                        self.logger.warning(f"Cleanup failed for download {download_id}: {cleanup_error}")
 
                     try:
                         self.queue_manager.delete_download(download_id)
                         cleared_ids.append(download_id)
                     except Exception as delete_error:
-                        logger.error(f"Failed to delete download {download_id}: {delete_error}")
+                        self.logger.error(f"Failed to delete download {download_id}: {delete_error}")
                         errors.append({'id': download_id, 'error': str(delete_error)})
 
             if cleared_ids:
@@ -936,7 +1009,7 @@ class DownloadManagementService:
             return result
 
         except Exception as e:
-            logger.error(f"Error clearing download queue: {e}", exc_info=True)
+            self.logger.error(f"Error clearing download queue: {e}", exc_info=True)
             return {
                 'success': False,
                 'message': f'Failed to clear queue: {str(e)}'
@@ -950,10 +1023,10 @@ class DownloadManagementService:
         """Start the download monitoring thread."""
         with self._monitor_lock:
             if self.monitor_running:
-                logger.debug("Download monitor thread already running")
+                self.logger.debug("Download monitor thread already running")
                 return
 
-            logger.debug("Starting download monitor thread...")
+            self.logger.debug("Starting download monitor thread...")
             self.monitor_running = True
             self.monitor_thread = threading.Thread(
                 target=self._monitor_loop,
@@ -964,7 +1037,7 @@ class DownloadManagementService:
     
     def stop_monitoring(self):
         """Stop the download monitoring thread."""
-        logger.debug("Stopping download monitor thread...")
+        self.logger.debug("Stopping download monitor thread...")
         self.monitor_running = False
         if self.monitor_thread:
             self.monitor_thread.join(timeout=5)
@@ -999,7 +1072,7 @@ class DownloadManagementService:
 
         cancel_event = context.get('cancel_event')
         if cancel_event and not cancel_event.is_set():
-            logger.info("Cancellation requested for Audible download %s", download_id)
+            self.logger.info("Cancellation requested for Audible download %s", download_id)
             cancel_event.set()
 
     def _clear_audible_context(self, download_id: int):
@@ -1008,13 +1081,13 @@ class DownloadManagementService:
             removed = self._audible_download_context.pop(download_id, None)
 
         if removed:
-            logger.debug("Audible download %s context cleared", download_id)
+            self.logger.debug("Audible download %s context cleared", download_id)
 
     def _monitor_loop(self):
         """Main monitoring loop - runs continuously."""
         import time
         
-        logger.debug("Download monitor thread started")
+        self.logger.debug("Download monitor thread started")
         
         while self.monitor_running:
             try:
@@ -1031,10 +1104,10 @@ class DownloadManagementService:
                 time.sleep(self.polling_interval)
                 
             except Exception as e:
-                logger.exception("Error in download monitor loop")
+                self.logger.exception("Error in download monitor loop")
                 time.sleep(5)  # Back off on error
         
-        logger.debug("Download monitor thread stopped")
+        self.logger.debug("Download monitor thread stopped")
 
     def _ensure_monitor_running(self):
         """Start monitoring thread if not already active."""
@@ -1067,7 +1140,7 @@ class DownloadManagementService:
                 download_type = (item.get('download_type') or '').strip().lower()
 
                 if download_type == 'audible':
-                    logger.info(
+                    self.logger.info(
                         "Download %s is Audible content; launching dedicated Audible pipeline",
                         item['id']
                     )
@@ -1088,30 +1161,30 @@ class DownloadManagementService:
                         refreshed = self.queue_manager.get_download(item['id']) or item
                         self._schedule_audible_download(item['id'], refreshed)
                     else:
-                        logger.debug(
+                        self.logger.debug(
                             "Audible download %s already in progress; skipping start",
                             item['id']
                         )
                     continue
                 # If we have search_result_id, skip to FOUND
                 if item.get('search_result_id'):
-                    logger.info("Download %s using pre-selected search result; scheduling download", item['id'])
+                    self.logger.info("Download %s using pre-selected search result; scheduling download", item['id'])
                     self.state_machine.transition(item['id'], 'FOUND')
                 else:
                     if active_searches >= self.max_active_searches:
-                        logger.debug(
+                        self.logger.debug(
                             "Reached search concurrency limit (%s); deferring remaining queued items",
                             self.max_active_searches
                         )
                         break
                     # Need to search
-                    logger.info("Download %s entering SEARCHING stage", item['id'])
+                    self.logger.info("Download %s entering SEARCHING stage", item['id'])
                     self.state_machine.transition(item['id'], 'SEARCHING')
                     self._start_search(item['id'])
                     active_searches += 1
                     
             except Exception as e:
-                logger.error(f"Error processing queued item {item['id']}: {e}")
+                self.logger.error(f"Error processing queued item {item['id']}: {e}")
         
         # Process FOUND items - start the actual download
         found_items = self.queue_manager.get_queue(status_filter='FOUND')
@@ -1123,13 +1196,13 @@ class DownloadManagementService:
 
                 download_type = (item.get('download_type') or '').strip().lower()
                 if download_type == 'audible':
-                    logger.debug(
+                    self.logger.debug(
                         "Found-stage handler skipping Audible download %s; handled via dedicated pipeline",
                         item['id']
                     )
                     continue
 
-                logger.info("Download %s entering DOWNLOADING stage (%s)", item['id'], item.get('book_title', 'Unknown'))
+                self.logger.info("Download %s entering DOWNLOADING stage (%s)", item['id'], item.get('book_title', 'Unknown'))
                 
                 # Prepare source info from the item
                 source_info = {
@@ -1146,14 +1219,14 @@ class DownloadManagementService:
                 self._start_download(item['id'], source_info)
                     
             except Exception as e:
-                logger.exception("Error starting download for FOUND item %s", item['id'])
+                self.logger.exception("Error starting download for FOUND item %s", item['id'])
     
     def _count_active_searches(self) -> int:
         try:
             searching_items = self.queue_manager.get_queue(status_filter='SEARCHING')
             return len(searching_items)
         except Exception as exc:
-            logger.debug("Unable to count active searches: %s", exc)
+            self.logger.debug("Unable to count active searches: %s", exc)
             return 0
 
     def _monitor_downloads(self):
@@ -1163,14 +1236,14 @@ class DownloadManagementService:
         for download in active_downloads:
             try:
                 if (download.get('download_type') or '').strip().lower() == 'audible':
-                    logger.debug(
+                    self.logger.debug(
                         "Skipping monitor poll for Audible download %s; progress handled via API callbacks",
                         download['id']
                     )
                     continue
                 self.download_monitor.update_progress(download['id'])
             except Exception as e:
-                logger.exception("Error monitoring download %s", download['id'])
+                self.logger.exception("Error monitoring download %s", download['id'])
     
     def _process_pipeline(self):
         """
@@ -1203,15 +1276,15 @@ class DownloadManagementService:
                 )
                 
                 if needs_conversion:
-                    logger.info(f"Download {item['id']} is Audible format (AAX/AAXC) - starting FFmpeg conversion to M4B")
+                    self.logger.info(f"Download {item['id']} is Audible format (AAX/AAXC) - starting FFmpeg conversion to M4B")
                     self._start_conversion(item['id'])
                 else:
                     # Torrent/NZB downloads are already in M4B/MP3 - skip to import
-                    logger.info(f"Download {item['id']} is torrent/NZB (already M4B/MP3) - skipping conversion, proceeding to AudioBookShelf import")
+                    self.logger.info(f"Download {item['id']} is torrent/NZB (already M4B/MP3) - skipping conversion, proceeding to AudioBookShelf import")
                     self._start_import(item['id'])
                     
             except Exception as e:
-                logger.error(f"Error processing completed item {item['id']}: {e}")
+                self.logger.error(f"Error processing completed item {item['id']}: {e}")
         
         # CONVERTED → start import
         converted_items = self.queue_manager.get_queue(status_filter='CONVERTED')
@@ -1219,7 +1292,7 @@ class DownloadManagementService:
             try:
                 self._start_import(item['id'])
             except Exception as e:
-                logger.error(f"Error starting import for {item['id']}: {e}")
+                self.logger.error(f"Error starting import for {item['id']}: {e}")
         
         # SEEDING → monitor or finalize depending on configuration
         seeding_items = self.queue_manager.get_queue(status_filter='SEEDING')
@@ -1229,12 +1302,12 @@ class DownloadManagementService:
                 try:
                     self.download_monitor.monitor_seeding(item['id'])
                 except Exception as e:
-                    logger.error(f"Error monitoring seeding for {item['id']}: {e}")
+                    self.logger.error(f"Error monitoring seeding for {item['id']}: {e}")
         else:
             for item in seeding_items:
                 try:
                     if self.cleanup_manager.check_seeding_complete(item['id'], item):
-                        logger.info(f"Seeding complete for download {item['id']}, finalizing...")
+                        self.logger.info(f"Seeding complete for download {item['id']}, finalizing...")
 
                         self.cleanup_manager.finalize_seeding(
                             download_id=item['id'],
@@ -1248,32 +1321,32 @@ class DownloadManagementService:
                                 'SEEDING_COMPLETE',
                                 'Seeding finished and cleaned up'
                             )
-                            logger.info(f"Download {item['id']} marked as SEEDING_COMPLETE")
+                            self.logger.info(f"Download {item['id']} marked as SEEDING_COMPLETE")
                             try:
                                 self.queue_manager.delete_download(item['id'])
                                 self.event_emitter.emit_queue_updated()
-                                logger.info(f"Download {item['id']} removed from queue after seeding")
+                                self.logger.info(f"Download {item['id']} removed from queue after seeding")
                             except Exception as delete_error:
-                                logger.error(
+                                self.logger.error(
                                     "Failed to remove download %s from queue after seeding: %s",
                                     item['id'],
                                     delete_error
                                 )
 
                 except Exception as e:
-                    logger.error(f"Error processing seeding item {item['id']}: {e}")
+                    self.logger.error(f"Error processing seeding item {item['id']}: {e}")
     
     def _start_search(self, download_id: int):
         """Initiate search for a book in indexers."""
         try:
             download = self.queue_manager.get_download(download_id)
             if not download:
-                logger.error(f"Download {download_id} not found")
+                self.logger.error(f"Download {download_id} not found")
                 return
             
             current_type = (download.get('download_type') or '').strip().lower()
             if current_type == 'audible':
-                logger.info(
+                self.logger.info(
                     "Download %s marked as Audible; skipping indexer search and transitioning to FOUND",
                     download_id
                 )
@@ -1288,7 +1361,7 @@ class DownloadManagementService:
                 return
 
             book_asin = download.get('book_asin')
-            logger.info(f"Starting search for download {download_id} (ASIN: {book_asin})")
+            self.logger.info(f"Starting search for download {download_id} (ASIN: {book_asin})")
             
             # Get book metadata from database
             db_service = self._get_database_service()
@@ -1296,7 +1369,7 @@ class DownloadManagementService:
             
             if not book_data:
                 error_msg = f"Book with ASIN {book_asin} not found in database"
-                logger.error(error_msg)
+                self.logger.error(error_msg)
                 self.retry_handler.handle_failure(
                     download_id=download_id,
                     failure_status='SEARCH_FAILED',
@@ -1310,7 +1383,7 @@ class DownloadManagementService:
             
             if not title or not author:
                 error_msg = f"Missing title or author for ASIN {book_asin}"
-                logger.error(error_msg)
+                self.logger.error(error_msg)
                 self.retry_handler.handle_failure(
                     download_id=download_id,
                     failure_status='SEARCH_FAILED',
@@ -1320,7 +1393,7 @@ class DownloadManagementService:
             
             # Perform search using SearchEngineService
             search_service = self._get_search_service()
-            logger.info(f"Searching for: {title} by {author}")
+            self.logger.info(f"Searching for: {title} by {author}")
             
             search_results = search_service.search_for_audiobook(
                 title=title,
@@ -1330,7 +1403,7 @@ class DownloadManagementService:
             
             if not search_results.get('success'):
                 error_msg = search_results.get('error', 'Search failed')
-                logger.error(f"Search failed for {title}: {error_msg}")
+                self.logger.error(f"Search failed for {title}: {error_msg}")
                 self.retry_handler.handle_failure(
                     download_id=download_id,
                     failure_status='SEARCH_FAILED',
@@ -1342,7 +1415,7 @@ class DownloadManagementService:
             results = search_results.get('results', [])
             if not results:
                 error_msg = f"No search results found for {title} by {author}"
-                logger.warning(error_msg)
+                self.logger.warning(error_msg)
                 self.retry_handler.handle_failure(
                     download_id=download_id,
                     failure_status='SEARCH_FAILED',
@@ -1381,7 +1454,7 @@ class DownloadManagementService:
                     f"Best search result confidence {best_confidence} below required"
                     f" threshold {min_confidence}"
                 )
-                logger.warning(error_msg)
+                self.logger.warning(error_msg)
                 self.retry_handler.handle_failure(
                     download_id=download_id,
                     failure_status='SEARCH_FAILED',
@@ -1391,7 +1464,7 @@ class DownloadManagementService:
 
             if not best_result.get('download_url'):
                 error_msg = "Selected search result is missing a download URL"
-                logger.error(error_msg)
+                self.logger.error(error_msg)
                 self.retry_handler.handle_failure(
                     download_id=download_id,
                     failure_status='SEARCH_FAILED',
@@ -1399,7 +1472,7 @@ class DownloadManagementService:
                 )
                 return
 
-            logger.info(
+            self.logger.info(
                 "Found download source: %s - Quality: %s",
                 best_result.get('indexer'),
                 best_result.get('confidence_score', 0)
@@ -1424,11 +1497,10 @@ class DownloadManagementService:
             # Transition to FOUND state and start download
             if self.state_machine.transition(download_id, 'FOUND'):
                 self.event_emitter.emit_state_changed(download_id, 'FOUND', 'Search completed')
-                # Start actual download in next cycle
-                self._start_download(download_id, best_result)
+                # Download kickoff handled by the FOUND queue processor to avoid double starts
             
         except Exception as e:
-            logger.exception("Error during search for download %s", download_id)
+            self.logger.exception("Error during search for download %s", download_id)
             self.retry_handler.handle_failure(
                     download_id=download_id,
                     failure_status='SEARCH_FAILED',
@@ -1440,7 +1512,7 @@ class DownloadManagementService:
         try:
             download = self.queue_manager.get_download(download_id)
             if not download:
-                logger.error(f"Download {download_id} not found")
+                self.logger.error(f"Download {download_id} not found")
                 return
 
             if download.get('next_retry_at'):
@@ -1452,14 +1524,14 @@ class DownloadManagementService:
                              or 'torrent')
             download_type = (download_type or '').strip().lower()
             
-            logger.info(f"Starting {download_type} download for {download_id}")
+            self.logger.info(f"Starting {download_type} download for {download_id}")
             
             # Branch based on download_type
             if download_type == 'audible':
                 current_status = (download.get('status') or '').upper()
 
                 if current_status == 'AUDIBLE_DOWNLOADING':
-                    logger.debug(
+                    self.logger.debug(
                         "Audible download %s already running via dedicated pipeline",
                         download_id
                     )
@@ -1470,7 +1542,7 @@ class DownloadManagementService:
                     refreshed = self.queue_manager.get_download(download_id) or download
                     self._schedule_audible_download(download_id, refreshed)
                 else:
-                    logger.debug(
+                    self.logger.debug(
                         "Audible download %s could not transition to AUDIBLE_DOWNLOADING (status=%s)",
                         download_id,
                         current_status or 'UNKNOWN'
@@ -1479,7 +1551,7 @@ class DownloadManagementService:
             elif download_type in ('torrent', 'nzb'):
                 if not download_url:
                     error_msg = "Download source missing download_url; retrying search"
-                    logger.error(error_msg)
+                    self.logger.error(error_msg)
                     self.retry_handler.handle_failure(
                         download_id=download_id,
                         failure_status='SEARCH_FAILED',
@@ -1491,7 +1563,7 @@ class DownloadManagementService:
                     normalized_url = self._normalize_download_url(download_url, allow_localhost=True)
                 except RuntimeError as rewrite_error:
                     error_msg = str(rewrite_error)
-                    logger.error(error_msg)
+                    self.logger.error(error_msg)
                     self.queue_manager.update_download(download_id, {'last_error': error_msg})
                     self.retry_handler.handle_failure(
                         download_id=download_id,
@@ -1501,7 +1573,7 @@ class DownloadManagementService:
                     return
 
                 if normalized_url != download_url:
-                    logger.debug(
+                    self.logger.debug(
                         "Rewriting download URL for download %s: %s -> %s",
                         download_id,
                         download_url,
@@ -1520,7 +1592,7 @@ class DownloadManagementService:
                 )
             else:
                 error_msg = f"Unknown download_type: {download_type}"
-                logger.error(error_msg)
+                self.logger.error(error_msg)
                 self.retry_handler.handle_failure(
                     download_id=download_id,
                     failure_status='DOWNLOAD_FAILED',
@@ -1528,7 +1600,7 @@ class DownloadManagementService:
                 )
                 
         except Exception as e:
-            logger.exception("Error starting download %s", download_id)
+            self.logger.exception("Error starting download %s", download_id)
             self.retry_handler.handle_failure(
                     download_id=download_id,
                     failure_status='DOWNLOAD_FAILED',
@@ -1542,14 +1614,14 @@ class DownloadManagementService:
         try:
             current_status = (download.get('status') or '').upper()
             if current_status == 'CANCELLED':
-                logger.info(
+                self.logger.info(
                     "Audible download %s cancellation detected before start; skipping",
                     download_id
                 )
                 return
 
             if current_status != 'AUDIBLE_DOWNLOADING':
-                logger.debug(
+                self.logger.debug(
                     "Audible download %s invoked while status=%s; ignoring",
                     download_id,
                     current_status or 'UNKNOWN'
@@ -1560,7 +1632,7 @@ class DownloadManagementService:
             if not book_asin:
                 raise ValueError("Missing book_asin for Audible download")
             
-            logger.info(f"Starting Audible download for ASIN: {book_asin}")
+            self.logger.info(f"Starting Audible download for ASIN: {book_asin}")
             
             # Create download directory
             temp_path = os.path.join(self.temp_download_path, str(download_id))
@@ -1573,7 +1645,7 @@ class DownloadManagementService:
                 config_service = self._get_config_service()
                 config_defaults = config_service.get_section('audible') or {}
             except Exception as cfg_error:  # pragma: no cover - defensive logging
-                logger.debug(f"Unable to load Audible config defaults: {cfg_error}")
+                self.logger.debug(f"Unable to load Audible config defaults: {cfg_error}")
 
             config_format = str(config_defaults.get('download_format', 'aaxc')).lower()
             config_quality = str(config_defaults.get('download_quality', 'best')).lower()
@@ -1607,7 +1679,7 @@ class DownloadManagementService:
                 # For AAXC we always allow helper to fall back internally if needed
                 aax_fallback_enabled = True
 
-            logger.info(
+            self.logger.info(
                 "Audible download %s preferences → format=%s, quality=%s, fallback=%s",
                 download_id,
                 download_format,
@@ -1638,7 +1710,7 @@ class DownloadManagementService:
                     downloaded_mb = downloaded_bytes / (1024 * 1024)
                     total_mb = total_bytes / (1024 * 1024)
                     speed_mb_s = downloaded_mb / elapsed
-                    logger.debug(
+                    self.logger.debug(
                         "Audible download %s progress %.1f%% (%.2f / %.2f MB, %.2f MB/s)",
                         download_id,
                         progress_pct,
@@ -1688,12 +1760,15 @@ class DownloadManagementService:
             total_elapsed = (datetime.now() - start_time).total_seconds() or 1.0
             total_size_mb = os.path.getsize(audio_file) / (1024 * 1024) if audio_file and os.path.exists(audio_file) else 0.0
             avg_speed_mb_s = total_size_mb / total_elapsed
-            logger.info(
-                "Audible download complete: %s (elapsed %.1fs, %.2f MB, avg %.2f MB/s)",
-                audio_file,
-                total_elapsed,
-                total_size_mb,
-                avg_speed_mb_s
+
+            self.logger.success(
+                "Audible download completed successfully",
+                extra={
+                    "audio_file": audio_file,
+                    "elapsed_seconds": round(total_elapsed, 1),
+                    "size_mb": round(total_size_mb, 2),
+                    "avg_mb_s": round(avg_speed_mb_s, 2),
+                },
             )
             
             # Update download record with file paths and mark download as finished
@@ -1715,7 +1790,7 @@ class DownloadManagementService:
 
                 # Attempt to normalize stale states so we don't requeue the download
                 if current_status in {'FOUND', 'AUDIBLE_DOWNLOAD_FAILED'}:
-                    logger.warning(
+                    self.logger.warning(
                         "Audible download %s finished while queue status was %s; coercing lifecycle",
                         download_id,
                         current_status
@@ -1724,20 +1799,20 @@ class DownloadManagementService:
                     if self.state_machine.transition(download_id, 'AUDIBLE_DOWNLOADING'):
                         if self.state_machine.transition(download_id, 'COMPLETE'):
                             self.event_emitter.emit_complete(download_id)
-                            logger.info(
+                            self.logger.info(
                                 "Audible download %s lifecycle coerced to COMPLETE from FOUND",
                                 download_id
                             )
                             return
 
                 elif current_status == 'CANCELLED':
-                    logger.info(
+                    self.logger.info(
                         "Audible download %s completed after cancellation request; leaving status CANCELLED",
                         download_id
                     )
                     return
 
-                logger.warning(
+                self.logger.warning(
                     "Audible download %s completed but state transition to COMPLETE was rejected (status=%s)",
                     download_id,
                     current_status or 'UNKNOWN'
@@ -1746,10 +1821,10 @@ class DownloadManagementService:
                 self.queue_manager.update_download(download_id, {'status': 'COMPLETE'})
                 self.event_emitter.emit_complete(download_id)
             
-            logger.info(f"Audible download {download_id} completed successfully")
+            self.logger.info(f"Audible download {download_id} completed successfully")
             
         except asyncio.CancelledError:
-            logger.info("Audible download %s cancelled before completion", download_id)
+            self.logger.info("Audible download %s cancelled before completion", download_id)
 
             if temp_path and os.path.isdir(temp_path):
                 shutil.rmtree(temp_path, ignore_errors=True)
@@ -1766,7 +1841,7 @@ class DownloadManagementService:
                 self.event_emitter.emit_download_cancelled(download_id)
 
         except Exception as e:
-            logger.error(f"Audible download failed for {download_id}: {e}", exc_info=True)
+            self.logger.error(f"Audible download failed for {download_id}: {e}", exc_info=True)
             self.retry_handler.handle_failure(
                     download_id=download_id,
                     failure_status='AUDIBLE_DOWNLOAD_FAILED',
@@ -1785,14 +1860,12 @@ class DownloadManagementService:
     ):
         """Download from torrent/NZB indexers using download clients."""
         try:
-            logger.info(f"Starting {download_type} download for {download_id}")
-            
             # Select appropriate download client
             client_name = 'qbittorrent'
             client = self.client_selector.get_client(client_name)  # Currently only qBittorrent supported
             if not client:
                 error_msg = f"No {download_type} client available"
-                logger.error(error_msg)
+                self.logger.error(error_msg)
                 self.retry_handler.handle_failure(
                     download_id=download_id,
                     failure_status='DOWNLOAD_FAILED',
@@ -1809,13 +1882,13 @@ class DownloadManagementService:
 
             remote_save_path = self._map_local_to_remote(download_dir)
             if remote_save_path:
-                logger.debug(
+                self.logger.debug(
                     "Mapped local download directory '%s' to remote save path '%s' for qBittorrent",
                     download_dir,
                     remote_save_path,
                 )
             else:
-                logger.debug(
+                self.logger.debug(
                     "No remote mapping for download directory '%s'; using local path for qBittorrent",
                     download_dir,
                 )
@@ -1832,7 +1905,7 @@ class DownloadManagementService:
                         fetched_payload, fetched_type = self._fetch_remote_torrent(trimmed_url, download)
                     except PermissionError as exc:
                         error_msg = str(exc) or "Direct provider rejected download session"
-                        logger.error(error_msg)
+                        self.logger.error(error_msg)
                         self.retry_handler.handle_failure(
                             download_id=download_id,
                             failure_status='DOWNLOAD_FAILED',
@@ -1841,12 +1914,12 @@ class DownloadManagementService:
                         return
                     if fetched_type == "bytes" and fetched_payload:
                         torrent_payload = fetched_payload
-                        logger.debug("Using server-fetched torrent payload for download %s", download_id)
+                        self.logger.debug("Using server-fetched torrent payload for download %s", download_id)
                     elif fetched_type == "magnet" and fetched_payload:
                         torrent_payload = fetched_payload
-                        logger.debug("Resolved download %s to magnet URI via Jackett redirect", download_id)
+                        self.logger.debug("Resolved download %s to magnet URI via Jackett redirect", download_id)
                     else:
-                        logger.warning(
+                        self.logger.warning(
                             "Failed to fetch torrent payload from %s; falling back to handing URL to client",
                             download_url,
                         )
@@ -1863,7 +1936,7 @@ class DownloadManagementService:
             
             if not add_result.get('success'):
                 error_msg = add_result.get('error', 'Failed to add download to client')
-                logger.error(error_msg)
+                self.logger.error(error_msg)
                 self.retry_handler.handle_failure(
                     download_id=download_id,
                     failure_status='DOWNLOAD_FAILED',
@@ -1880,7 +1953,7 @@ class DownloadManagementService:
                     requested_dir = os.path.abspath(download_dir)
                     actual_dir_abs = os.path.abspath(actual_dir)
                     if actual_dir_abs != requested_dir:
-                        logger.warning(
+                        self.logger.warning(
                             "qBittorrent stored download %s in '%s' instead of requested path '%s'. "
                             "Check category defaults or Auto TMM settings if this is unintended.",
                             download_id,
@@ -1890,7 +1963,7 @@ class DownloadManagementService:
                         relocation_target = save_path_for_client
                         if relocation_target and hasattr(client, 'set_location'):
                             if client.set_location(torrent_hash, relocation_target):
-                                logger.info(
+                                self.logger.info(
                                     "Requested relocation of download %s back to %s via qBittorrent",
                                     download_id,
                                     relocation_target,
@@ -1899,7 +1972,7 @@ class DownloadManagementService:
                                 if updated_dir and os.path.isdir(updated_dir):
                                     download_dir = updated_dir
                             else:
-                                logger.debug(
+                                self.logger.debug(
                                     "qBittorrent refused relocation for download %s",
                                     download_id,
                                 )
@@ -1951,7 +2024,7 @@ class DownloadManagementService:
                             normalized_save = os.path.abspath(save_path.rstrip('/\\'))
                             if normalized_save == normalized_temp:
                                 torrent_hash = candidate_hash
-                                logger.info(f"Found torrent hash via save_path match: {torrent_hash}")
+                                self.logger.info(f"Found torrent hash via save_path match: {torrent_hash}")
                                 break
 
                         if book_title and name and book_title in name:
@@ -1959,19 +2032,19 @@ class DownloadManagementService:
 
                     if not torrent_hash and matched_hash:
                         torrent_hash = matched_hash
-                        logger.info(f"Found torrent hash via name match: {torrent_hash}")
+                        self.logger.info(f"Found torrent hash via name match: {torrent_hash}")
 
                     if not torrent_hash and torrents:
                         sorted_torrents = sorted(torrents, key=lambda t: t.get('added_on', 0), reverse=True)
                         if sorted_torrents:
                             torrent_hash = sorted_torrents[0].get('hash')
-                            logger.info(f"Using most recent torrent hash fallback: {torrent_hash}")
+                            self.logger.info(f"Using most recent torrent hash fallback: {torrent_hash}")
 
                 except Exception as find_error:
-                    logger.warning(f"Could not determine torrent hash: {find_error}")
+                    self.logger.warning(f"Could not determine torrent hash: {find_error}")
 
             if not torrent_hash:
-                logger.warning(f"No torrent hash available for download {download_id} - monitoring may be limited")
+                self.logger.warning(f"No torrent hash available for download {download_id} - monitoring may be limited")
                 # Still continue - qBittorrent accepted it
             
             update_payload = {
@@ -1984,7 +2057,7 @@ class DownloadManagementService:
             if torrent_hash:
                 update_payload['download_client_id'] = torrent_hash
             else:
-                logger.debug(f"Torrent hash still unresolved for download {download_id}; monitor will retry discovery")
+                self.logger.debug(f"Torrent hash still unresolved for download {download_id}; monitor will retry discovery")
 
             self.queue_manager.update_download(download_id, update_payload)
 
@@ -1996,13 +2069,13 @@ class DownloadManagementService:
                     latest_status = latest_record.get('status', current_status)
 
             if latest_status == 'DOWNLOADING':
-                logger.debug(f"Download {download_id} already in DOWNLOADING state; skipping transition")
+                self.logger.debug(f"Download {download_id} already in DOWNLOADING state; skipping transition")
             elif self.state_machine.transition(download_id, 'DOWNLOADING'):
                 self.event_emitter.emit_download_started(download_id)
-                logger.info(f"Download {download_id} started with torrent hash: {torrent_hash}")
+                self.logger.info(f"Download {download_id} started with torrent hash: {torrent_hash}")
             
         except Exception as e:
-            logger.exception("Error starting download %s", download_id)
+            self.logger.exception("Error starting download %s", download_id)
             self.retry_handler.handle_failure(
                     download_id=download_id,
                     failure_status='DOWNLOAD_FAILED',
@@ -2035,7 +2108,7 @@ class DownloadManagementService:
 
         if needs_override and not base_override:
             if allow_localhost:
-                logger.debug(
+                self.logger.debug(
                     "Leaving localhost download URL unchanged because allow_localhost is True",
                 )
                 return download_url
@@ -2157,7 +2230,7 @@ class DownloadManagementService:
                 response = requests.get(download_url, **request_kwargs)
 
                 if response.status_code in {401, 403} and current_meta:
-                    logger.warning(
+                    self.logger.warning(
                         "Direct provider rejected session while fetching %s (attempt %s)",
                         download_url,
                         attempt + 1,
@@ -2178,7 +2251,7 @@ class DownloadManagementService:
                     if location.lower().startswith("magnet:"):
                         return location, "magnet"
                     if location:
-                        logger.debug("Following redirect for torrent payload: %s", location)
+                        self.logger.debug("Following redirect for torrent payload: %s", location)
                         follow_kwargs = {
                             "timeout": 30,
                             "verify": self.jackett_verify_ssl,
@@ -2199,11 +2272,11 @@ class DownloadManagementService:
 
                 content = response.content
                 if not content:
-                    logger.warning("Torrent download returned empty payload from %s", download_url)
+                    self.logger.warning("Torrent download returned empty payload from %s", download_url)
                     return None, ""
 
                 if 'bittorrent' not in content_type_lower and not download_url.lower().endswith('.torrent'):
-                    logger.debug(
+                    self.logger.debug(
                         "Torrent payload from %s has unexpected content-type '%s'",
                         download_url,
                         content_type_header,
@@ -2212,7 +2285,7 @@ class DownloadManagementService:
                 return content, "bytes"
 
             except requests.RequestException as exc:
-                logger.error("Failed to fetch torrent file from %s: %s", download_url, exc)
+                self.logger.error("Failed to fetch torrent file from %s: %s", download_url, exc)
                 return None, ""
 
         return None, ""
@@ -2222,18 +2295,18 @@ class DownloadManagementService:
         try:
             download = self.queue_manager.get_download(download_id)
             if not download:
-                logger.error(f"Download {download_id} not found")
+                self.logger.error(f"Download {download_id} not found")
                 return
             
             book_asin = download.get('book_asin')
             temp_file_path = download.get('temp_file_path')
             voucher_file_path = download.get('voucher_file_path')
             
-            logger.info(f"Starting conversion for download {download_id} (ASIN: {book_asin})")
+            self.logger.info(f"Starting conversion for download {download_id} (ASIN: {book_asin})")
             
             if not temp_file_path or not os.path.exists(temp_file_path):
                 error_msg = f"Downloaded file not found at {temp_file_path}"
-                logger.error(error_msg)
+                self.logger.error(error_msg)
                 self.retry_handler.handle_failure(
                     download_id=download_id,
                     failure_status='CONVERSION_FAILED',
@@ -2243,7 +2316,7 @@ class DownloadManagementService:
             
             # Transition to CONVERTING state
             if not self.state_machine.transition(download_id, 'CONVERTING'):
-                logger.error(f"Failed to transition download {download_id} to CONVERTING state")
+                self.logger.error(f"Failed to transition download {download_id} to CONVERTING state")
                 return
             
             self.event_emitter.emit_state_changed(download_id, 'CONVERTING', 'Starting conversion')
@@ -2256,7 +2329,7 @@ class DownloadManagementService:
             actual_file = self._find_downloaded_file(temp_file_path)
             if not actual_file:
                 error_msg = f"Could not locate downloaded audiobook file in {temp_file_path}"
-                logger.error(error_msg)
+                self.logger.error(error_msg)
                 self.retry_handler.handle_failure(
                     download_id=download_id,
                     failure_status='CONVERSION_FAILED',
@@ -2271,7 +2344,7 @@ class DownloadManagementService:
                         f"Voucher file missing for AAXC download {download_id}; "
                         "conversion cannot continue"
                     )
-                    logger.error(error_msg)
+                    self.logger.error(error_msg)
                     self.retry_handler.handle_failure(
                         download_id=download_id,
                         failure_status='CONVERSION_FAILED',
@@ -2283,7 +2356,7 @@ class DownloadManagementService:
                         f"Voucher file not found at {voucher_file_path} for AAXC "
                         f"download {download_id}"
                     )
-                    logger.error(error_msg)
+                    self.logger.error(error_msg)
                     self.retry_handler.handle_failure(
                         download_id=download_id,
                         failure_status='CONVERSION_FAILED',
@@ -2319,7 +2392,7 @@ class DownloadManagementService:
             
             if not conversion_result.get('success'):
                 error_msg = conversion_result.get('error', 'Conversion failed')
-                logger.error(f"Conversion failed for {download_id}: {error_msg}")
+                self.logger.error(f"Conversion failed for {download_id}: {error_msg}")
                 self.retry_handler.handle_failure(
                     download_id=download_id,
                     failure_status='CONVERSION_FAILED',
@@ -2339,12 +2412,15 @@ class DownloadManagementService:
             # Transition to CONVERTED state
             if self.state_machine.transition(download_id, 'CONVERTED'):
                 self.event_emitter.emit_state_changed(download_id, 'CONVERTED', 'Conversion completed')
-                logger.info(f"Conversion completed for download {download_id}: {converted_file_path}")
+                self.logger.success(
+                    "Conversion completed successfully",
+                    extra={"download_id": download_id, "converted_file": converted_file_path},
+                )
                 # Start import in next cycle
                 self._start_import(download_id)
             
         except Exception as e:
-            logger.exception("Error during conversion for download %s", download_id)
+            self.logger.exception("Error during conversion for download %s", download_id)
             self.retry_handler.handle_failure(
                     download_id=download_id,
                     failure_status='CONVERSION_FAILED',
@@ -2356,7 +2432,7 @@ class DownloadManagementService:
         try:
             download = self.queue_manager.get_download(download_id)
             if not download:
-                logger.error(f"Download {download_id} not found")
+                self.logger.error(f"Download {download_id} not found")
                 return
             
             book_asin = download.get('book_asin')
@@ -2364,7 +2440,7 @@ class DownloadManagementService:
             temp_file_path = download.get('temp_file_path')
             converted_file_path = download.get('converted_file_path')
             
-            logger.info(f"Starting import for download {download_id} (ASIN: {book_asin})")
+            self.logger.info(f"Starting import for download {download_id} (ASIN: {book_asin})")
 
             # Resolve media file path when conversion step was skipped (torrent/NZB)
             if not converted_file_path or not os.path.exists(converted_file_path):
@@ -2381,14 +2457,14 @@ class DownloadManagementService:
                         'converted_file_path': converted_file_path,
                         'last_error': None
                     })
-                    logger.info(f"Resolved media path for download {download_id}: {converted_file_path}")
+                    self.logger.info(f"Resolved media path for download {download_id}: {converted_file_path}")
                 else:
                     expected_path = converted_file_path or temp_file_path
                     error_msg = (
                         f"Converted media file not found for download {download_id}"
                         f" (expected at {expected_path})"
                     )
-                    logger.error(error_msg)
+                    self.logger.error(error_msg)
                     self.retry_handler.handle_failure(
                         download_id=download_id,
                         failure_status='IMPORT_FAILED',
@@ -2403,9 +2479,9 @@ class DownloadManagementService:
                 self.event_emitter.emit_state_changed(download_id, 'IMPORTING', 'Starting library import')
                 download['status'] = 'IMPORTING'
             elif current_status == 'IMPORTING':
-                logger.debug(f"Download {download_id} already in IMPORTING state; continuing import workflow")
+                self.logger.debug(f"Download {download_id} already in IMPORTING state; continuing import workflow")
             else:
-                logger.error(f"Failed to transition download {download_id} to IMPORTING state from {current_status}")
+                self.logger.error(f"Failed to transition download {download_id} to IMPORTING state from {current_status}")
                 return
             
             # Get book metadata for import
@@ -2414,7 +2490,7 @@ class DownloadManagementService:
             
             if not book_data:
                 error_msg = f"Book data not found for ASIN {book_asin}"
-                logger.error(error_msg)
+                self.logger.error(error_msg)
                 self.retry_handler.handle_failure(
                     download_id=download_id,
                     failure_status='IMPORT_FAILED',
@@ -2432,9 +2508,9 @@ class DownloadManagementService:
             # For torrents with seeding enabled, copy instead of move to preserve seeding
             if download_type == 'torrent' and self.seeding_enabled:
                 should_move = False
-                logger.debug(f"Using copy mode for download {download_id} (seeding enabled)")
+                self.logger.debug(f"Using copy mode for download {download_id} (seeding enabled)")
             else:
-                logger.debug(f"Using move mode for download {download_id} (download_type={download_type}, seeding={self.seeding_enabled})")
+                self.logger.debug(f"Using move mode for download {download_id} (download_type={download_type}, seeding={self.seeding_enabled})")
             
             success, message, destination_path = import_service.import_book(
                 source_file_path=converted_file_path,
@@ -2444,7 +2520,7 @@ class DownloadManagementService:
             )
             
             if not success:
-                logger.error(f"Import failed for {download_id}: {message}")
+                self.logger.error(f"Import failed for {download_id}: {message}")
                 self.retry_handler.handle_failure(
                     download_id=download_id,
                     failure_status='IMPORT_FAILED',
@@ -2452,7 +2528,9 @@ class DownloadManagementService:
                 )
                 return
             
-            logger.info(f"Import successful for download {download_id}: {destination_path}")
+            loguru_logger.bind(logger_name="Service.DownloadManagement.Service").success(
+                f"Import successful for download {download_id}: {destination_path}"
+            )
             
             # Update download record with final path
             self.queue_manager.update_download(download_id, {
@@ -2466,12 +2544,14 @@ class DownloadManagementService:
                 imported_transitioned = True
                 download['status'] = 'IMPORTED'
                 self.event_emitter.emit_download_completed(download_id)
-                logger.info(f"Download {download_id} completed successfully")
+                loguru_logger.bind(logger_name="Service.DownloadManagement.Service").success(
+                    f"Download {download_id} completed successfully"
+                )
             elif download.get('status') == 'IMPORTED':
                 imported_transitioned = True
-                logger.debug(f"Download {download_id} already marked as IMPORTED; continuing post-import workflow")
+                self.logger.debug(f"Download {download_id} already marked as IMPORTED; continuing post-import workflow")
             else:
-                logger.error(f"Download {download_id} could not enter IMPORTED state; skipping cleanup/seeding")
+                self.logger.error(f"Download {download_id} could not enter IMPORTED state; skipping cleanup/seeding")
                 return
 
             # Post-import handling: seeding-aware cleanup vs full cleanup
@@ -2486,9 +2566,9 @@ class DownloadManagementService:
 
                 if self.state_machine.transition(download_id, 'SEEDING'):
                     self.event_emitter.emit_state_changed(download_id, 'SEEDING', 'Seeding torrent')
-                    logger.info(f"Download {download_id} entered seeding state")
+                    self.logger.info(f"Download {download_id} entered seeding state")
                 else:
-                    logger.warning(
+                    self.logger.warning(
                         "Download %s could not transition to SEEDING despite seeding being enabled",
                         download_id
                     )
@@ -2499,14 +2579,82 @@ class DownloadManagementService:
                     seeding=False,
                     delete_source=True
                 )
+
+            # Kick off optional ABS auto-matching (non-blocking)
+            try:
+                self._trigger_post_import_abs_match(
+                    download_id=download_id,
+                    download=download,
+                    book_data=book_data,
+                )
+            except Exception as match_exc:  # pragma: no cover - defensive logging
+                self.logger.warning(
+                    "ABS auto-match scheduling failed for download %s: %s",
+                    download_id,
+                    match_exc,
+                )
             
         except Exception as e:
-            logger.exception("Error during import for download %s", download_id)
+            self.logger.exception("Error during import for download %s", download_id)
             self.retry_handler.handle_failure(
                     download_id=download_id,
                     failure_status='IMPORT_FAILED',
                     error_message=str(e)
                 )
+
+    def _trigger_post_import_abs_match(self, download_id: int, download: Dict[str, Any], book_data: Dict[str, Any]):
+        """Schedule optional ABS auto-matching after import completes."""
+
+        config_service = self._get_config_service()
+        enabled = config_service.get_config_bool('audiobookshelf', 'abs_auto_match_imports', False)
+        if not enabled:
+            return
+
+        asin = (book_data.get('ASIN') or '').strip()
+        if not asin:
+            self.logger.debug("ABS auto-match skipped for download %s: missing ASIN", download_id)
+            return
+
+        library_id = (config_service.get_config_value('audiobookshelf', 'abs_library_id', '') or '').strip()
+        if not library_id:
+            self.logger.debug("ABS auto-match skipped for download %s: no AudioBookShelf library configured", download_id)
+            return
+
+        # Add a modest delay to let ABS finish scanning newly imported files before matching
+        delay_seconds = config_service.get_config_int('audiobookshelf', 'abs_auto_match_delay_seconds', 30)
+        title_hint = (book_data.get('Title') or download.get('book_title') or '').strip()
+
+        def _run_abs_match():
+            try:
+                from services.service_manager import get_audiobookshelf_service
+
+                abs_service = get_audiobookshelf_service()
+                success, message = abs_service.auto_match_imported_item(
+                    asin=asin,
+                    title=title_hint,
+                    library_id=library_id,
+                    delay_seconds=delay_seconds,
+                )
+                if success:
+                    self.logger.info(
+                        "ABS auto-match scheduled for download %s succeeded: %s",
+                        download_id,
+                        message,
+                    )
+                else:
+                    self.logger.warning(
+                        "ABS auto-match scheduled for download %s failed: %s",
+                        download_id,
+                        message,
+                    )
+            except Exception as exc:  # pragma: no cover - defensive logging
+                self.logger.error(
+                    "ABS auto-match encountered an error for download %s: %s",
+                    download_id,
+                    exc,
+                )
+
+        threading.Thread(target=_run_abs_match, daemon=True).start()
 
     def _map_local_to_remote(self, local_path: Optional[str]) -> Optional[str]:
         """Translate a local filesystem path to the remote path expected by the client."""
@@ -2631,7 +2779,7 @@ class DownloadManagementService:
         try:
             status = client.get_status(torrent_hash)
         except Exception as exc:
-            logger.debug("Unable to query qBittorrent save path for %s: %s", torrent_hash, exc)
+            self.logger.debug("Unable to query qBittorrent save path for %s: %s", torrent_hash, exc)
             return None
 
         save_path = status.get('save_path') if isinstance(status, dict) else None

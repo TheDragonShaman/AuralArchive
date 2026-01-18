@@ -1,16 +1,25 @@
 """
-Fuzzy Matcher - Enhanced fuzzy string matching with token-based and character-level strategies
-Combines LazyLibrarian's token set matching with Readarr's Bitap algorithm
-Features aggressive normalization for audiobook title/author matching
+Module Name: fuzzy_matcher.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Enhanced fuzzy string matching combining token-based and character-level
+    strategies for audiobook title/author matching. Provides aggressive
+    normalization and multi-strategy scoring for search relevance.
 
-Location: services/search_engine/fuzzy_matcher.py
-Purpose: Provide fuzzy matching capabilities for audiobook search
+Location:
+    /services/search_engine/fuzzy_matcher.py
+
 """
 
 from typing import Dict, List, Any, Optional, Tuple, Set
-import logging
 import re
 from dataclasses import dataclass
+
+from utils.logger import get_module_logger
+
+_LOGGER = get_module_logger("Service.SearchEngine.FuzzyMatcher")
 
 
 @dataclass
@@ -37,9 +46,9 @@ class FuzzyMatcher:
     - Configurable match thresholds
     """
     
-    def __init__(self):
+    def __init__(self, *, logger=None):
         """Initialize the fuzzy matcher."""
-        self.logger = logging.getLogger("SearchEngineService.FuzzyMatcher")
+        self.logger = logger or _LOGGER
         
         # Bitap algorithm configuration
         self.max_distance = 2  # Maximum edit distance
@@ -75,13 +84,17 @@ class FuzzyMatcher:
             self.dash_pattern = re.compile(r'\s*[-–—]\s*.*$')
             
         except Exception as e:
-            self.logger.error(f"Failed to compile regex patterns: {e}")
+            self.logger.error(
+                "Failed to compile regex patterns",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
             raise
     
     def _initialize(self):
         """Initialize the fuzzy matcher."""
         try:
-            self.logger.debug("Initializing FuzzyMatcher...")
+            self.logger.debug("Initializing FuzzyMatcher", extra={"max_distance": self.max_distance})
             
             # Test regex patterns
             test_result = self.clean_pattern.sub('', 'test-string')
@@ -92,7 +105,11 @@ class FuzzyMatcher:
             self.logger.debug("FuzzyMatcher initialized successfully")
             
         except Exception as e:
-            self.logger.error(f"Failed to initialize FuzzyMatcher: {e}")
+            self.logger.error(
+                "Failed to initialize FuzzyMatcher",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
             self.initialized = False
     
     def is_initialized(self) -> bool:
@@ -296,7 +313,11 @@ class FuzzyMatcher:
             )
             
         except Exception as e:
-            self.logger.error(f"Fuzzy match failed: {e}")
+            self.logger.error(
+                "Fuzzy match failed",
+                extra={"text1": text1, "text2": text2, "error": str(e)},
+                exc_info=True,
+            )
             return MatchResult(0.0, False, False, False, "error")
     
     def _bitap_search(self, pattern: str, text: str) -> float:
@@ -347,7 +368,11 @@ class FuzzyMatcher:
             return best_score
             
         except Exception as e:
-            self.logger.debug(f"Bitap search error: {e}")
+            self.logger.error(
+                "Bitap search error",
+                extra={"pattern": pattern, "text": text, "error": str(e)},
+                exc_info=True,
+            )
             return 0.0
     
     def _edit_distance(self, s1: str, s2: str) -> int:
@@ -388,7 +413,11 @@ class FuzzyMatcher:
             return overlap_ratio >= 0.5  # At least 50% word overlap
             
         except Exception as e:
-            self.logger.debug(f"Word boundary check error: {e}")
+            self.logger.error(
+                "Word boundary check error",
+                extra={"text1": text1, "text2": text2, "error": str(e)},
+                exc_info=True,
+            )
             return False
     
     def clean_title_for_matching(self, title: str) -> str:
@@ -423,5 +452,9 @@ class FuzzyMatcher:
             return cleaned
             
         except Exception as e:
-            self.logger.error(f"Title cleaning failed for '{title}': {e}")
+            self.logger.error(
+                "Title cleaning failed",
+                extra={"title": title, "error": str(e)},
+                exc_info=True,
+            )
             return title.lower() if title else ""

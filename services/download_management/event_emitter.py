@@ -1,16 +1,21 @@
 """
-Event Emitter
-=============
+Module Name: event_emitter.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Emits real-time SocketIO events for download lifecycle and status updates,
+    coordinating with the status service for long-running event tracking.
 
-Emits real-time SocketIO events for download lifecycle and feeds the
-user-facing status service with curated updates.
+Location:
+    /services/download_management/event_emitter.py
+
 """
 
-import logging
 from threading import Lock
 from typing import Any, Callable, Optional
 
-logger = logging.getLogger("DownloadManagement.EventEmitter")
+from utils.logger import get_module_logger
 
 
 class EventEmitter:
@@ -29,9 +34,9 @@ class EventEmitter:
     - queue:updated
     """
     
-    def __init__(self):
+    def __init__(self, *, logger=None):
         """Initialize event emitter."""
-        self.logger = logging.getLogger("DownloadManagement.EventEmitter")
+        self.logger = logger or get_module_logger("Service.DownloadManagement.EventEmitter")
         self._status_service = None
         self._status_lock = Lock()
         self._status_events = {}
@@ -64,6 +69,15 @@ class EventEmitter:
             self.logger.debug(f"Download lookup failed: {exc}")
             return {}
 
+    def _title_for_download(self, download_id: int) -> str:
+        details = self._get_download_details(download_id)
+        return (
+            details.get('book_title')
+            or details.get('title')
+            or details.get('book_asin')
+            or f"Download #{download_id}"
+        )
+
     def _ensure_status_event(self, download_id: int, *, state: str, message: str) -> Optional[int]:
         service = self._get_status_service()
         if not service:
@@ -75,7 +89,7 @@ class EventEmitter:
                 return existing
 
             details = self._get_download_details(download_id)
-            title = details.get('book_title') or details.get('book_asin') or f'Download #{download_id}'
+            title = self._title_for_download(download_id)
             metadata = {
                 'asin': details.get('book_asin'),
                 'download_id': download_id,
@@ -149,10 +163,11 @@ class EventEmitter:
             'download_id': download_id,
             'book_asin': book_asin
         })
+        title = self._title_for_download(download_id) or book_asin
         self._ensure_status_event(
             download_id,
             state='queued',
-            message=f'Queued download ({book_asin})'
+            message=f'Queued download: {title}'
         )
     
     def emit_download_started(self, download_id: int):
@@ -162,10 +177,11 @@ class EventEmitter:
         })
         details = self._get_download_details(download_id)
         client = details.get('download_client') or 'client'
+        title = self._title_for_download(download_id)
         self._update_status_event(
             download_id,
             state='downloading',
-            message=f'Started via {client}',
+            message=f'Started downloading {title} via {client}',
             progress=0.0,
             metadata={'status': 'DOWNLOADING'}
         )
@@ -179,10 +195,11 @@ class EventEmitter:
         if message:
             payload['message'] = message
         self._emit('download:progress', payload)
+        title = self._title_for_download(download_id)
         self._update_status_event(
             download_id,
             state='downloading',
-            message=message or 'Downloading…',
+            message=message or f'Downloading {title}…',
             progress=float(progress),
             metadata={'status': 'DOWNLOADING'}
         )
@@ -192,7 +209,8 @@ class EventEmitter:
         self._emit('download:completed', {
             'download_id': download_id
         })
-        self._complete_status_event(download_id, success=True, message='Download complete')
+        title = self._title_for_download(download_id)
+        self._complete_status_event(download_id, success=True, message=f'Download complete: {title}')
 
     def emit_completed(self, download_id: int, *_args, **_kwargs):
         """Legacy alias for emit_download_completed."""
@@ -208,14 +226,16 @@ class EventEmitter:
             'download_id': download_id,
             'error': error
         })
-        self._complete_status_event(download_id, success=False, message='Download failed', error=error)
+        title = self._title_for_download(download_id)
+        self._complete_status_event(download_id, success=False, message=f'Download failed: {title}', error=error)
     
     def emit_download_cancelled(self, download_id: int):
         """Emit download cancelled event."""
         self._emit('download:cancelled', {
             'download_id': download_id
         })
-        self._complete_status_event(download_id, success=False, message='Download cancelled')
+        title = self._title_for_download(download_id)
+        self._complete_status_event(download_id, success=False, message=f'Download cancelled: {title}')
     
     def emit_download_paused(self, download_id: int):
         """Emit download paused event."""

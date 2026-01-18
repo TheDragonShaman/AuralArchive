@@ -1,11 +1,13 @@
 """
-Author Routes - AuralArchive
+Module Name: authors.py
+Author: TheDragonShaman
+Created: July 15, 2025
+Last Modified: December 23, 2025
+Description:
+    Route handlers for author dashboards, metadata enrichment, and catalog imports.
+Location:
+    /routes/authors.py
 
-Provides author dashboards, metadata enrichment routines, catalog import helpers,
-and supporting APIs for managing author-centric automation.
-
-Author: AuralArchive Development Team
-Updated: December 2, 2025
 """
 from flask import Blueprint, render_template, request, jsonify
 from services.service_manager import (
@@ -19,12 +21,15 @@ from services.service_manager import (
 )
 from services.image_cache import get_cached_author_image_url, cache_author_image
 from typing import List, Dict, Any, Optional, Set
-from datetime import datetime
+from datetime import datetime, timedelta
 from collections import defaultdict
 from utils.logger import get_module_logger
 
 authors_bp = Blueprint('authors', __name__)
-logger = get_module_logger("Route.Authors")
+logger = get_module_logger("Routes.Authors")
+
+# Author metadata refresh cadence (hours)
+_AUTHOR_METADATA_MAX_AGE_HOURS = 24
 
 
 def get_preferred_author_languages() -> Optional[Set[str]]:
@@ -352,9 +357,10 @@ def update_author_data_with_asin(author_name: str, author_asin: str = None) -> D
         # Prepare author metadata for database
         author_image_url = author_details.get('image')
         
-        # Cache the image if available
+        # Cache the image if available and prefer the cached URL for storage
         if author_image_url:
             cached_image_url = cache_author_image(author_image_url)
+            author_image_url = cached_image_url or author_image_url
             logger.debug(f"Cached author image for {author_name}: {author_image_url} -> {cached_image_url}")
         
         author_metadata = {
@@ -393,6 +399,21 @@ def update_author_data_with_asin(author_name: str, author_asin: str = None) -> D
             'error': f'Exception during author update: {str(e)}',
             'source': 'exception'
         }
+
+
+def _parse_timestamp(value: Any) -> Optional[datetime]:
+    """Safely parse SQLite timestamp strings into datetime objects."""
+
+    if not value:
+        return None
+
+    try:
+        return datetime.fromisoformat(str(value))
+    except Exception:
+        try:
+            return datetime.strptime(str(value), "%Y-%m-%d %H:%M:%S")
+        except Exception:
+            return None
 
 def enhance_author_with_external_data(author_name: str, author_data: Dict) -> Dict[str, Any]:
     """Enhance author data with external sources using hybrid service."""
@@ -551,6 +572,49 @@ def update_author_from_asin(author_name: str, author_asin: str) -> Dict[str, Any
             'error': str(e),
             'asin': author_asin
         }
+
+
+def ensure_author_metadata_cached(author_name: str, *, refresh_if_stale: bool = True) -> Dict[str, Any]:
+    """Ensure author metadata exists and stays fresh; cache image locally."""
+
+    db_service = get_database_service()
+    metadata = db_service.authors.get_author_metadata(author_name) or {}
+
+    needs_refresh = not metadata
+    if refresh_if_stale and metadata:
+        last_fetched = _parse_timestamp(metadata.get('last_fetched_at')) or _parse_timestamp(metadata.get('updated_at'))
+        if not last_fetched:
+            needs_refresh = True
+        else:
+            age = datetime.utcnow() - last_fetched
+            if age > timedelta(hours=_AUTHOR_METADATA_MAX_AGE_HOURS):
+                needs_refresh = True
+
+    if needs_refresh:
+        if metadata.get('audible_author_id'):
+            refresh_result = update_author_from_asin(author_name, metadata['audible_author_id'])
+        else:
+            refresh_result = update_author_data_with_asin(author_name)
+
+        if not refresh_result.get('success'):
+            logger.debug(
+                "Author metadata refresh skipped",
+                extra={
+                    "author": author_name,
+                    "reason": refresh_result.get('error')
+                }
+            )
+        else:
+            metadata = db_service.authors.get_author_metadata(author_name) or {}
+
+    image_url = metadata.get('author_image_url')
+    if image_url:
+        cached_url = cache_author_image(image_url)
+        if cached_url and cached_url != image_url:
+            metadata['author_image_url'] = cached_url
+            db_service.authors.upsert_author_metadata(metadata)
+
+    return metadata
 
 def process_book_contributors_for_authors(book_data: Dict) -> List[Dict]:
     """
@@ -727,6 +791,8 @@ def author_detail_page(author_name):
                                  title=f'Author: {author_name}',
                                  author_name=author_name,
                                  error='Author not found'), 404
+
+        ensure_author_metadata_cached(author_name, refresh_if_stale=True)
         
         # Build library lookup for quick enrichment
         library_book_map = {}
@@ -737,7 +803,7 @@ def author_detail_page(author_name):
                 library_asins.add(asin)
                 library_book_map[asin] = book
         
-    # Get comprehensive author data
+        # Get comprehensive author data
         author_data = format_author_for_template(author_name, books, enhanced=True)
         author_data = enhance_author_with_external_data(author_name, author_data)
         

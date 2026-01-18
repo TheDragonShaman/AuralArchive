@@ -1,16 +1,14 @@
 """
-Metadata Processor - Conversion Service Helper
+Module Name: metadata_processor.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Extracts, preserves, and embeds metadata during audiobook conversion flows.
 
-Processes and preserves metadata during audiobook conversion.
+Location:
+    /services/conversion_service/metadata_processor.py
 
-Features:
-- Metadata extraction and preservation
-- Chapter information processing
-- Cover art embedding
-- Tag standardization and cleanup
-
-Author: AuralArchive Development Team
-Created: September 28, 2025
 """
 
 import os
@@ -25,9 +23,9 @@ from utils.logger import get_module_logger
 
 class MetadataProcessor:
     """Processor for audiobook metadata and chapters"""
-    
-    def __init__(self):
-        self.logger = get_module_logger("MetadataProcessor")
+
+    def __init__(self, *, logger=None):
+        self.logger = logger or get_module_logger("Service.Conversion.MetadataProcessor")
         
         # Standard metadata field mappings
         self.metadata_fields = {
@@ -67,7 +65,7 @@ class MetadataProcessor:
             Dict with processing results
         """
         try:
-            self.logger.info(f"Processing metadata for: {output_file}")
+            self.logger.info("Processing metadata", extra={"output_file": output_file})
             
             results = {
                 'success': True,
@@ -115,12 +113,20 @@ class MetadataProcessor:
                 results['success'] = False
                 results['errors'].append(validation_result.get('error', 'File validation failed'))
             
-            self.logger.info(f"Metadata processing complete. Processed: {', '.join(results['processed'])}")
+            self.logger.info(
+                "Metadata processing complete",
+                extra={
+                    "output_file": output_file,
+                    "processed": results['processed'],
+                    "warnings": results['warnings'],
+                    "errors": results['errors']
+                }
+            )
             
             return results
             
         except Exception as e:
-            self.logger.error(f"Metadata processing failed for {output_file}: {e}")
+            self.logger.exception("Metadata processing failed", extra={"output_file": output_file, "error": str(e)})
             return {
                 'success': False,
                 'error': str(e)
@@ -154,11 +160,11 @@ class MetadataProcessor:
                     'chapter_count': len(chapters)
                 }
             else:
-                self.logger.warning(f"Could not extract metadata: {result.stderr}")
+                self.logger.warning("Could not extract metadata", extra={"file_path": file_path, "stderr": result.stderr})
                 return {}
                 
         except Exception as e:
-            self.logger.error(f"Error extracting metadata: {e}")
+            self.logger.exception("Error extracting metadata", extra={"file_path": file_path, "error": str(e)})
             return {}
     
     def _process_chapters(self, file_path: str) -> Dict[str, Any]:
@@ -187,7 +193,7 @@ class MetadataProcessor:
                         chapter['tags']['title'] = f'Chapter {i + 1}'
                         valid_chapters.append(chapter)
                 else:
-                    self.logger.warning(f"Chapter {i + 1} missing timing information")
+                    self.logger.warning("Chapter missing timing information", extra={"file_path": file_path, "chapter_index": i})
             
             # If we have valid chapters, try to re-embed them cleanly
             if valid_chapters:
@@ -238,10 +244,16 @@ class MetadataProcessor:
                     os.unlink(temp_chapters_file)
                     return True
                 else:
-                    self.logger.warning(f"mp4chaps failed, trying fallback method: {result.stderr}")
+                    self.logger.warning(
+                        "mp4chaps failed, trying fallback method",
+                        extra={"file_path": file_path, "stderr": result.stderr},
+                    )
             
             except FileNotFoundError:
-                self.logger.debug("mp4chaps not available, using FFmpeg method")
+                self.logger.debug(
+                    "mp4chaps not available, using FFmpeg method",
+                    extra={"file_path": file_path},
+                )
             
             # Fallback: Use FFmpeg to re-encode with chapters
             # Note: This is more complex and may require re-encoding
@@ -249,7 +261,7 @@ class MetadataProcessor:
             return True  # For now, return True to indicate processing attempted
             
         except Exception as e:
-            self.logger.error(f"Error embedding chapters: {e}")
+            self.logger.exception("Error embedding chapters", extra={"file_path": file_path, "error": str(e)})
             return False
     
     def _process_cover_art(self, file_path: str, custom_metadata: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -354,11 +366,11 @@ class MetadataProcessor:
             else:
                 if os.path.exists(temp_output):
                     os.remove(temp_output)
-                self.logger.warning(f"Cover embedding failed: {result.stderr}")
+                self.logger.warning("Cover embedding failed", extra={"file_path": file_path, "cover_path": cover_path, "stderr": result.stderr})
                 return False
                 
         except Exception as e:
-            self.logger.error(f"Error embedding cover art: {e}")
+            self.logger.exception("Error embedding cover art", extra={"file_path": file_path, "cover_path": cover_path, "error": str(e)})
             return False
     
     def _standardize_metadata(self, file_path: str, custom_metadata: Optional[Dict[str, Any]]) -> Dict[str, Any]:

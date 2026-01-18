@@ -1,22 +1,16 @@
 """
-Audible Library Service - AuralArchive
+Module Name: audible_library_service.py
+Author: TheDragonShaman
+Created: August 22, 2025
+Last Modified: December 23, 2025
+Description:
+    Access and manage the user's Audible library using the Python audible package.
+Location:
+    /services/audible/audible_library_service/audible_library_service.py
 
-This service integrates with the Python audible package to provide direct access to the user's Audible library,
-enabling viewing, downloading, and management of user-owned audiobooks.
-
-Key Features:
-- Library export and viewing
-- User-owned content identification  
-- Integration with existing audible services
-- Secure credential management
-- Compliance with Audible ToS
-
-Author: AuralArchive Development Team
-Created: September 16, 2025
 """
 
 import asyncio
-import logging
 import os
 import re
 import threading
@@ -31,6 +25,7 @@ from .format_converter import AudibleFormatConverter
 from ..audible_download_service.audible_download_helper import AudibleDownloadHelper
 from ..audible_metadata_sync_service.audible_api_helper import AudibleApiHelper
 from services.service_manager import get_download_management_service
+from utils.logger import get_module_logger
 
 # Global shared progress store to ensure consistency across service instances
 _GLOBAL_PROGRESS_STORE = {}
@@ -55,7 +50,7 @@ class AudibleLibraryService:
             socketio: SocketIO instance for real-time communication
         """
         self.config_service = config_service
-        self.logger = logger or logging.getLogger(__name__)
+        self.logger = logger or get_module_logger("Service.Audible.Library")
         self.socketio = socketio
         
         # Initialize helper components
@@ -73,10 +68,11 @@ class AudibleLibraryService:
         
         # Download tracking - use global shared store
         self.download_progress_store = _GLOBAL_PROGRESS_STORE
-        self.logger.info(f"*** SERVICE INITIALIZED *** Instance ID: {id(self)} using global progress store (size: {len(self.download_progress_store)})")
+        self.logger.success(
+            "Audible library service started successfully",
+            extra={"instance_id": id(self), "progress_store_size": len(self.download_progress_store)},
+        )
         self.active_downloads = {}
-        
-        self.logger.info("AudibleLibraryService initialized")
     
     def _get_api_helper(self, force_reload: bool = False) -> Optional[AudibleApiHelper]:
         """Lazily load the shared Audible API helper."""
@@ -97,7 +93,10 @@ class AudibleLibraryService:
                 self.api_helper = AudibleApiHelper(auth_file=auth_path) if auth_path else AudibleApiHelper()
                 self._auth_helper_mtime = auth_mtime
             except Exception as exc:
-                self.logger.error(f"Failed to initialize Audible API helper: {exc}")
+                self.logger.error(
+                    "Failed to initialize Audible API helper",
+                    extra={"auth_file": auth_path, "exc": exc}
+                )
                 self.api_helper = None
                 self._auth_helper_mtime = None
         return self.api_helper
@@ -172,18 +171,27 @@ class AudibleLibraryService:
             if helper_status.get('error'):
                 response['error'] = helper_status['error']
 
-            self.logger.debug(f"Audible API status: {response}")
+            self.logger.debug(
+                "Audible API status",
+                extra={"status": response}
+            )
             return response
 
         except ImportError as exc:
-            self.logger.error(f"Python audible package import failed: {exc}")
+            self.logger.error(
+                "Python audible package import failed",
+                extra={"exc": exc}
+            )
             return {
                 'available': False,
                 'error': str(exc),
                 'message': 'Python audible package is not installed or not accessible'
             }
         except Exception as exc:
-            self.logger.error(f"Error testing Audible API availability: {exc}")
+            self.logger.error(
+                "Error testing Audible API availability",
+                extra={"exc": exc}
+            )
             return {
                 'available': False,
                 'error': str(exc),
@@ -205,7 +213,10 @@ class AudibleLibraryService:
             self.is_authenticated = status.get('authenticated', False)
 
             if self.is_authenticated:
-                self.logger.debug("User is authenticated with Audible")
+                self.logger.debug(
+                    "User is authenticated with Audible",
+                    extra={"auth_files": len(auth_files)}
+                )
                 message = 'Successfully authenticated with Audible'
             elif auth_files:
                 message = 'Authentication data found but verification failed. Re-authenticate to refresh tokens.'
@@ -228,7 +239,10 @@ class AudibleLibraryService:
             return response
 
         except Exception as exc:
-            self.logger.error(f"Error checking authentication: {exc}")
+            self.logger.error(
+                "Error checking authentication",
+                extra={"exc": exc}
+            )
             return {
                 'authenticated': False,
                 'error': str(exc),
@@ -263,7 +277,10 @@ class AudibleLibraryService:
             )
 
             if cache_valid:
-                self.logger.debug("Using cached Audible library data")
+                self.logger.debug(
+                    "Using cached Audible library data",
+                    extra={"last_update": self.last_library_update.isoformat() if self.last_library_update else None}
+                )
                 return {
                     'success': True,
                     'data': self.cached_parsed_library,
@@ -276,7 +293,10 @@ class AudibleLibraryService:
 
             helper = self._get_api_helper(force_reload=force_refresh)
             if not helper or not helper.is_available():
-                self.logger.warning("Cannot export library: Audible API helper unavailable or not authenticated")
+                self.logger.warning(
+                    "Cannot export library: Audible API helper unavailable or not authenticated",
+                    extra={"helper_available": helper.is_available() if helper else None}
+                )
                 return {
                     'success': False,
                     'error': 'not_authenticated',
@@ -292,7 +312,10 @@ class AudibleLibraryService:
             self.last_library_update = datetime.now()
 
             book_count = len(parsed_data.get('books', []))
-            self.logger.info(f"Exported library with {book_count} books")
+            self.logger.info(
+                "Exported library",
+                extra={"book_count": book_count}
+            )
 
             return {
                 'success': True,
@@ -305,7 +328,10 @@ class AudibleLibraryService:
             }
 
         except Exception as exc:
-            self.logger.error(f"Error exporting library via API: {exc}")
+            self.logger.error(
+                "Error exporting library via API",
+                extra={"exc": exc}
+            )
             return {
                 'success': False,
                 'error': str(exc),
@@ -332,7 +358,10 @@ class AudibleLibraryService:
             # Calculate statistics
             stats = self.library_parser.calculate_library_stats(books)
             
-            self.logger.info(f"Generated library statistics for {len(books)} books")
+            self.logger.info(
+                "Generated library statistics",
+                extra={"book_count": len(books)}
+            )
             
             return {
                 'success': True,
@@ -341,12 +370,15 @@ class AudibleLibraryService:
                 'last_updated': self.last_library_update.isoformat() if self.last_library_update else None
             }
             
-        except Exception as e:
-            self.logger.error(f"Error calculating library stats: {str(e)}")
+        except Exception as exc:
+            self.logger.error(
+                "Error calculating library stats",
+                extra={"exc": exc}
+            )
             return {
                 'success': False,
-                'error': str(e),
-                'message': f'Error calculating library stats: {str(e)}'
+                'error': str(exc),
+                'message': f'Error calculating library stats: {exc}'
             }
     
     def search_library(self, query: str, search_fields: List[str] = None) -> Dict[str, Any]:
@@ -372,7 +404,10 @@ class AudibleLibraryService:
             # Perform search using library parser
             search_results = self.library_parser.search_books(books, query, search_fields)
             
-            self.logger.info(f"Library search for '{query}' returned {len(search_results)} results")
+            self.logger.info(
+                "Library search completed",
+                extra={"query": query, "result_count": len(search_results), "search_fields": search_fields or ['title', 'author', 'narrator']}
+            )
             
             return {
                 'success': True,
@@ -382,12 +417,15 @@ class AudibleLibraryService:
                 'search_fields': search_fields or ['title', 'author', 'narrator']
             }
             
-        except Exception as e:
-            self.logger.error(f"Error searching library: {str(e)}")
+        except Exception as exc:
+            self.logger.error(
+                "Error searching library",
+                extra={"query": query, "exc": exc}
+            )
             return {
                 'success': False,
-                'error': str(e),
-                'message': f'Error searching library: {str(e)}'
+                'error': str(exc),
+                'message': f'Error searching library: {exc}'
             }
     
     def get_service_status(self) -> Dict[str, Any]:
@@ -430,16 +468,22 @@ class AudibleLibraryService:
                 'cached_library': cached_info
             }
 
-            self.logger.info("Generated service status report")
+            self.logger.info(
+                "Generated service status report",
+                extra={"authenticated": authenticated, "cached_books": cached_info.get('book_count')}
+            )
             return status
             
-        except Exception as e:
-            self.logger.error(f"Error getting service status: {str(e)}")
+        except Exception as exc:
+            self.logger.error(
+                "Error getting service status",
+                extra={"exc": exc}
+            )
             return {
                 'service_name': 'AudibleLibraryService',
                 'status': 'error',
-                'error': str(e),
-                'message': f'Error getting service status: {str(e)}'
+                'error': str(exc),
+                'message': f'Error getting service status: {exc}'
             }
     
     def _get_cached_book_count(self) -> int:
@@ -481,10 +525,6 @@ class AudibleLibraryService:
             progress: Progress percentage (0-100)
             title: Book title for the download
         """
-        self.logger.info(f"*** _EMIT_PROGRESS CALLED *** step={step}, progress={progress}, message={message}")
-        self.logger.info(f"*** DOWNLOAD_ID *** {download_id}")
-        
-        # Store progress in memory for polling access
         progress_data = {
             'download_id': download_id,
             'step': step,
@@ -494,11 +534,13 @@ class AudibleLibraryService:
             'timestamp': datetime.now().isoformat(),
             'status': 'active' if step not in ['complete', 'error'] else step
         }
-        
-        # Store in memory
+
         self.download_progress_store[download_id] = progress_data
-        self.logger.info(f"*** STORED PROGRESS DATA *** {progress_data}")
-        
+        self.logger.debug(
+            "Stored download progress",
+            extra=progress_data
+        )
+
         # Legacy SocketIO emit removed - streaming_download_api.py handles real-time events
     
     def refresh_library_cache(self) -> Dict[str, Any]:
@@ -508,7 +550,7 @@ class AudibleLibraryService:
         Returns:
             Dict containing refresh status and updated library data
         """
-        self.logger.info("Forcing library cache refresh")
+        self.logger.info("Forcing library cache refresh", extra={"force_refresh": True})
         
         # Clear existing cache
         self.cached_library = None
@@ -582,8 +624,7 @@ class AudibleLibraryService:
                 download_id = f"download_{book_asin}_{int(time.time())}"
 
             book_title = title or f"Book {book_asin}"
-            # Ensure output directory exists even though download management handles paths internally
-            self._resolve_output_directory(output_dir)
+            target_dir = self._resolve_output_directory(output_dir)
             sanitized_name = self._sanitize_filename(book_title, book_asin)
             format_preference = format if format in ("aax", "aaxc", "aax-fallback") else "aaxc"
 
@@ -624,15 +665,24 @@ class AudibleLibraryService:
                     )
 
                     if result.get('success'):
-                        self.logger.info(f"Download completed for {book_title}")
+                        self.logger.info(
+                            "Download completed",
+                            extra={"asin": book_asin, "title": book_title, "download_id": download_id}
+                        )
                         self._emit_progress(download_id, 'complete', f"{book_title} downloaded successfully", 100, book_title)
                     else:
                         error_message = result.get('error', 'Unknown error')
-                        self.logger.error(f"Download failed for {book_title}: {error_message}")
+                        self.logger.error(
+                            "Download failed",
+                            extra={"asin": book_asin, "title": book_title, "download_id": download_id, "error": error_message}
+                        )
                         self._emit_progress(download_id, 'error', f"Download failed: {error_message}", 0, book_title)
 
                 except Exception as exc:
-                    self.logger.error(f"Error downloading {book_title}: {exc}")
+                    self.logger.error(
+                        "Error during download",
+                        extra={"asin": book_asin, "title": book_title, "download_id": download_id, "exc": exc}
+                    )
                     self._emit_progress(download_id, 'error', f"Error downloading {book_title}: {exc}", 0, book_title)
                 finally:
                     self.active_downloads.pop(download_id, None)
@@ -656,7 +706,10 @@ class AudibleLibraryService:
             return response
 
         except Exception as exc:
-            self.logger.error(f"Error starting download: {exc}")
+            self.logger.error(
+                "Error starting download",
+                extra={"asin": asin, "title": title, "download_id": download_id, "exc": exc}
+            )
             if download_id:
                 self._emit_progress(download_id, 'error', f"Error starting download: {exc}", 0)
                 self.active_downloads.pop(download_id, None)
@@ -717,6 +770,10 @@ class AudibleLibraryService:
                     'download_count': 0
                 }
 
+            format_preference = format if format in ('aax', 'aaxc', 'aax-fallback') else 'aaxc'
+            quality_preference = quality
+            ownership_status = 'audible_library'
+
             def parse_date(value: str) -> Optional[datetime]:
                 if not value:
                     return None
@@ -748,7 +805,6 @@ class AudibleLibraryService:
                 }
 
             target_dir = self._resolve_output_directory(output_dir)
-            format_preference = format if format in ('aax', 'aaxc', 'aax-fallback') else 'aaxc'
 
             download_service = get_download_management_service()
             if not download_service:
@@ -772,7 +828,10 @@ class AudibleLibraryService:
                         or audible_defaults.get('download_concurrency')
                     )
                 except Exception as cfg_exc:
-                    self.logger.debug(f"Unable to read Audible concurrency defaults: {cfg_exc}")
+                    self.logger.debug(
+                        "Unable to read Audible concurrency defaults",
+                        extra={"exc": cfg_exc}
+                    )
 
             effective_jobs = jobs if jobs is not None else config_jobs
             try:
@@ -784,7 +843,10 @@ class AudibleLibraryService:
             try:
                 download_service.set_audible_concurrency(jobs)
             except Exception as exc:
-                self.logger.debug(f"Unable to set Audible concurrency to %s workers: %s", jobs, exc)
+                self.logger.debug(
+                    "Unable to set Audible concurrency",
+                    extra={"jobs": jobs, "exc": exc}
+                )
 
             queue_priority = 5
             if self.config_service:
@@ -792,9 +854,27 @@ class AudibleLibraryService:
                     dm_config = self.config_service.get_section('download_management') or {}
                     queue_priority = int(dm_config.get('queue_priority_default', queue_priority))
                 except Exception as cfg_exc:
-                    self.logger.debug(f"Unable to read queue priority default: {cfg_exc}")
+                    self.logger.debug(
+                        "Unable to read queue priority default",
+                        extra={"exc": cfg_exc}
+                    )
 
             queue_priority = max(1, min(queue_priority, 10))
+
+            self.logger.info(
+                "Preparing bulk download queue",
+                extra={
+                    "requested_count": len(books),
+                    "filtered_count": len(filtered_books),
+                    "format": format_preference,
+                    "quality": quality_preference,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "jobs": jobs,
+                    "queue_priority": queue_priority,
+                    "output_dir": str(target_dir),
+                },
+            )
 
             bulk_id = f"bulk_{int(time.time())}"
             self.active_downloads[bulk_id] = {
@@ -877,8 +957,8 @@ class AudibleLibraryService:
                         download_type='audible',
                         title=title,
                         author=author,
-                        audible_format=format_pref,
-                        audible_quality=quality_pref,
+                        audible_format=format_preference,
+                        audible_quality=quality_preference,
                         search_result_id=None,
                         ownership_details={
                             'ownership_status': ownership_status,
@@ -902,6 +982,17 @@ class AudibleLibraryService:
             queued_count = len(queued_ids)
             skipped_count = len(skipped_entries)
             final_message = f"Queued {queued_count} of {total_books} book(s)"
+
+            self.logger.info(
+                "Bulk download queued",
+                extra={
+                    "bulk_id": bulk_id,
+                    "queued": queued_count,
+                    "skipped": skipped_count,
+                    "total": total_books,
+                    "jobs": jobs,
+                },
+            )
 
             progress_step = 'complete' if queued_count else 'error'
             self._emit_progress(bulk_id, progress_step, final_message, 100, 'Bulk Download')
@@ -928,7 +1019,10 @@ class AudibleLibraryService:
             return response
 
         except Exception as exc:
-            self.logger.error(f"Error during bulk download: {exc}")
+            self.logger.error(
+                "Error during bulk download",
+                extra={"exc": exc}
+            )
             return {
                 'success': False,
                 'error': str(exc),
@@ -954,12 +1048,18 @@ class AudibleLibraryService:
                     'message': 'Audible Python API is not available or not authenticated'
                 }
 
-            self.logger.info("Fetching activation bytes via Audible API%s", " (reload requested)" if reload else "")
+            self.logger.info(
+                "Fetching activation bytes via Audible API",
+                extra={"reload": reload}
+            )
             result = helper.get_activation_bytes(reload=reload)
 
             if result.get('success'):
                 activation_bytes = result.get('activation_bytes')
-                self.logger.info("Successfully retrieved activation bytes via API")
+                self.logger.info(
+                    "Successfully retrieved activation bytes via API",
+                    extra={"reload": reload}
+                )
                 return {
                     'success': True,
                     'activation_bytes': activation_bytes,
@@ -967,7 +1067,10 @@ class AudibleLibraryService:
                 }
 
             error_message = result.get('error', 'Unknown error')
-            self.logger.error("Failed to retrieve activation bytes via API: %s", error_message)
+            self.logger.error(
+                "Failed to retrieve activation bytes via API",
+                extra={"reload": reload, "error": error_message}
+            )
             return {
                 'success': False,
                 'error': error_message,
@@ -975,7 +1078,10 @@ class AudibleLibraryService:
             }
 
         except Exception as exc:
-            self.logger.error("Error getting activation bytes: %s", exc)
+            self.logger.error(
+                "Error getting activation bytes",
+                extra={"reload": reload, "exc": exc}
+            )
             return {
                 'success': False,
                 'error': str(exc),
@@ -1033,4 +1139,7 @@ class AudibleLibraryService:
         """
         if download_id in self.download_progress_store:
             del self.download_progress_store[download_id]
-            self.logger.info(f"Cleared progress data for download {download_id}")
+            self.logger.info(
+                "Cleared progress data for download",
+                extra={"download_id": download_id}
+            )

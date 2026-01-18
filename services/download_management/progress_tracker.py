@@ -1,15 +1,21 @@
 """
-Progress Tracker
-================
+Module Name: progress_tracker.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Tracks download progress and emits real-time SocketIO events with legacy
+    argument handling. Normalizes progress data for UI consumption and logs
+    additional fields when provided.
 
-Tracks download progress and emits real-time SocketIO events.
-Calculates ETA, speed, and overall progress metrics.
+Location:
+    /services/download_management/progress_tracker.py
+
 """
 
-import logging
 from typing import Optional, Dict, Any, List
 
-logger = logging.getLogger("DownloadManagement.ProgressTracker")
+from utils.logger import get_module_logger
 
 
 class ProgressTracker:
@@ -22,9 +28,9 @@ class ProgressTracker:
     - SocketIO emission with backwards-compatible argument handling
     """
 
-    def __init__(self):
+    def __init__(self, *, logger=None):
         """Initialize the progress tracker logger."""
-        self.logger = logging.getLogger("DownloadManagement.ProgressTracker")
+        self.logger = logger or get_module_logger("Service.DownloadManagement.Progress")
     
     def emit_progress(self, download_id: int, *args: Any, **kwargs: Any):
         """

@@ -1,13 +1,32 @@
-import logging
+"""
+Module Name: local_metadata_extractor.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Reads local audio files and extracts metadata hints from tags and path
+    structure to aid import matching. Supports mutagen-backed ID3/MP4 tags
+    when available.
+
+Location:
+    /services/import_service/local_metadata_extractor.py
+
+"""
+
 import os
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from utils.logger import get_module_logger
+
 try:
     import mutagen  # type: ignore
 except ImportError:  # pragma: no cover - mutagen is in requirements but guard just in case
     mutagen = None
+
+
+_LOGGER = get_module_logger("Service.Import.MetadataExtractor")
 
 
 class LocalMetadataExtractor:
@@ -71,8 +90,8 @@ class LocalMetadataExtractor:
         'isbn13'
     )
 
-    def __init__(self) -> None:
-        self.logger = logging.getLogger("ImportService.MetadataExtractor")
+    def __init__(self, *, logger=None) -> None:
+        self.logger = logger or _LOGGER
 
     def extract_metadata(self, file_path: str) -> Dict[str, Any]:
         """Return best-effort metadata extracted from ID3/MP4 tags and the path."""

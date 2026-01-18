@@ -1,8 +1,29 @@
+"""
+Module Name: config.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Loads environment configuration and central application defaults.
+
+Location:
+    /config/config.py
+
+"""
+
+# Bottleneck: .env loading minimal; primary cost is downstream imports.
+# Upgrade: centralize validation of critical env vars.
+
 import os
 from dotenv import load_dotenv
 
+from utils.logger import get_module_logger
+
 # Load environment variables from .env file
 load_dotenv()
+
+_LOGGER = get_module_logger("Config.Config")
+
 
 class Config:
     # Basic Flask configuration
@@ -20,6 +41,9 @@ class Config:
     
     # Application settings
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB max file upload
+
+    # Debug utilities (protected with shared secret token)
+    AUDIBLE_DEBUG_TOKEN = os.environ.get('AUDIBLE_DEBUG_TOKEN')
     
     # Monitor settings
     MONITOR_ENABLED = os.environ.get('MONITOR_ENABLED', 'true').lower() == 'true'
@@ -126,3 +150,14 @@ class Config:
         'cache_results': True,        # Cache search results in database
         'cache_ttl': 3600            # Cache time-to-live in seconds (1 hour)
     }
+
+
+_LOGGER.info(
+    "Config loaded",
+    extra={
+        "log_level": Config.LOG_LEVEL,
+        "log_file": Config.LOG_FILE,
+        "monitor_enabled": Config.MONITOR_ENABLED,
+        "socketio_async_mode": Config.SOCKETIO_ASYNC_MODE,
+    },
+)

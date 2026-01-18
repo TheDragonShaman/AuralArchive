@@ -1,17 +1,33 @@
+"""
+Module Name: image_cache_service.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Local image caching service to reduce external requests for author images
+    and book covers. Supports preload from DB and cache size management.
+
+Location:
+    /services/image_cache/image_cache_service.py
+
+"""
+
 import os
 import hashlib
 import requests
-import logging
 from pathlib import Path
 from typing import Optional, Dict, Any
 from urllib.parse import urlparse
-import mimetypes
 import time
+
+from utils.logger import get_module_logger
+
+_LOGGER = get_module_logger("Service.ImageCache.Service")
 
 class ImageCacheService:
     """Local image caching service to reduce external web requests for author images and book covers."""
     
-    def __init__(self, cache_dir: str = None, cache_type: str = "local", max_cache_size_mb: int = 500):
+    def __init__(self, cache_dir: str = None, cache_type: str = "local", max_cache_size_mb: int = 500, *, logger=None):
         """
         Initialize the image cache service.
         
@@ -20,7 +36,7 @@ class ImageCacheService:
             cache_type: Type of cache - "local" or "audible"
             max_cache_size_mb: Maximum cache size in MB before cleanup
         """
-        self.logger = logging.getLogger("ImageCacheService")
+        self.logger = logger or _LOGGER
         self.cache_type = cache_type
         
         # Set up cache directory with new structure
@@ -37,7 +53,10 @@ class ImageCacheService:
             'User-Agent': 'AuralArchive/1.0 (Image Cache Service)'
         })
         
-        self.logger.info(f"Image cache initialized: {self.cache_dir} (type: {self.cache_type})")
+        self.logger.success(
+            "Image cache service started successfully",
+            extra={"cache_dir": str(self.cache_dir), "cache_type": self.cache_type},
+        )
         
     def _generate_cache_key(self, url: str) -> str:
         """Generate a unique cache key from URL."""
@@ -118,7 +137,7 @@ class ImageCacheService:
             # Move to final location
             temp_path.rename(cache_path)
             
-            self.logger.info(f"Image cached successfully: {cache_path}")
+            self.logger.debug(f"Image cached successfully: {cache_path}")
             return True
             
         except requests.exceptions.RequestException as e:
@@ -148,7 +167,13 @@ class ImageCacheService:
             if total_size <= self.max_cache_size_bytes:
                 return
             
-            self.logger.info(f"Cache size ({total_size / 1024 / 1024:.1f}MB) exceeds limit ({self.max_cache_size_bytes / 1024 / 1024:.1f}MB), cleaning up...")
+            self.logger.info(
+                "Cache size exceeds limit; cleaning up",
+                extra={
+                    "cache_size_mb": round(total_size / 1024 / 1024, 1),
+                    "limit_mb": round(self.max_cache_size_bytes / 1024 / 1024, 1),
+                },
+            )
             
             # Sort by modification time (oldest first)
             cache_files.sort(key=lambda x: x['mtime'])
@@ -167,7 +192,10 @@ class ImageCacheService:
                 except Exception as e:
                     self.logger.error(f"Error removing cache file {file_info['path']}: {e}")
             
-            self.logger.info(f"Cache cleanup completed. New size: {total_size / 1024 / 1024:.1f}MB")
+            self.logger.info(
+                "Cache cleanup completed",
+                extra={"cache_size_mb": round(total_size / 1024 / 1024, 1)},
+            )
             
         except Exception as e:
             self.logger.error(f"Error during cache cleanup: {e}")
@@ -305,33 +333,34 @@ class ImageCacheService:
                 image_urls.extend(cover_images)
                 
                 if image_urls:
-                    self.logger.info(f"Preloading {len(image_urls)} images into cache ({len(author_images)} author images, {len(cover_images)} book covers)...")
-                    
-                    results = {}
+                    self.logger.info(
+                        f"Preloading {len(image_urls)} images into cache ({len(author_images)} author images, {len(cover_images)} book covers)..."
+                    )
+
+                    results: Dict[str, bool] = {}
                     for url in image_urls:
-                        if not url:
-                            continue
-                            
                         try:
                             cache_key = self._generate_cache_key(url)
                             extension = self._detect_extension_from_url(url)
                             cache_path = self._get_cache_path(cache_key, extension)
-                            
+
                             if cache_path.exists():
                                 results[url] = True  # Already cached
                             else:
                                 results[url] = self._download_image(url, cache_path)
-                                
+
                         except Exception as e:
                             self.logger.error(f"Error preloading image {url}: {e}")
                             results[url] = False
-                    
+
                     # Cleanup cache after preloading
                     self._cleanup_cache()
-                    
+
                     success_count = sum(1 for success in results.values() if success)
-                    self.logger.info(f"Preloaded {success_count}/{len(image_urls)} images successfully")
-                    
+                    self.logger.info(
+                        f"Preloaded {success_count}/{len(image_urls)} images successfully"
+                    )
+
                     return results
                 else:
                     self.logger.info("No images found in database to preload")

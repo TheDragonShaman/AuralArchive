@@ -1,11 +1,16 @@
 """
-Base Indexer
-============
+Module Name: base_indexer.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Abstract base class for all indexer implementations (Jackett, Prowlarr,
+    direct providers). Defines the interface and shared helpers for Torznab
+    and direct indexers.
 
-Abstract base class for all indexer implementations (Jackett, Prowlarr, etc.).
-Defines the interface that all indexers must implement.
+Location:
+    /services/indexers/base_indexer.py
 
-Primarily targets Torznab-compatible torrent indexers and direct providers.
 """
 
 from abc import ABC, abstractmethod
@@ -14,7 +19,8 @@ from enum import Enum
 
 from utils.logger import get_module_logger
 
-logger = get_module_logger("Indexer.Base")
+
+_LOGGER = get_module_logger("Service.Indexers.Base")
 
 
 class IndexerProtocol(Enum):
@@ -42,7 +48,7 @@ class BaseIndexer(ABC):
     CATEGORY_AUDIOBOOK = "3030"  # Standard audiobook category
     CATEGORY_ALL = "8000"        # All audio categories
     
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], *, logger=None):
         """
         Initialize the indexer.
         
@@ -79,8 +85,11 @@ class BaseIndexer(ABC):
         
         # Capabilities (populated by test_connection)
         self.capabilities = {}
+
+        # Logger
+        self.logger = logger or _LOGGER
         
-        logger.debug(f"Initializing {self.name} indexer at {self.base_url}")
+        self.logger.debug(f"Initializing {self.name} indexer at {self.base_url}")
     
     @abstractmethod
     def connect(self) -> bool:
@@ -205,9 +214,9 @@ class BaseIndexer(ABC):
         
         if self.consecutive_failures >= 3:
             self.available = False
-            logger.warning(f"{self.name} marked unavailable after {self.consecutive_failures} failures")
+            self.logger.warning(f"{self.name} marked unavailable after {self.consecutive_failures} failures")
         
-        logger.error(f"{self.name} failure: {error}")
+        self.logger.error(f"{self.name} failure: {error}")
     
     def mark_success(self) -> None:
         """Mark a successful request to this indexer."""
@@ -218,7 +227,7 @@ class BaseIndexer(ABC):
         self.available = True
         self.last_success = datetime.now()
         
-        logger.debug(f"{self.name} request successful")
+        self.logger.debug(f"{self.name} request successful")
     
     def _build_api_url(self, endpoint: str = 'api') -> str:
         """

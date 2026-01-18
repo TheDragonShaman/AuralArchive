@@ -1,7 +1,13 @@
 """
-Audible Series Service
-Main service for syncing series data from Audible API to database
-Follows singleton pattern like DatabaseService
+Module Name: audible_series_service.py
+Author: TheDragonShaman
+Created: August 26, 2025
+Last Modified: December 24, 2025
+Description:
+    Sync Audible series metadata and books into the database using the shared Audible client.
+Location:
+    /services/audible/audible_series_service/audible_series_service.py
+
 """
 
 from utils.logger import get_module_logger
@@ -9,9 +15,6 @@ from .series_relationship_extractor import SeriesRelationshipExtractor
 from .series_data_fetcher import SeriesDataFetcher
 from .series_book_processor import SeriesBookProcessor
 from .series_database_sync import SeriesDatabaseSync
-
-LOGGER_NAME = "AudibleSeriesService"
-logger = get_module_logger(LOGGER_NAME)
 
 
 class AudibleSeriesService:
@@ -22,25 +25,26 @@ class AudibleSeriesService:
     
     _instance = None
     
-    def __new__(cls):
+    def __new__(cls, *args, **kwargs):
         """Singleton pattern - only one instance exists"""
         if cls._instance is None:
             cls._instance = super(AudibleSeriesService, cls).__new__(cls)
             cls._instance._initialized = False
         return cls._instance
     
-    def __init__(self):
+    def __init__(self, logger=None):
         """Initialize service components"""
         if self._initialized:
             return
-            
+        
+        self.logger = logger or get_module_logger("Service.Audible.Series")
         self.extractor = SeriesRelationshipExtractor()
         self.fetcher = None  # Will be set when Audible client is available
         self.processor = None  # Will be set when database service is available
         self.sync = None  # Will be set when database service is available
         
         self._initialized = True
-    logger.info("Initialized")
+        self.logger.debug("Series service instantiated", extra={"instance_id": id(self)})
     
     def initialize(self, audible_client, db_service):
         """
@@ -53,7 +57,10 @@ class AudibleSeriesService:
         self.fetcher = SeriesDataFetcher(audible_client)
         self.processor = SeriesBookProcessor(db_service)
         self.sync = SeriesDatabaseSync(db_service)
-    logger.info("Dependencies initialized")
+        self.logger.debug(
+            "Series service dependencies initialized",
+            extra={"audible_client": bool(audible_client), "db_service": bool(db_service)},
+        )
     
     def sync_book_series(self, book_asin, book_metadata):
         """
@@ -67,12 +74,12 @@ class AudibleSeriesService:
             dict: Result containing success status and series info
         """
         try:
-            logger.info(f"Starting series sync for book {book_asin}")
+            self.logger.info("Starting series sync for book", extra={"book_asin": book_asin})
             
             # Step 1: Extract series ASIN from book relationships
             series_metadata = self.extractor.extract_series_metadata(book_metadata)
             if not series_metadata:
-                logger.info(f"No series found for book {book_asin}")
+                self.logger.info("No series found for book", extra={"book_asin": book_asin})
                 return {'success': True, 'message': 'Book is not part of a series', 'series_count': 0}
             
             series_asin = series_metadata.get('series_asin')
@@ -80,7 +87,7 @@ class AudibleSeriesService:
             # Step 2: Fetch complete series data from Audible
             series_data = self.fetcher.fetch_series_metadata(series_asin)
             if not series_data:
-                logger.error(f"Failed to fetch series data for {series_asin}")
+                self.logger.error("Failed to fetch series data", extra={"series_asin": series_asin})
                 return {'success': False, 'error': 'Failed to fetch series data'}
             
             # Step 3: Fetch all books in the series
@@ -99,7 +106,10 @@ class AudibleSeriesService:
             # Calculate stats
             stats = self.processor.calculate_series_stats(processed_books)
             
-            logger.info(f"Series sync complete for {series_asin}: {books_synced} books synced")
+            self.logger.info(
+                "Series sync complete",
+                extra={"series_asin": series_asin, "books_synced": books_synced},
+            )
             
             return {
                 'success': True,
@@ -111,7 +121,11 @@ class AudibleSeriesService:
             }
             
         except Exception as e:
-            logger.error(f"Error syncing book series: {e}")
+            self.logger.error(
+                "Error syncing book series",
+                extra={"book_asin": book_asin, "error": str(e)},
+                exc_info=True,
+            )
             return {'success': False, 'error': str(e)}
     
     def sync_book_series_by_asin(self, book_asin):
@@ -126,13 +140,19 @@ class AudibleSeriesService:
             dict: Result with series data and sync status
         """
         try:
-            logger.info(f"Fetching book metadata for {book_asin}")
+            self.logger.info(
+                "Fetching book metadata for series sync",
+                extra={"book_asin": book_asin},
+            )
             
             # Fetch book metadata to get series info
             book_metadata = self.fetcher.fetch_book_metadata(book_asin)
             
             if not book_metadata:
-                logger.error(f"Failed to fetch metadata for book {book_asin}")
+                self.logger.error(
+                    "Failed to fetch metadata for book",
+                    extra={"book_asin": book_asin},
+                )
                 return {'success': False, 'error': 'Failed to fetch book metadata', 'series_count': 0}
             
             # Use main sync method
@@ -141,7 +161,11 @@ class AudibleSeriesService:
             return result
             
         except Exception as e:
-            logger.error(f"Error in sync_book_series_by_asin for {book_asin}: {e}")
+            self.logger.error(
+                "Error in sync_book_series_by_asin",
+                extra={"book_asin": book_asin, "error": str(e)},
+                exc_info=True,
+            )
             return {'success': False, 'error': str(e), 'series_count': 0}
     
     def sync_series_by_series_asin(self, series_asin):
@@ -156,12 +180,12 @@ class AudibleSeriesService:
             dict: Result with series data and sync status
         """
         try:
-            logger.info(f"Starting direct series sync for {series_asin}")
+            self.logger.info("Starting direct series sync", extra={"series_asin": series_asin})
             
             # Step 1: Fetch complete series data from Audible
             series_data = self.fetcher.fetch_series_metadata(series_asin)
             if not series_data:
-                logger.error(f"Failed to fetch series data for {series_asin}")
+                self.logger.error("Failed to fetch series data", extra={"series_asin": series_asin})
                 return {'success': False, 'error': 'Failed to fetch series data'}
             
             # Step 2: Fetch all books in the series
@@ -177,7 +201,10 @@ class AudibleSeriesService:
             # Step 5: Calculate stats
             stats = self.processor.calculate_series_stats(processed_books)
             
-            logger.info(f"Series sync complete for {series_asin}: {books_synced} books synced")
+            self.logger.info(
+                "Series sync complete",
+                extra={"series_asin": series_asin, "books_synced": books_synced},
+            )
             
             return {
                 'success': True,
@@ -189,7 +216,11 @@ class AudibleSeriesService:
             }
             
         except Exception as e:
-            logger.error(f"Error syncing series {series_asin}: {e}")
+            self.logger.error(
+                "Error syncing series",
+                extra={"series_asin": series_asin, "error": str(e)},
+                exc_info=True,
+            )
             return {'success': False, 'error': str(e)}
     
     def sync_all_series(self, limit=None):
@@ -204,13 +235,19 @@ class AudibleSeriesService:
             dict: Summary of sync operation
         """
         try:
-            logger.info("Starting batch series sync for all library series")
+            self.logger.info(
+                "Starting batch series sync for all library series",
+                extra={"limit": limit},
+            )
             
             # Get all unique series ASINs from books that have them
             series_asins = self.sync.db.series.get_all_series_asins(limit=limit)
             
             if not series_asins:
-                logger.info("No books with series information found in library")
+                self.logger.info(
+                    "No books with series information found in library",
+                    extra={"limit": limit},
+                )
                 return {
                     'success': True,
                     'message': 'No series found in library',
@@ -222,12 +259,15 @@ class AudibleSeriesService:
             failed = 0
             results = []
             
-            logger.info(f"Found {total_series} unique series to sync")
+            self.logger.info("Found unique series to sync", extra={"count": total_series})
             
             # Process each series
             for idx, series_asin in enumerate(series_asins, 1):
                 try:
-                    logger.info(f"Syncing series {idx}/{total_series}: {series_asin}")
+                    self.logger.info(
+                        "Syncing series",
+                        extra={"index": idx, "total": total_series, "series_asin": series_asin},
+                    )
                     # Use direct series sync instead of book-based sync
                     result = self.sync_series_by_series_asin(series_asin)
                     
@@ -248,7 +288,11 @@ class AudibleSeriesService:
                         })
                         
                 except Exception as e:
-                    logger.error(f"Error syncing series {series_asin}: {e}")
+                    self.logger.error(
+                        "Error syncing series in batch",
+                        extra={"series_asin": series_asin, "error": str(e)},
+                        exc_info=True,
+                    )
                     failed += 1
                     results.append({
                         'series_asin': series_asin,
@@ -256,7 +300,10 @@ class AudibleSeriesService:
                         'error': str(e)
                     })
             
-            logger.info(f"Batch series sync complete: {successful} successful, {failed} failed")
+            self.logger.info(
+                "Batch series sync complete",
+                extra={"successful": successful, "failed": failed, "total": total_series},
+            )
             
             return {
                 'success': True,
@@ -268,7 +315,11 @@ class AudibleSeriesService:
             }
             
         except Exception as e:
-            logger.error(f"Error in batch series sync: {e}")
+            self.logger.error(
+                "Error in batch series sync",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
             return {'success': False, 'error': str(e)}
     
     def refresh_series(self, series_asin):
@@ -282,7 +333,7 @@ class AudibleSeriesService:
             dict: Result of refresh operation
         """
         try:
-            logger.info(f"Refreshing series: {series_asin}")
+            self.logger.info("Refreshing series", extra={"series_asin": series_asin})
             
             # Fetch fresh data from Audible
             series_data = self.fetcher.fetch_series_metadata(series_asin)
@@ -306,5 +357,9 @@ class AudibleSeriesService:
             }
             
         except Exception as e:
-            logger.error(f"Error refreshing series: {e}")
+            self.logger.error(
+                "Error refreshing series",
+                extra={"series_asin": series_asin, "error": str(e)},
+                exc_info=True,
+            )
             return {'success': False, 'error': str(e)}

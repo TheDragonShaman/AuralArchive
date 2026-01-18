@@ -1,16 +1,29 @@
-import logging
+"""
+Module Name: series.py
+Author: TheDragonShaman
+Created: Aug 26 2025
+Last Modified: Dec 24 2025
+Description:
+    Database operations for series metadata and membership.
+
+Location:
+    /services/database/series.py
+
+"""
+
 from typing import List, Dict, Optional, TYPE_CHECKING
 from .error_handling import error_handler
+from utils.logger import get_module_logger
 
 if TYPE_CHECKING:
     from .connection import DatabaseConnection
 
 class SeriesOperations:
     """Handles all series-related database operations"""
-    
-    def __init__(self, connection_manager, author_override_operations=None):
+
+    def __init__(self, connection_manager, author_override_operations=None, *, logger=None):
         self.connection_manager = connection_manager
-        self.logger = logging.getLogger("DatabaseService.Series")
+        self.logger = logger or get_module_logger("Service.Database.Series")
         self.author_override_operations = author_override_operations
 
     def _apply_author_override(self, author_name: Optional[str], asin: Optional[str]) -> Optional[str]:
@@ -53,11 +66,18 @@ class SeriesOperations:
             ))
             
             conn.commit()
-            self.logger.info(f"Upserted series metadata: {series_data.get('series_title')}")
+            self.logger.info("Upserted series metadata", extra={
+                "series_title": series_data.get('series_title'),
+                "series_asin": series_data.get('series_asin')
+            })
             return True
         
         except Exception as e:
-            self.logger.error(f"Error upserting series metadata: {e}")
+            self.logger.exception("Error upserting series metadata", extra={
+                "series_title": series_data.get('series_title'),
+                "series_asin": series_data.get('series_asin'),
+                "error": str(e)
+            })
             if conn:
                 conn.rollback()
             return False
@@ -130,7 +150,11 @@ class SeriesOperations:
             return True
         
         except Exception as e:
-            self.logger.error(f"Error upserting series book: {e}")
+            self.logger.exception("Error upserting series book", extra={
+                "series_asin": series_book_data.get('series_asin'),
+                "book_asin": series_book_data.get('book_asin'),
+                "error": str(e)
+            })
             if conn:
                 conn.rollback()
             return False
@@ -195,7 +219,9 @@ class SeriesOperations:
             return series_list
         
         except Exception as e:
-            self.logger.error(f"Error getting all series: {e}")
+            self.logger.exception("Error getting all series", extra={
+                "error": str(e)
+            })
             return []
         finally:
             error_handler.handle_connection_cleanup(conn)
@@ -230,7 +256,10 @@ class SeriesOperations:
             }
         
         except Exception as e:
-            self.logger.error(f"Error getting series by ASIN: {e}")
+            self.logger.exception("Error getting series by ASIN", extra={
+                "series_asin": series_asin,
+                "error": str(e)
+            })
             return None
         finally:
             error_handler.handle_connection_cleanup(conn)
@@ -242,7 +271,9 @@ class SeriesOperations:
         try:
             conn, cursor = self.connection_manager.connect_db()
             
-            self.logger.info(f"Executing query for series_asin: {series_asin}")
+            self.logger.debug("Executing series books query", extra={
+                "series_asin": series_asin
+            })
             
             cursor.execute("""
                 SELECT 
@@ -281,7 +312,10 @@ class SeriesOperations:
             """, (series_asin,))
             
             rows = cursor.fetchall()
-            self.logger.info(f"Query returned {len(rows)} rows")
+            self.logger.debug("Series books query complete", extra={
+                "series_asin": series_asin,
+                "row_count": len(rows)
+            })
             
             books = []
             
@@ -314,11 +348,17 @@ class SeriesOperations:
                     'library_status': library_status
                 })
             
-            self.logger.info(f"Returning {len(books)} books")
+            self.logger.debug("Returning series books", extra={
+                "series_asin": series_asin,
+                "book_count": len(books)
+            })
             return books
         
         except Exception as e:
-            self.logger.error(f"Error getting series books: {e}", exc_info=True)
+            self.logger.exception("Error getting series books", extra={
+                "series_asin": series_asin,
+                "error": str(e)
+            })
             return []
         finally:
             error_handler.handle_connection_cleanup(conn)
@@ -351,7 +391,10 @@ class SeriesOperations:
             return missing
         
         except Exception as e:
-            self.logger.error(f"Error getting missing books: {e}")
+            self.logger.exception("Error getting missing books", extra={
+                "series_asin": series_asin,
+                "error": str(e)
+            })
             return []
         finally:
             error_handler.handle_connection_cleanup(conn)
@@ -371,7 +414,11 @@ class SeriesOperations:
             return True
         
         except Exception as e:
-            self.logger.error(f"Error updating book series ASIN: {e}")
+            self.logger.exception("Error updating book series ASIN", extra={
+                "book_asin": book_asin,
+                "series_asin": series_asin,
+                "error": str(e)
+            })
             if conn:
                 conn.rollback()
             return False
@@ -401,11 +448,15 @@ class SeriesOperations:
             
             updated = cursor.rowcount
             conn.commit()
-            self.logger.info(f"Synced library status for {updated} series books")
+            self.logger.debug("Synced library status for series books", extra={
+                "updated_count": updated
+            })
             return updated
         
         except Exception as e:
-            self.logger.error(f"Error syncing library status: {e}")
+            self.logger.exception("Error syncing library status", extra={
+                "error": str(e)
+            })
             if conn:
                 conn.rollback()
             return 0
@@ -442,11 +493,17 @@ class SeriesOperations:
             rows = cursor.fetchall()
             
             series_asins = [row[0] for row in rows]
-            self.logger.info(f"Found {len(series_asins)} unique series in library")
+            self.logger.debug("Found series ASINs in library", extra={
+                "count": len(series_asins),
+                "limit": limit
+            })
             return series_asins
             
         except Exception as e:
-            self.logger.error(f"Error getting series ASINs: {e}")
+            self.logger.exception("Error getting series ASINs", extra={
+                "limit": limit,
+                "error": str(e)
+            })
             return []
         finally:
             error_handler.handle_connection_cleanup(conn)
