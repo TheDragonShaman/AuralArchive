@@ -1,6 +1,16 @@
 I would like to say I am a beginner with no experience and I have been teaching myself during this build. This project has taken many, many months. Things will break, things will have bugs. Things will get fixed. This is my first application and it is currently an Alpha build. Please have some patience. Thank you for your interest and please enjoy AuralArchive. 
 
-# AuralArchive Features
+# AuralArchive
+
+**AuralArchive is a comprehensive audiobook library management and acquisition system designed to help you organize, discover, and manage your audiobook collection.**
+
+Track your entire audiobook library with detailed metadata. Discover new titles with personalized recommendations. Search across multiple indexers to find and automatically download audiobooks. Integrate seamlessly with AudioBookShelf for organized library storage. Monitor your Audible wishlist for automatic tracking. All wrapped in a clean, modern web interface.
+
+Whether you're managing hundreds of audiobooks or just getting started, AuralArchive provides the tools to keep your collection organized and growing.
+
+---
+
+## Features
 
 ## Dashboard
 
