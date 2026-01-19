@@ -10,7 +10,7 @@ The dashboard provides an at-a-glance view of your entire audiobook collection a
 
 Find new audiobooks with personalized recommendations tailored to your listening habits.
 
-![Discover Page](screenshots/discover.png)
+![Discover Page](screenshots/discovery.png)
 
 Browse curated recommendations displayed in grid, list, or table views. Each book card shows cover art, title, author, series information, narrator, runtime, and rating. Quick-action buttons let you view details, find similar titles, or add directly to your library. Use the Refresh Page button to generate new recommendations based on your current collection and preferences.
 
@@ -26,7 +26,7 @@ Enter a title, author, or series name to search for audiobooks galore. Results d
 
 Explore complete author catalogs with detailed statistics and series tracking.
 
-![Author Detail](screenshots/author-detail.png)
+![Author Detail](screenshots/author.png)
 
 Author pages display profile information, biographical details, and listening statistics. The Highlights section shows recent additions, discovery metadata, and most common narrators for that author. Catalogue Coverage breaks down total titles tracked, library percentage, and missing titles. Series Overview organizes all series by the author with book counts and import status, while standalone titles are listed separately. Additional features include importing entire series or the entire author catalog.
 
