@@ -70,7 +70,6 @@ When Audible authentication is configured, AuralArchive automatically syncs with
 - Advanced filtering and sorting
 
 ### Author Tracking
-- Complete author bibliographies
 - Series and standalone organization
 - Catalogue completion statistics
 - Narrator tracking and preferences
@@ -80,3 +79,23 @@ When Audible authentication is configured, AuralArchive automatically syncs with
 - Bulk import entire series
 - Author context matching
 - Automatic ordering and sequencing
+
+---
+
+## Disclaimer
+
+**This software is intended solely for downloading your own legally owned titles and copyright-free or public domain audio content.**
+
+This software is provided "AS IS," without warranty of any kind, either express or implied, including but not limited to the implied warranties of merchantability, fitness for a particular purpose, or non-infringement.
+
+The developer(s) make no representations or warranties regarding the accuracy, functionality, reliability, or suitability of this software for any purpose.
+
+You acknowledge and agree that you assume full responsibility for how you choose to use this software. The developer(s) are not responsible for any misuse of this software and do not endorse or condone copyright infringement or any illegal activity.
+
+You are solely responsible for ensuring compliance with all applicable local, state, national, and international laws, including copyright laws and intellectual property rights, and for obtaining proper authorization before downloading any content.
+
+The developer(s) shall not be held liable for any legal consequences, damages, losses, or claims arising from your use or misuse of this software.
+
+By using this software, you acknowledge that you have read, understood, and agree to these terms, and you accept all risks associated with its use.
+
+**USE AT YOUR OWN RISK.**
