@@ -817,21 +817,23 @@ def get_media_management_tab_data():
         
         # Extract relevant settings with defaults
         return {
-            'library_path': abs_config.get('library_path', '/mnt/audiobooks'),
-            'naming_template': abs_config.get('naming_template', 'standard'),
+            'library_path': abs_config.get('library_path', '/audiobooks'),
+            'naming_template': abs_config.get('naming_template', 'simple'),
             'verify_after_import': import_config.get('verify_after_import', True),
             'create_backup_on_error': import_config.get('create_backup_on_error', True),
-            'delete_source_after_import': import_config.get('delete_source_after_import', False)
+            'delete_source_after_import': import_config.get('delete_source_after_import', False),
+            'import_directory': import_config.get('import_directory', '/import')
         }
     
     except Exception as e:
         logger.error(f"Error collecting media management tab data: {e}")
         return {
-            'library_path': '/mnt/audiobooks',
-            'naming_template': 'standard',
+            'library_path': '/audiobooks',
+            'naming_template': 'simple',
             'verify_after_import': True,
             'create_backup_on_error': True,
-            'delete_source_after_import': False
+            'delete_source_after_import': False,
+            'import_directory': '/import'
         }
 
 def get_download_management_tab_data():
@@ -859,9 +861,10 @@ def get_download_management_tab_data():
             # Cleanup
             'delete_source_after_import': to_bool(dm_config.get('delete_source_after_import'), 'false'),
             
-            # Paths
-            'temp_download_path': dm_config.get('temp_download_path', '/tmp/auralarchive/downloads'),
-            'temp_conversion_path': dm_config.get('temp_conversion_path', '/tmp/auralarchive/converting'),
+            # Configurable Paths
+            'downloads_path': dm_config.get('downloads_path', '/downloads'),
+            'library_path': dm_config.get('library_path', '/audiobooks'),
+            'import_path': dm_config.get('import_path', '/import'),
             
             # Retry
             'retry_search_max': int(dm_config.get('retry_search_max', '3')),
@@ -886,8 +889,9 @@ def get_download_management_tab_data():
         return {
             'seeding_enabled': True,
             'delete_source_after_import': False,
-            'temp_download_path': '/tmp/auralarchive/downloads',
-            'temp_conversion_path': '/tmp/auralarchive/converting',
+            'downloads_path': '/downloads',
+            'library_path': '/audiobooks',
+            'import_path': '/import',
             'retry_search_max': 3,
             'retry_download_max': 2,
             'retry_conversion_max': 1,
@@ -2135,13 +2139,17 @@ def get_audiobookshelf_naming_templates():
         templates = file_naming_service.get_available_templates()
         sample_books = _get_sample_books_for_preview()
 
-        base_path = '/mnt/audiobooks'
+        base_path = '/audiobooks'
         if config_service:
             configured_path = config_service.get_config_value('audiobookshelf', 'library_path', fallback=base_path)
             if configured_path:
                 base_path = configured_path
 
         template_payload = []
+        label_map = {
+            'simple': 'Simple',
+            'simple_asin': 'Simple ASIN'
+        }
         for template_name in templates:
             example_entries = []
             for book in sample_books:
@@ -2162,7 +2170,7 @@ def get_audiobookshelf_naming_templates():
 
             template_payload.append({
                 'name': template_name,
-                'label': template_name.replace('_', ' ').title(),
+                'label': label_map.get(template_name, template_name.replace('_', ' ').title()),
                 'examples': example_entries
             })
 
@@ -2252,9 +2260,10 @@ def revoke_audible_auth():
     """Revoke Audible authentication."""
     try:
         import os
+        from utils.paths import resolve_audible_auth_file
         
         # Remove the auth file
-        auth_file = "auth/audible_auth.json"
+        auth_file = resolve_audible_auth_file()
         if os.path.exists(auth_file):
             os.remove(auth_file)
             logger.info("Audible authentication file removed")
@@ -2478,9 +2487,9 @@ def get_media_management_config():
         return jsonify({
             'success': True,
             'config': {
-                'library_path': abs_config.get('library_path', '/mnt/audiobooks'),
-                'naming_template': abs_config.get('naming_template', 'standard'),
-                'import_directory': import_config.get('import_directory', '/downloads/import'),
+                'library_path': abs_config.get('library_path', '/audiobooks'),
+                'naming_template': abs_config.get('naming_template', 'simple'),
+                'import_directory': import_config.get('import_directory', '/import'),
                 'verify_after_import': import_config.get('verify_after_import', True),
                 'create_backup_on_error': import_config.get('create_backup_on_error', True),
                 'delete_source_after_import': import_config.get('delete_source_after_import', False),
@@ -2512,7 +2521,7 @@ def save_media_management_config():
         data = request.get_json()
         
         # Validate template if custom
-        template = data.get('naming_template', 'standard')
+        template = data.get('naming_template', 'simple')
         if template == 'custom':
             custom_template = data.get('custom_template', '')
             if not custom_template:
@@ -2546,10 +2555,10 @@ def save_media_management_config():
 
         updates = {
             # AudiobookShelf settings
-            'audiobookshelf.library_path': data.get('library_path', '/mnt/audiobooks'),
+            'audiobookshelf.library_path': data.get('library_path', '/audiobooks'),
             'audiobookshelf.naming_template': template,
             # Import settings
-            'import.import_directory': data.get('import_directory', '/downloads/import'),
+            'import.import_directory': data.get('import_directory', '/import'),
             'import.verify_after_import': to_bool_str(data.get('verify_after_import'), True),
             'import.create_backup_on_error': to_bool_str(data.get('create_backup_on_error'), True),
             'import.delete_source_after_import': to_bool_str(data.get('delete_source_after_import'), False),
@@ -2599,7 +2608,7 @@ def preview_naming_template():
         file_naming_service = get_file_naming_service()
 
         data = request.get_json()
-        template = data.get('template', 'standard')
+        template = data.get('template', 'simple')
 
         sample_books = _get_sample_books_for_preview()
 
@@ -2699,10 +2708,10 @@ def reset_media_management():
         # Build updates dictionary with default values
         updates = {
             # AudiobookShelf defaults (keeping existing connection settings)
-            'audiobookshelf.library_path': '/mnt/audiobooks',
-            'audiobookshelf.naming_template': 'standard',
+            'audiobookshelf.library_path': '/audiobooks',
+            'audiobookshelf.naming_template': 'simple',
             # Import defaults
-            'import.import_directory': '/downloads/import',
+            'import.import_directory': '/import',
             'import.verify_after_import': 'true',
             'import.create_backup_on_error': 'true',
             'import.delete_source_after_import': 'false',
@@ -2785,9 +2794,10 @@ def get_download_management_config():
                 # Cleanup
                 'delete_source_after_import': get_bool('delete_source_after_import', False),
 
-                # Paths
-                'temp_download_path': get_str('temp_download_path', '/tmp/auralarchive/downloads'),
-                'temp_conversion_path': get_str('temp_conversion_path', '/tmp/auralarchive/converting'),
+                # Configurable Paths
+                'downloads_path': get_str('downloads_path', '/downloads'),
+                'library_path': get_str('library_path', '/audiobooks'),
+                'import_path': get_str('import_path', '/import'),
 
                 # Retry
                 'retry_search_max': get_int('retry_search_max', 3),
@@ -2826,9 +2836,10 @@ def save_download_management_config():
             # Cleanup
             'download_management.delete_source_after_import': str(data.get('delete_source_after_import', False)).lower(),
             
-            # Paths
-            'download_management.temp_download_path': data.get('temp_download_path', '/tmp/auralarchive/downloads'),
-            'download_management.temp_conversion_path': data.get('temp_conversion_path', '/tmp/auralarchive/converting'),
+            # Configurable Paths
+            'download_management.downloads_path': data.get('downloads_path', '/downloads'),
+            'download_management.library_path': data.get('library_path', '/audiobooks'),
+            'download_management.import_path': data.get('import_path', '/import'),
             
             # Retry
             'download_management.retry_search_max': str(data.get('retry_search_max', 3)),
@@ -2911,8 +2922,9 @@ def test_download_paths():
         data = request.get_json()
         
         paths = {
-            'temp_download_path': data.get('temp_download_path'),
-            'temp_conversion_path': data.get('temp_conversion_path')
+            'downloads_path': data.get('downloads_path'),
+            'library_path': data.get('library_path'),
+            'import_path': data.get('import_path')
         }
         
         results = {}
@@ -2953,8 +2965,9 @@ def reset_download_management_config():
         defaults = {
             'download_management.seeding_enabled': 'true',
             'download_management.delete_source_after_import': 'false',
-            'download_management.temp_download_path': '/tmp/auralarchive/downloads',
-            'download_management.temp_conversion_path': '/tmp/auralarchive/converting',
+            'download_management.downloads_path': '/downloads',
+            'download_management.library_path': '/audiobooks',
+            'download_management.import_path': '/import',
             'download_management.retry_search_max': '3',
             'download_management.retry_download_max': '2',
             'download_management.retry_conversion_max': '1',

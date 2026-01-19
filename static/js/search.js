@@ -1052,46 +1052,58 @@
   };
 
   window.viewDetails = function (asin) {
+    console.log('viewDetails called with asin:', asin);
+    
     if (!asin) {
+      console.warn('viewDetails: No ASIN provided');
       return;
     }
 
     const book = findResultByAsin(asin);
+    console.log('viewDetails: Found book:', book);
+    
     if (!book) {
+      console.warn('viewDetails: Book not found for ASIN:', asin);
       return;
     }
 
     if (typeof window.openBookDetails === 'function') {
+      console.log('viewDetails: Using window.openBookDetails');
       window.openBookDetails(book.id || asin);
       return;
     }
 
+    console.log('viewDetails: Showing book details modal');
     showBookDetails(book);
   };
 
   function showBookDetails(book) {
-    const modal = document.createElement('div');
-    modal.className = 'modal modal-open';
+    console.log('showBookDetails called with book:', book);
+    
+    try {
+      const modal = document.createElement('div');
+      modal.className = 'modal modal-open';
+      
+      console.log('Modal element created:', modal);
 
-    const cover = book.cover_image
-      ? `<img src="${escapeHtml(book.cover_image)}" alt="${escapeHtml(book.title)}" loading="lazy" class="book-modal__cover">`
-      : '<div class="book-modal__cover book-modal__cover--placeholder">AUDIO<br>BOOK</div>';
+      const cover = book.cover_image
+        ? `<img src="${escapeHtml(book.cover_image)}" alt="${escapeHtml(book.title)}" loading="lazy" class="book-modal__cover">`
+        : '<div class="book-modal__cover book-modal__cover--placeholder">AUDIO<br>BOOK</div>';
 
-    const metaSection = createMetaPills(book);
-    const summaryText = extractSummaryText(book.summary || '');
-    const summaryHtml = summaryText
-      ? summaryText.split(/\n{2,}/).map((paragraph) => `<p>${escapeHtml(paragraph.trim())}</p>`).join('')
-      : '';
+      const metaSection = createMetaPills(book);
+      const summaryText = extractSummaryText(book.summary || '');
+      const summaryHtml = summaryText
+        ? summaryText.split(/\n{2,}/).map((paragraph) => `<p>${escapeHtml(paragraph.trim())}</p>`).join('')
+        : '';
 
-    const status = getLibraryStatus(book);
-    const addButton = status === 'in_library'
-      ? '<button class="btn btn-sm btn-outline" disabled>In Library</button>'
-      : status === 'wanted'
-        ? '<button class="btn btn-sm btn-outline" disabled>Wanted</button>'
-        : `<button class="btn btn-sm btn-primary" onclick="addToLibrary('${escapeHtml(book.asin)}', this)"><i class="fas fa-plus"></i> Add to Library</button>`;
-    const autoDownloadButton = buildAutoDownloadButton(book, 'modal');
+      const status = getLibraryStatus(book);
+      const addButton = status === 'in_library'
+        ? '<button class="btn btn-sm btn-outline" disabled>In Library</button>'
+        : status === 'wanted'
+          ? '<button class="btn btn-sm btn-outline" disabled>Wanted</button>'
+          : `<button class="btn btn-sm btn-primary" onclick="addToLibrary('${escapeHtml(book.asin)}', this)"><i class="fas fa-plus"></i> Add to Library</button>`;
 
-    modal.innerHTML = `
+      modal.innerHTML = `
   <div class="modal-box max-w-5xl p-0 book-modal-shell">
         <button class="btn btn-sm btn-ghost book-modal-close" aria-label="Close" onclick="this.closest('.modal').remove()">
           <i class="fas fa-times"></i>
@@ -1109,20 +1121,26 @@
             ${summaryHtml ? `<div class="book-modal__summary">${summaryHtml}</div>` : ''}
             <div class="book-modal__actions">
               ${addButton}
-              ${autoDownloadButton}
               <button class="btn btn-sm btn-outline" onclick="this.closest('.modal').remove()">Close</button>
             </div>
           </div>
         </div>
       </div>
     `;
-    document.body.appendChild(modal);
+      
+      console.log('Modal HTML set, appending to body');
+      document.body.appendChild(modal);
+      console.log('Modal appended successfully');
 
-    modal.addEventListener('click', (event) => {
-      if (event.target === modal) {
-        modal.remove();
-      }
-    });
+      modal.addEventListener('click', (event) => {
+        if (event.target === modal) {
+          modal.remove();
+        }
+      });
+    } catch (error) {
+      console.error('Error in showBookDetails:', error);
+      alert('Error displaying book details: ' + error.message);
+    }
   }
 
   goBtn?.addEventListener('click', search);

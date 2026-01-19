@@ -116,6 +116,9 @@ def get_indexers():
             protocol = _resolve_protocol(indexer_type, indexer.get('protocol', ''))
             is_direct = indexer_type == 'direct'
             configured = bool(base_url and session_id) if is_direct else bool(indexer.get('feed_url') and api_key)
+            search_type = (indexer.get('search_type') or 'all').lower()
+            if search_type == 'default':
+                search_type = 'all'
 
             formatted_indexers[key] = {
                 'name': indexer.get('name', key.capitalize()),
@@ -128,6 +131,7 @@ def get_indexers():
                 'session_id_masked': _mask_api_key(session_id),
                 'type': indexer_type,
                 'protocol': protocol,
+                'search_type': search_type,
                 'priority': int(indexer.get('priority', 999)),
                 'categories': categories,
                 'verify_ssl': bool(indexer.get('verify_ssl', True)),
@@ -189,6 +193,15 @@ def update_indexer(indexer_key):
                 'error': 'Feed URL is required'
             }), 400
 
+        search_type = (data.get('search_type') or existing.get('search_type') or 'all').lower()
+        valid_search_types = {
+            'all', 'default', 'active', 'inactive', 'fl', 'fl-vip', 'vip', 'nvip', 'nmeta'
+        }
+        if search_type not in valid_search_types:
+            search_type = 'all'
+        elif search_type == 'default':
+            search_type = 'all'
+
         # Normalize API key handling, allowing masked values to preserve existing secrets
         raw_api_key = (data.get('api_key') or '').strip()
         preserve_existing_api = raw_api_key in API_KEY_SENTINELS or raw_api_key == ''
@@ -242,6 +255,7 @@ def update_indexer(indexer_key):
             'session_id': session_id,
             'type': indexer_type,
             'protocol': protocol,
+            'search_type': search_type,
             'priority': priority,
             'categories': categories,
             'rate_limit': rate_limit,

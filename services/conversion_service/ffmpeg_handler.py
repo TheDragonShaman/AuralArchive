@@ -194,7 +194,8 @@ class FFmpegHandler:
     def _decrypt_voucher_payload(self, asin: str, encrypted_voucher: str) -> Dict[str, str]:
         """Decrypt the license_response payload to recover audible_key/iv."""
         try:
-            auth = audible.Authenticator.from_file('auth/audible_auth.json')
+            from utils.paths import resolve_audible_auth_file
+            auth = audible.Authenticator.from_file(resolve_audible_auth_file())
         except Exception as exc:
             raise ValueError(f"Failed to load Audible auth for voucher decryption: {exc}")
 

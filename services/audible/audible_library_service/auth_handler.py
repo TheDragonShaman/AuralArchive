@@ -17,6 +17,7 @@ from typing import Dict, Any, Optional, List
 
 import audible
 from utils.logger import get_module_logger
+from utils.paths import resolve_audible_auth_file
 
 
 class AudibleAuthHandler:
@@ -38,8 +39,7 @@ class AudibleAuthHandler:
         self.config_service = config_service
         self.logger = logger or get_module_logger("Service.Audible.Auth")
 
-        self.project_root = Path(__file__).resolve().parents[3]
-        self.default_auth_path = self.project_root / "auth" / "audible_auth.json"
+        self.default_auth_path = Path(resolve_audible_auth_file())
 
         self.auth_status: Optional[Dict[str, Any]] = None
         self.profile_info: Dict[str, str] = {}

@@ -21,6 +21,7 @@ from urllib.parse import urlencode
 import audible
 
 from utils.logger import get_module_logger
+from utils.paths import resolve_audible_auth_file
 
 
 class AudibleDownloadHelper:
@@ -46,7 +47,7 @@ class AudibleDownloadHelper:
                 in-flight downloads.
         """
         self.logger = get_module_logger("Service.Audible.DownloadHelper")
-        self.auth_file = Path("auth/audible_auth.json")
+        self.auth_file = Path(resolve_audible_auth_file())
         self.auth = None
         self.progress_callback = progress_callback
         self.cancel_event = cancel_event

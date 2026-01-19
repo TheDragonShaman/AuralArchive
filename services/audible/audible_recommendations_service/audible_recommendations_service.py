@@ -11,11 +11,13 @@ Location:
 """
 
 import os
+from urllib.parse import urlparse
 from typing import Any, Dict, List, Tuple
 from datetime import datetime, timedelta
 import threading
 
 from utils.logger import get_module_logger
+from config.config import Config
 from ..audible_service_manager import get_audible_manager
 
 class AudibleRecommendationsService:
@@ -232,6 +234,16 @@ class AudibleRecommendationsService:
                 exc_info=True,
             )
             return self._get_generic_fallback(num_results)
+
+    @staticmethod
+    def _resolve_db_path() -> str:
+        database_url = Config.DATABASE_URL
+        if not database_url:
+            return ""
+        if database_url.startswith("sqlite"):
+            parsed = urlparse(database_url)
+            return parsed.path or ""
+        return ""
     
     def _analyze_library_preferences(self) -> Dict[str, Any]:
         """Analyze user's library to understand reading preferences."""
@@ -240,7 +252,12 @@ class AudibleRecommendationsService:
             from collections import Counter
             
             # Connect to database
-            db_path = "database/auralarchive_database.db"
+            db_path = self._resolve_db_path()
+            if not db_path:
+                self.logger.warning(
+                    "Database not configured, using generic recommendations",
+                )
+                return {}
             if not os.path.exists(db_path):
                 self.logger.warning(
                     "Database not found, using generic recommendations",

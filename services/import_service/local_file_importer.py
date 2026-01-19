@@ -1100,8 +1100,8 @@ class LocalFileImportCoordinator:
         if callable(load_config):
             load_config()
 
-        default_template = getattr(self.import_service, 'naming_template', 'standard')
-        default_library = getattr(self.import_service, 'library_base_path', '/mnt/audiobooks')
+        default_template = getattr(self.import_service, 'naming_template', 'simple')
+        default_library = getattr(self.import_service, 'library_base_path', '/audiobooks')
 
         return template_name or default_template, library_path or default_library
 

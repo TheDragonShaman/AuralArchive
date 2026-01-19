@@ -44,6 +44,9 @@ class InterceptHandler(logging.Handler):
         except ValueError:
             level = record.levelno
 
+        if record.name in {"httpx", "httpcore"} and record.levelno == logging.INFO:
+            level = "DEBUG"
+
         frame = logging.currentframe()
         depth = 2
         while frame and frame.f_code.co_name == "emit":
@@ -125,6 +128,10 @@ def setup_loguru(log_level: Union[str, int] = "INFO", log_file: str = "auralarch
     # Quiet noisy third-party loggers we don't control
     for noisy in ("audible", "audible.auth"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
+
+    # Enable debug logging for httpx/httpcore
+    for http_logger in ("httpx", "httpcore"):
+        logging.getLogger(http_logger).setLevel(logging.DEBUG)
 
     standardized_root = _standardize_name(logger_name)
 

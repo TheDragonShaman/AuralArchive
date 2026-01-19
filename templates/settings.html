@@ -594,6 +594,23 @@
                                     <span class="label-text-alt text-base-content/60">Used as the authentication token when calling the direct provider API.</span>
                                 </label>
                             </div>
+                            <div class="form-control hidden" data-indexer-field="direct">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Search scope</span>
+                                </label>
+                                <select id="indexer_search_type" class="select select-bordered w-full">
+                                    <option value="all">Everything</option>
+                                    <option value="fl">Freeleech only</option>
+                                    <option value="fl-vip">Freeleech or VIP</option>
+                                    <option value="vip">VIP only</option>
+                                    <option value="nvip">Non-VIP only</option>
+                                    <option value="active">Active (seeded)</option>
+                                    <option value="inactive">Inactive (0 seeders)</option>
+                                </select>
+                                <label class="label">
+                                    <span class="label-text-alt text-base-content/60">MyAnonamouse supports filtering by VIP/freeleech/active status.</span>
+                                </label>
+                            </div>
                         </div>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div class="form-control">
@@ -655,20 +672,29 @@
                     </div>
                     <div class="form-control">
                         <label class="label pb-1">
-                            <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Library root path</span>
+                            <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Library path</span>
                         </label>
-                        <input id="mm_library_path" type="text" class="input input-bordered w-full" placeholder="/mnt/audiobooks" />
+                        <input id="mm_library_path" type="text" class="input input-bordered w-full" placeholder="Auto-detected" />
                         <label class="label">
-                            <span class="label-text-alt text-base-content/60">Imported audiobooks are organized into this directory after processing.</span>
+                            <span class="label-text-alt text-base-content/60">Leave blank for auto-detection (Docker: /audiobooks, Bare Metal: ./audiobooks). Override with custom path if needed.</span>
                         </label>
                     </div>
                     <div class="form-control">
                         <label class="label pb-1">
-                            <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Import staging directory</span>
+                            <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Import path</span>
                         </label>
-                        <input id="mm_import_directory" type="text" class="input input-bordered w-full" placeholder="/downloads/import" />
+                        <input id="mm_import_directory" type="text" class="input input-bordered w-full" placeholder="Auto-detected" />
                         <label class="label">
-                            <span class="label-text-alt text-base-content/60">Place manual files here so the server can enumerate them (no uploads required).</span>
+                            <span class="label-text-alt text-base-content/60">Leave blank for auto-detection (Docker: /import, Bare Metal: ./import). Override with custom path if needed.</span>
+                        </label>
+                    </div>
+                    <div class="form-control">
+                        <label class="label pb-1">
+                            <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Downloads path</span>
+                        </label>
+                        <input id="dm_downloads_path" type="text" class="input input-bordered w-full" placeholder="Auto-detected" />
+                        <label class="label">
+                            <span class="label-text-alt text-base-content/60">Leave blank for auto-detection (Docker: /downloads, Bare Metal: ./downloads). Override with custom path if needed.</span>
                         </label>
                     </div>
                 </section>
@@ -713,18 +739,6 @@
                         </div>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div class="form-control">
-                            <label class="label pb-1">
-                                <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Temp download path</span>
-                            </label>
-                            <input id="dm_temp_download_path" type="text" class="input input-bordered w-full" placeholder="/tmp/auralarchive/downloads" />
-                        </div>
-                        <div class="form-control">
-                            <label class="label pb-1">
-                                <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Temp conversion path</span>
-                            </label>
-                            <input id="dm_temp_conversion_path" type="text" class="input input-bordered w-full" placeholder="/tmp/auralarchive/converting" />
-                        </div>
                         <div class="form-control">
                             <label class="label pb-1">
                                 <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Max concurrent downloads</span>

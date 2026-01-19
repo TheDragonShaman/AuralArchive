@@ -387,7 +387,13 @@ def get_download_clients_tab_data() -> Dict[str, Any]:
                 'qb_host': qbittorrent_config.get('qb_host', ''),
                 'qb_port': qbittorrent_config.get('qb_port', ''),
                 'qb_username': qbittorrent_config.get('qb_username', ''),
-                'qb_configured': bool(qbittorrent_config.get('qb_host') and qbittorrent_config.get('qb_username'))
+                'qb_configured': bool(
+                    qbittorrent_config.get('enabled')
+                    and qbittorrent_config.get('qb_host')
+                    and qbittorrent_config.get('qb_port')
+                    and qbittorrent_config.get('qb_username')
+                    and qbittorrent_config.get('qb_password')
+                )
             },
             'jackett_config': {
                 'jackett_url': jackett_config.get('jackett_url', ''),

@@ -54,6 +54,7 @@
     };
 
     const DEFAULT_INDEXER_PRIORITY = 100;
+    const VALID_MAM_SEARCH_TYPES = ["all", "default", "fl", "fl-vip", "vip", "nvip", "active", "inactive", "nmeta"];
 
     const state = {
         config: {},
@@ -120,6 +121,14 @@
             .filter(Boolean);
     }
 
+    function sanitizeSearchType(value) {
+        const normalized = (value || "").toString().trim().toLowerCase();
+        if (normalized === "default") {
+            return "all";
+        }
+        return VALID_MAM_SEARCH_TYPES.includes(normalized) ? normalized : "all";
+    }
+
     function hydrateIndexersFromConfig() {
         if (!state.config || typeof state.config !== "object") {
             return;
@@ -144,6 +153,7 @@
             const protocol = (values.protocol || (isDirectIndexerType(type) ? "direct" : "torznab")).toLowerCase();
             const priority = toNumeric(values.priority, DEFAULT_INDEXER_PRIORITY);
             const categories = parseCategoriesList(values.categories);
+            const searchType = sanitizeSearchType(values.search_type || values.searchType);
             const verifySsl = values.verify_ssl != null ? toBoolean(values.verify_ssl) : true;
             const timeout = toNumeric(values.timeout, 30);
             const rateLimitRps = toNumeric(values.rate_limit_requests_per_second || values["rate_limit.request_per_second"], 1);
@@ -164,6 +174,7 @@
                 session_id_masked: maskApiKey(sessionId),
                 type,
                 protocol,
+                search_type: searchType,
                 priority,
                 categories,
                 verify_ssl: verifySsl,
@@ -326,7 +337,11 @@
             if (!details || typeof details !== "object") {
                 return;
             }
-            state.indexers[key] = { key, ...details };
+            state.indexers[key] = {
+                key,
+                search_type: sanitizeSearchType(details.search_type || details.searchType),
+                ...details
+            };
         });
 
         if (!Object.keys(state.indexers).length) {
@@ -1208,6 +1223,7 @@
         const typeSelect = document.getElementById("indexer_type");
         const keyInput = document.getElementById("indexer_custom_key");
         const statusTarget = document.getElementById("indexerStatus");
+        const searchTypeSelect = document.getElementById("indexer_search_type");
 
         if (!editor || !emptyCard || !heading || !helper || !deleteButton || !typeSelect || !keyInput || !statusTarget) {
             return;
@@ -1240,6 +1256,7 @@
             setInputValue("indexer_api_key", indexer.api_key || "");
             setInputValue("indexer_base_url", indexer.base_url || "");
             setInputValue("indexer_session_id", indexer.session_id || "");
+            setInputValue("indexer_search_type", searchTypeSelect ? sanitizeSearchType(indexer.search_type) : "all");
             setNumericInput("indexer_priority", indexer.priority, DEFAULT_INDEXER_PRIORITY);
             setInputValue("indexer_categories", (indexer.categories || []).join(", "));
         } else {
@@ -1258,6 +1275,7 @@
             setInputValue("indexer_api_key", "");
             setInputValue("indexer_base_url", "");
             setInputValue("indexer_session_id", "");
+            setInputValue("indexer_search_type", searchTypeSelect ? "all" : "");
             setNumericInput("indexer_priority", DEFAULT_INDEXER_PRIORITY, DEFAULT_INDEXER_PRIORITY);
             setInputValue("indexer_categories", "3030");
         }
@@ -1306,6 +1324,10 @@
                     ? "Provide the base URL and session ID for your direct provider. Priority determines search order."
                     : "Provide the torznab endpoint and API key. Priority determines search order.";
             }
+        }
+
+        if (isDirectIndexerType(typeValue)) {
+            setInputValue("indexer_search_type", sanitizeSearchType(getInputValue("indexer_search_type") || "all"));
         }
 
         if (state.selectedIndexerKey) {
@@ -1362,7 +1384,8 @@
             type: typeValue,
             enabled: getCheckboxValue("indexer_enabled"),
             priority: toNumeric(getInputValue("indexer_priority"), DEFAULT_INDEXER_PRIORITY),
-            categories: getInputValue("indexer_categories").split(",").map((value) => value.trim()).filter(Boolean)
+            categories: getInputValue("indexer_categories").split(",").map((value) => value.trim()).filter(Boolean),
+            search_type: sanitizeSearchType(getInputValue("indexer_search_type"))
         };
 
         if (isDirectIndexerType(typeValue)) {
@@ -1590,7 +1613,7 @@
                 templateSelect.appendChild(option);
                 templateSelect.disabled = true;
             }
-            const currentTemplate = state.mediaSettings.naming_template || "standard";
+            const currentTemplate = state.mediaSettings.naming_template || "simple";
             templateSelect.value = currentTemplate;
         }
 
@@ -1598,8 +1621,8 @@
             previewList.innerHTML = "";
         }
 
-    setInputValue("mm_library_path", state.mediaSettings.library_path || "/mnt/audiobooks");
-    setInputValue("mm_import_directory", state.mediaSettings.import_directory || "/downloads/import");
+    setInputValue("mm_library_path", state.mediaSettings.library_path || "/audiobooks");
+    setInputValue("mm_import_directory", state.mediaSettings.import_directory || "/import");
 
         setCheckboxValue("dm_seeding_enabled", state.downloadSettings.seeding_enabled);
         setCheckboxValue("dm_delete_source", state.downloadSettings.delete_source_after_import);
@@ -1607,8 +1630,9 @@
         setCheckboxValue("dm_auto_start_monitoring", state.downloadSettings.auto_start_monitoring);
         setCheckboxValue("dm_monitor_seeding", state.downloadSettings.monitor_seeding);
 
-        setInputValue("dm_temp_download_path", state.downloadSettings.temp_download_path || "");
-        setInputValue("dm_temp_conversion_path", state.downloadSettings.temp_conversion_path || "");
+        setInputValue("dm_downloads_path", state.downloadSettings.downloads_path || "/downloads");
+        setInputValue("dm_library_path", state.downloadSettings.library_path || "/audiobooks");
+        setInputValue("dm_import_path", state.downloadSettings.import_path || "/import");
         setNumericInput("dm_max_concurrent_downloads", state.downloadSettings.max_concurrent_downloads, 3);
         setNumericInput("dm_queue_priority", state.downloadSettings.queue_priority_default, 5);
         setNumericInput("dm_monitor_interval", state.downloadSettings.monitoring_interval, 2);
@@ -1628,7 +1652,14 @@
         setCheckboxValue("audible_include_pdf", audibleDefaults.include_pdf);
         setNumericInput("audible_concurrent_downloads", audibleDefaults.concurrent_downloads, 1);
 
-        const currentTemplate = templateSelect ? templateSelect.value : "standard";
+        let currentTemplate = templateSelect ? templateSelect.value : "simple";
+        const availableTemplateNames = (state.namingTemplates || []).map((entry) => entry.name);
+        if (!availableTemplateNames.includes(currentTemplate) && availableTemplateNames.length) {
+            currentTemplate = availableTemplateNames[0];
+            if (templateSelect) {
+                templateSelect.value = currentTemplate;
+            }
+        }
         renderNamingPreview(currentTemplate);
     }
 
@@ -1721,10 +1752,10 @@
             return;
         }
 
-        const templateValue = getInputValue("mm_naming_template") || "standard";
+        const templateValue = getInputValue("mm_naming_template") || "simple";
         const mediaPayload = {
-            library_path: getInputValue("mm_library_path") || state.mediaSettings.library_path || "/mnt/audiobooks",
-            import_directory: getInputValue("mm_import_directory") || state.mediaSettings.import_directory || "/downloads/import",
+            library_path: getInputValue("mm_library_path") || state.mediaSettings.library_path || "/audiobooks",
+            import_directory: getInputValue("mm_import_directory") || state.mediaSettings.import_directory || "/import",
             naming_template: templateValue,
             verify_after_import: Boolean(state.mediaSettings.verify_after_import),
             create_backup_on_error: Boolean(state.mediaSettings.create_backup_on_error),
@@ -1737,8 +1768,9 @@
             delete_source_after_import: getCheckboxValue("dm_delete_source"),
             auto_start_monitoring: getCheckboxValue("dm_auto_start_monitoring"),
             monitor_seeding: getCheckboxValue("dm_monitor_seeding"),
-            temp_download_path: getInputValue("dm_temp_download_path"),
-            temp_conversion_path: getInputValue("dm_temp_conversion_path"),
+            downloads_path: getInputValue("dm_downloads_path"),
+            library_path: getInputValue("dm_library_path"),
+            import_path: getInputValue("dm_import_path"),
             max_concurrent_downloads: toNumeric(getInputValue("dm_max_concurrent_downloads"), state.downloadSettings.max_concurrent_downloads || 3),
             queue_priority_default: toNumeric(getInputValue("dm_queue_priority"), state.downloadSettings.queue_priority_default || 5),
             monitoring_interval: toNumeric(getInputValue("dm_monitor_interval"), state.downloadSettings.monitoring_interval || 2),

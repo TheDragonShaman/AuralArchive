@@ -18,6 +18,8 @@ database/auralarchive_database.db
 # Config and auth files - SENSITIVE
 auth/
 config/config.txt
+config/audible_auth.json
+config/users.json
 .env
 .env.*
 !.env.example

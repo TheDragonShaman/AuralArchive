@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import threading
 
 from utils.logger import get_module_logger
+from utils.paths import resolve_audible_auth_file
 
 # Import the new library service
 from .audible_library_service.audible_library_service import AudibleLibraryService
@@ -34,7 +35,7 @@ class AudibleServiceManager:
         """
         self.logger = logger or get_module_logger("Service.Audible.Manager")
         self.config_service = config_service
-        self.auth_file = auth_file or "auth/audible_auth.json"
+        self.auth_file = auth_file or resolve_audible_auth_file()
         self.auth = None
         self._lock = threading.Lock()
         

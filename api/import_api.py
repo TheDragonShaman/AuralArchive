@@ -41,7 +41,7 @@ logger = get_module_logger("API.Import")
 
 import_api_bp = Blueprint('import_api', __name__, url_prefix='/api/import')
 
-DEFAULT_IMPORT_DIRECTORY = '/downloads/import'
+DEFAULT_IMPORT_DIRECTORY = '/import'
 DEFAULT_EXTENSIONS = {'.m4b', '.mp3', '.m4a', '.aac', '.flac', '.ogg', '.wav'}
 
 BATCH_CACHE: Dict[str, Dict[str, Any]] = {}

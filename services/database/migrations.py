@@ -29,14 +29,29 @@ class DatabaseMigrations:
         self.logger = logger or get_module_logger("Service.Database.Migrations")
 
     def initialize_database(self):
-        """Verify connectivity; schema changes are frozen."""
+        """Initialize base schema for a fresh database."""
         try:
-            conn, _ = self.connection_manager.connect_db()
+            conn, cursor = self.connection_manager.connect_db()
+
+            # Core tables required at startup
+            self._create_books_table(cursor)
+            self._create_authors_table(cursor)
+            self._create_author_name_overrides_table(cursor)
+            self._create_audible_library_table(cursor)
+
+            # Supporting tables
+            self._create_indexer_status_table(cursor)
+            self._create_search_preferences_table(cursor)
+            self._create_download_queue_table(cursor)
+
+            conn.commit()
             conn.close()
-            self.logger.info("Database initialization skipped (frozen schema)")
+
+            self.logger.info("Database initialization completed")
+
         except Exception as exc:
             self.logger.error(
-                "Error initializing database (frozen state)",
+                "Error initializing database",
                 extra={"error": str(exc)},
                 exc_info=True,
             )
@@ -168,6 +183,123 @@ class DatabaseMigrations:
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_download_queue_client_id ON download_queue(download_client_id)')
         
         self.logger.debug("Download queue table created or verified")
+
+    def _create_books_table(self, cursor):
+        """Create the books table for library storage."""
+        create_table_sql = """
+            CREATE TABLE IF NOT EXISTS books (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                author TEXT,
+                series TEXT,
+                sequence TEXT,
+                narrator TEXT,
+                runtime INTEGER,
+                release_date TEXT,
+                language TEXT,
+                publisher TEXT,
+                overall_rating TEXT,
+                rating REAL,
+                num_ratings INTEGER DEFAULT 0,
+                status TEXT,
+                asin TEXT,
+                summary TEXT,
+                cover_image TEXT,
+                source TEXT,
+                ownership_status TEXT,
+                file_path TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                series_asin TEXT,
+                file_size INTEGER,
+                file_format TEXT,
+                file_quality TEXT,
+                imported_to_library BOOLEAN DEFAULT 0,
+                import_date INTEGER,
+                naming_template TEXT
+            )
+        """
+        cursor.execute(create_table_sql)
+        self.logger.debug("Books table created or verified")
+
+    def _create_authors_table(self, cursor):
+        """Create the authors table for author metadata."""
+        create_table_sql = """
+            CREATE TABLE IF NOT EXISTS authors (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                audible_author_id TEXT,
+                author_image_url TEXT,
+                author_bio TEXT,
+                author_page_url TEXT,
+                total_books_count INTEGER DEFAULT 0,
+                audible_books_count INTEGER DEFAULT 0,
+                last_fetched_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """
+        cursor.execute(create_table_sql)
+        self.logger.debug("Authors table created or verified")
+
+    def _create_author_name_overrides_table(self, cursor):
+        """Create the author_name_overrides table for canonical names."""
+        create_table_sql = """
+            CREATE TABLE IF NOT EXISTS author_name_overrides (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_author_name TEXT NOT NULL,
+                preferred_author_name TEXT NOT NULL,
+                asin TEXT DEFAULT '',
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(source_author_name, asin)
+            )
+        """
+        cursor.execute(create_table_sql)
+        self.logger.debug("Author name overrides table created or verified")
+
+    def _create_audible_library_table(self, cursor):
+        """Create the audible_library table for Audible sync."""
+        create_table_sql = """
+            CREATE TABLE IF NOT EXISTS audible_library (
+                asin TEXT PRIMARY KEY,
+                title TEXT,
+                author TEXT,
+                authors TEXT,
+                narrator TEXT,
+                narrators TEXT,
+                series_title TEXT,
+                series_sequence TEXT,
+                publisher TEXT,
+                publication_date TEXT,
+                release_date TEXT,
+                duration_minutes INTEGER,
+                runtime_length_min INTEGER,
+                summary TEXT,
+                description TEXT,
+                genres TEXT,
+                tags TEXT,
+                language TEXT,
+                format TEXT,
+                rating REAL,
+                num_ratings INTEGER,
+                purchase_date TEXT,
+                listened BOOLEAN DEFAULT 0,
+                progress REAL DEFAULT 0,
+                favorite BOOLEAN DEFAULT 0,
+                cover_image_url TEXT,
+                local_cover_path TEXT,
+                file_path TEXT,
+                file_size INTEGER,
+                added_date TEXT,
+                last_updated TEXT,
+                metadata_source TEXT,
+                sync_status TEXT
+            )
+        """
+        cursor.execute(create_table_sql)
+        self.logger.debug("Audible library table created or verified")
 
     def _seed_default_author_overrides(self, cursor):
         """Insert curated overrides to keep metadata consistent."""

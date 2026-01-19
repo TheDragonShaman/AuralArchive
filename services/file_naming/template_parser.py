@@ -45,11 +45,11 @@ class TemplateParser:
         self.variable_pattern = re.compile(r'\{(\w+)\}')
     
     def get_template(self, template_name: str, templates: Dict[str, str]) -> str:
-        """Get a template by name, falling back to 'standard' if not found."""
+        """Get a template by name, falling back to 'simple' if not found."""
         template = templates.get(template_name)
         if not template:
-            self.logger.warning(f"Template '{template_name}' not found, using 'standard'")
-            return templates.get('standard', '{author}/{series}/{title}')
+            self.logger.warning(f"Template '{template_name}' not found, using 'simple'")
+            return templates.get('simple', '{author}/{series}/{title}/{title}')
         return template
     
     def add_custom_template(self, name: str, template: str, templates: Dict[str, str]) -> bool:

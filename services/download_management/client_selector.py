@@ -69,6 +69,12 @@ class ClientSelector:
     def _select_torrent_client(self) -> Optional[str]:
         """Select best available torrent client (currently qBittorrent)."""
 
+        if not self._is_qbittorrent_enabled():
+            self.logger.debug("No torrent client enabled", extra={
+                "client": "qbittorrent"
+            })
+            return None
+
         self.logger.debug("Selecting torrent client", extra={
             "client": "qbittorrent"
         })
@@ -90,6 +96,9 @@ class ClientSelector:
                 from services.download_clients.qbittorrent_client import QBittorrentClient
 
                 config = self._load_client_config("qbittorrent")
+                if not config.get("enabled"):
+                    self.logger.debug("qBittorrent is disabled; skipping client init")
+                    return None
                 client = QBittorrentClient(config)
                 client.connect()
                 self._client_cache[client_name] = client
@@ -216,6 +225,7 @@ class ClientSelector:
                     local_root = legacy_local or remote_root
 
                 config_dict = {
+                    "enabled": _get_bool("enabled", False),
                     "host": _get("qb_host", "localhost"),
                     "port": int(_get("qb_port", "8080") or 8080),
                     "username": _get("qb_username", "admin"),
@@ -235,6 +245,7 @@ class ClientSelector:
 
             self.logger.warning("qBittorrent config not found, using defaults")
             return {
+                "enabled": False,
                 "host": "localhost",
                 "port": 8080,
                 "username": "admin",
@@ -247,3 +258,7 @@ class ClientSelector:
             }
 
         return {}
+
+    def _is_qbittorrent_enabled(self) -> bool:
+        config = self._load_client_config("qbittorrent")
+        return bool(config.get("enabled"))

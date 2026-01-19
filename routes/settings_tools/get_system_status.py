@@ -133,7 +133,13 @@ def _check_qbittorrent_config(config_data):
     """Check if qBittorrent configuration is valid."""
     try:
         qb_config = config_data.get('qbittorrent', {})
-        return bool(qb_config.get('qb_host') and qb_config.get('qb_username'))
+        return bool(
+            qb_config.get('enabled')
+            and qb_config.get('qb_host')
+            and qb_config.get('qb_port')
+            and qb_config.get('qb_username')
+            and qb_config.get('qb_password')
+        )
     except Exception as e:
         logger.error(f"Error checking qBittorrent config: {e}")
         return False

@@ -76,7 +76,7 @@ class ImportService:
                     
                     # Import settings (loaded from config)
                     self.library_base_path = None
-                    self.naming_template = 'standard'
+                    self.naming_template = 'simple'
                     self.verify_after_import = True
                     self.create_backup_on_error = True
                     self.overwrite_existing_files = False
@@ -115,10 +115,10 @@ class ImportService:
             if config_service:
                 # Load library settings
                 abs_config = config_service.get_section('audiobookshelf')
-                self.library_base_path = abs_config.get('library_path', '/mnt/audiobooks')
+                self.library_base_path = abs_config.get('library_path', '/audiobooks')
                 
                 # Load naming settings
-                self.naming_template = abs_config.get('naming_template', 'standard')
+                self.naming_template = abs_config.get('naming_template', 'simple')
                 
                 # Load import settings
                 import_config = config_service.get_section('import')
@@ -130,8 +130,8 @@ class ImportService:
                 self.logger.debug("Loaded import configuration", extra={"library_base_path": self.library_base_path, "naming_template": self.naming_template})
         except Exception as e:
             self.logger.warning("Could not load configuration, using defaults", extra={"error": str(e)})
-            self.library_base_path = '/mnt/audiobooks'
-            self.naming_template = 'standard'
+            self.library_base_path = '/audiobooks'
+            self.naming_template = 'simple'
             self._config_loaded = True  # Mark as attempted even if failed
     
     def _get_file_naming_service(self):
@@ -323,7 +323,7 @@ class ImportService:
             
             asin = self._normalize_asin(book_data.get('ASIN') or book_data.get('asin'))
             stored_record = self._persist_book_record(book_data)
-            if stored_record:
+            if isinstance(stored_record, dict):
                 book_data = stored_record
                 asin = self._normalize_asin(book_data.get('ASIN') or book_data.get('asin'))
 
@@ -600,8 +600,8 @@ class ImportService:
                 book_data,
                 status=book_data.get('Status') or book_data.get('status') or 'Owned'
             )
-            if added:
-                return added
+            if added and asin:
+                return database_service.get_book_by_asin(asin)
 
             if asin:
                 return database_service.get_book_by_asin(asin)

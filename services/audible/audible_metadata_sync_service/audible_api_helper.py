@@ -15,6 +15,7 @@ import math
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 from utils.logger import get_module_logger
+from utils.paths import resolve_audible_auth_file
 
 logger = get_module_logger("Service.Audible.MetadataSync.ApiHelper")
 
@@ -25,14 +26,14 @@ class AudibleApiHelper:
     Uses the audible package directly instead of CLI subprocess calls.
     """
     
-    def __init__(self, auth_file: str = 'auth/audible_auth.json'):
+    def __init__(self, auth_file: str = None):
         """
         Initialize the API helper.
         
         Args:
             auth_file: Path to the Audible authentication file
         """
-        self.auth_file = auth_file
+        self.auth_file = auth_file or resolve_audible_auth_file()
         self.auth = None
         self._load_auth()
     

@@ -31,6 +31,7 @@ import audible
 from flask import Blueprint, jsonify, request
 
 from utils.logger import get_module_logger
+from utils.paths import resolve_audible_auth_file
 
 audible_auth_api = Blueprint('audible_auth_api', __name__)
 logger = get_module_logger("API.Audible.Auth")
@@ -139,7 +140,7 @@ def start_authentication():
             logger.info("Authentication successful without OTP")
             
             # Save auth file
-            auth_file = 'auth/audible_auth.json'
+            auth_file = resolve_audible_auth_file()
             os.makedirs(os.path.dirname(auth_file), exist_ok=True)
             auth.to_file(auth_file, encryption=False)
             logger.info(f"Auth file saved to {auth_file}")
@@ -262,7 +263,7 @@ def submit_otp():
             )
             
             # Save auth file
-            auth_file = 'auth/audible_auth.json'
+            auth_file = resolve_audible_auth_file()
             os.makedirs(os.path.dirname(auth_file), exist_ok=True)
             auth.to_file(auth_file, encryption=False)
             logger.info(f"Auth file saved to {auth_file}")
@@ -323,7 +324,7 @@ def get_auth_status():
         }
     """
     try:
-        auth_file = Path('auth/audible_auth.json')
+        auth_file = Path(resolve_audible_auth_file())
         
         if not auth_file.exists():
             return jsonify({'authenticated': False})
@@ -363,7 +364,7 @@ def revoke_authentication():
         }
     """
     try:
-        auth_file = Path('auth/audible_auth.json')
+        auth_file = Path(resolve_audible_auth_file())
         
         if auth_file.exists():
             os.remove(auth_file)

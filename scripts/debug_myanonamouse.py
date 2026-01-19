@@ -58,6 +58,7 @@ def load_indexer_config(path: Path, section: str) -> Dict[str, Any]:
     cfg["session_id"] = cfg.get("session_id", "").strip()
     cfg["verify_ssl"] = _as_bool(cfg.get("verify_ssl"), True)
     cfg["timeout"] = _as_int(cfg.get("timeout"), 30)
+    cfg["search_type"] = (cfg.get("search_type") or "all").strip().lower() or "all"
 
     categories = cfg.get("categories")
     cfg["categories"] = _split_csv(categories)

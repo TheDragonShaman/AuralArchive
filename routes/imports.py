@@ -26,9 +26,9 @@ import_bp = Blueprint('import_page', __name__)
 @login_required
 def import_dashboard():
     """Render the manual import UI."""
-    default_library_path = '/mnt/audiobooks'
-    default_template = 'standard'
-    import_directory = '/downloads/import'
+    default_library_path = '/audiobooks'
+    default_template = 'simple'
+    import_directory = '/import'
 
     try:
         config_service = get_config_service()

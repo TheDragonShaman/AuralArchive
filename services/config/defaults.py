@@ -44,13 +44,12 @@ class ConfigDefaults:
             self._add_qbittorrent_config,
             self._add_audiobookshelf_config,
             self._add_import_config,
-            self._add_database_config,
+            self._add_download_management_config,
             self._add_application_config,
             self._add_auto_search_config,
             self._add_media_management_config,
             self._add_authors_config,
-            self._add_providers_config,
-            self._add_indexer_defaults,
+            # Providers/indexer samples removed from defaults
         ]
 
         for add_section in sections:
@@ -78,7 +77,6 @@ class ConfigDefaults:
             "max_results": "25",
             "cache_duration": "2",
             "auto_authenticate": "True",
-            "download_directory": "",
             "download_format": "aaxc",
             "download_quality": "best",
             "aax_fallback_enabled": "true",
@@ -86,9 +84,7 @@ class ConfigDefaults:
             "include_cover": "false",
             "include_chapters": "false",
             "include_pdf": "false",
-            "concurrent_downloads": "1",
-            "temp_dir_enabled": "true",
-            "temp_directory": "/tmp/aural_archive_conversion"
+            "concurrent_downloads": "1"
         }
     
     def _add_jackett_config(self, config: configparser.ConfigParser):
@@ -127,10 +123,9 @@ class ConfigDefaults:
             "abs_sync_metadata": "true",
             "abs_sync_only_owned": "true",
             "abs_auto_sync": "false",
-            "abs_auto_sync_enabled": "false",
             "abs_sync_frequency": "30min",
-            "library_path": "/mnt/audiobooks",
-            "naming_template": "standard",
+            "library_path": "",
+            "naming_template": "simple",
             "include_asin_in_path": "false",
             "create_author_folders": "true",
             "create_series_folders": "true"
@@ -143,13 +138,26 @@ class ConfigDefaults:
             "create_backup_on_error": "true",
             "delete_source_after_import": "false",
             "use_hardlinks": "false",
-            "import_directory": "/downloads/import"
+            "import_directory": ""
         }
     
-    def _add_database_config(self, config: configparser.ConfigParser):
-        """Add database configuration section."""
-        config["database"] = {
-            "db_file": "database/auralarchive_database.db"
+    def _add_download_management_config(self, config: configparser.ConfigParser):
+        """Add download management configuration section."""
+        config["download_management"] = {
+            "downloads_path": "",
+            "import_path": "",
+            "library_path": "",
+            "seeding_enabled": "false",
+            "delete_source_after_import": "false",
+            "max_concurrent_downloads": "2",
+            "monitoring_interval": "2",
+            "auto_start_monitoring": "true",
+            "monitor_seeding": "true",
+            "retry_search_max": "3",
+            "retry_download_max": "2",
+            "retry_conversion_max": "1",
+            "retry_import_max": "2",
+            "retry_backoff_seconds": "10"
         }
     
     def _add_application_config(self, config: configparser.ConfigParser):
@@ -194,49 +202,3 @@ class ConfigDefaults:
             "abs_provider": "audible"
         }
     
-    def _add_providers_config(self, config: configparser.ConfigParser):
-        """Add providers configuration sections."""
-        config["prowlarr"] = {
-            "enabled": "false",
-            "host": "localhost",
-            "port": "9696",
-            "base_url": "",
-            "api_key": "",
-            "indexer_ids": "",
-            "min_seeders": "1",
-            "use_https": "false",
-            "timeout": "30"
-        }
-        
-        config["nzbhydra2"] = {
-            "enabled": "false",
-            "host": "localhost",
-            "port": "5076",
-            "api_key": "",
-            "use_https": "false",
-            "timeout": "30"
-        }
-        
-        config["librivox"] = {
-            "enabled": "false",
-            "base_url": "https://librivox.org/api/feed",
-            "timeout": "30",
-            "max_results": "100"
-        }
-
-    def _add_indexer_defaults(self, config: configparser.ConfigParser):
-        """Add sample indexer configuration sections."""
-        config["indexer:jackett_sample"] = {
-            "name": "Jackett - Sample",
-            "enabled": "false",
-            "type": "jackett",
-            "protocol": "torznab",
-            "feed_url": "http://localhost:9117/api/v2.0/indexers/audiobookbay/results/torznab",
-            "api_key": "",
-            "priority": "1",
-            "categories": "3030",
-            "verify_ssl": "true",
-            "timeout": "30",
-            "rate_limit_requests_per_second": "1",
-            "rate_limit_max_concurrent": "1"
-        }

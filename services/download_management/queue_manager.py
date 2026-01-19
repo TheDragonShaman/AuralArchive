@@ -33,6 +33,7 @@ class QueueManager:
         """Initialize queue manager."""
         self.logger = logger or get_module_logger("Service.DownloadManagement.QueueManager")
         self._database_service = None
+        self._table_initialized = False
     
     def _get_database_service(self):
         """Lazy load DatabaseService."""
@@ -40,6 +41,64 @@ class QueueManager:
             from services.service_manager import get_database_service
             self._database_service = get_database_service()
         return self._database_service
+    
+    def _ensure_table_exists(self):
+        """Ensure download_queue table exists (for frozen schema)."""
+        if self._table_initialized:
+            return
+        
+        db = self._get_database_service()
+        conn, cursor = db.connection_manager.connect_db()
+        
+        try:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS download_queue (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    book_title TEXT NOT NULL,
+                    book_author TEXT,
+                    book_asin TEXT,
+                    search_result_id INTEGER,
+                    download_url TEXT,
+                    download_client TEXT,
+                    download_client_id TEXT,
+                    status TEXT DEFAULT 'queued',
+                    quality_score REAL,
+                    match_score REAL,
+                    file_format TEXT,
+                    file_size INTEGER,
+                    download_progress REAL DEFAULT 0.0,
+                    eta_seconds INTEGER,
+                    error_message TEXT,
+                    last_error TEXT,
+                    retry_count INTEGER DEFAULT 0,
+                    max_retries INTEGER DEFAULT 3,
+                    seeding_ratio REAL DEFAULT 0.0,
+                    seeding_time_seconds INTEGER DEFAULT 0,
+                    queued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    started_at TIMESTAMP,
+                    completed_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (search_result_id) REFERENCES search_results(id)
+                )
+            """)
+            
+            # Create indexes
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_download_queue_asin ON download_queue(book_asin)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_download_queue_status ON download_queue(status)")
+            
+            conn.commit()
+            self._table_initialized = True
+            self.logger.debug("Download queue table verified/created")
+            
+        except Exception as e:
+            self.logger.error(f"Error ensuring download_queue table exists: {e}")
+            raise
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
     
     def add_to_queue(self, book_asin: str, search_result_id: Optional[int] = None,
                      priority: int = 5, **kwargs) -> int:
@@ -62,6 +121,7 @@ class QueueManager:
         Returns:
             download_id: ID of created queue item
         """
+        self._ensure_table_exists()
         db = self._get_database_service()
         conn, cursor = db.connection_manager.connect_db()
         
@@ -155,6 +215,7 @@ class QueueManager:
         Returns:
             Download record or None
         """
+        self._ensure_table_exists()
         db = self._get_database_service()
         conn, cursor = db.connection_manager.connect_db()
         
@@ -184,6 +245,7 @@ class QueueManager:
         Returns:
             Active download record or None
         """
+        self._ensure_table_exists()
         db = self._get_database_service()
         conn, cursor = db.connection_manager.connect_db()
         
@@ -219,6 +281,7 @@ class QueueManager:
         Returns:
             List of download records
         """
+        self._ensure_table_exists()
         db = self._get_database_service()
         conn, cursor = db.connection_manager.connect_db()
         
@@ -235,14 +298,14 @@ class QueueManager:
                     query = """
                         SELECT * FROM download_queue 
                         WHERE status=?
-                        ORDER BY priority DESC, queued_at ASC
+                        ORDER BY queued_at ASC
                     """
                 cursor.execute(query, (status_filter,))
             else:
                 query = """
                     SELECT * FROM download_queue 
                     WHERE status NOT IN ('IMPORTED', 'FAILED', 'CANCELLED')
-                    ORDER BY priority DESC, queued_at ASC
+                    ORDER BY queued_at ASC
                 """
                 cursor.execute(query)
             
@@ -267,6 +330,7 @@ class QueueManager:
             download_id: Download queue ID
             updates: Dictionary of fields to update
         """
+        self._ensure_table_exists()
         db = self._get_database_service()
         conn, cursor = db.connection_manager.connect_db()
         
@@ -300,6 +364,7 @@ class QueueManager:
         Args:
             download_id: Download queue ID
         """
+        self._ensure_table_exists()
         db = self._get_database_service()
         conn, cursor = db.connection_manager.connect_db()
         
@@ -323,6 +388,7 @@ class QueueManager:
         Returns:
             Dictionary of counts by status
         """
+        self._ensure_table_exists()
         db = self._get_database_service()
         conn, cursor = db.connection_manager.connect_db()
         

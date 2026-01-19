@@ -44,6 +44,7 @@ import requests
 from loguru import logger as loguru_logger
 
 from utils.logger import get_module_logger
+from utils.path_resolver import get_path_resolver
 from services.audible.ownership_validator import (
     assess_audible_ownership,
     fetch_audible_library_entry,
@@ -139,8 +140,18 @@ class DownloadManagementService:
                     # Download management settings (loaded from config)
                     self.seeding_enabled = False
                     self.delete_source_after_import = False
-                    self.temp_download_path = '/tmp/auralarchive/downloads'
-                    self.temp_conversion_path = '/tmp/auralarchive/converting'
+                    
+                    # Hardcoded paths (always relative to project root)
+                    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                    self.audible_dl_path = os.path.join(project_root, 'audible_dl')
+                    
+                    # Auto-detected paths (can be overridden in config.txt or environment variables)
+                    path_resolver = get_path_resolver()
+                    self.downloads_path = path_resolver.get_downloads_dir()
+                    self.import_path = path_resolver.get_import_dir()
+                    self.conversion_path = path_resolver.get_conversion_dir()
+                    self.library_path = '/audiobooks'  # TODO: Add to path resolver if needed
+                    
                     self.torrent_download_root = None
                     self.torrent_download_root_local = None
                     self.torrent_download_root_remote = None
@@ -223,10 +234,16 @@ class DownloadManagementService:
                 self.queue_priority_default = _coerce_int(dm_config.get('queue_priority_default', self.queue_priority_default), self.queue_priority_default)
                 self.max_active_searches = max(1, _coerce_int(dm_config.get('max_active_searches', self.max_active_searches), self.max_active_searches))
 
-                # Paths
-                self.temp_download_path = dm_config.get('temp_download_path', self.temp_download_path)
-                self.temp_conversion_path = dm_config.get('temp_conversion_path', self.temp_conversion_path)
-                self.temp_failed_path = dm_config.get('temp_failed_path', self.temp_failed_path)
+                # Configurable paths (user can override auto-detected paths in config.txt)
+                # Priority: config.txt > environment variables > auto-detection
+                if 'downloads_path' in dm_config:
+                    self.downloads_path = dm_config['downloads_path']
+                if 'import_path' in dm_config:
+                    self.import_path = dm_config['import_path']
+                if 'library_path' in dm_config:
+                    self.library_path = dm_config['library_path']
+                if 'temp_failed_path' in dm_config:
+                    self.temp_failed_path = dm_config['temp_failed_path']
                 
                 # Retry limits
                 self.retry_limits = {
@@ -337,8 +354,8 @@ class DownloadManagementService:
                 )
 
             if not self.torrent_download_root_local:
-                # Fall back to temp download directory and ensure it exists
-                fallback_local = os.path.abspath(self.temp_download_path)
+                # Fall back to downloads directory and ensure it exists
+                fallback_local = os.path.abspath(self.downloads_path)
                 os.makedirs(fallback_local, exist_ok=True)
                 self.torrent_download_root_local = fallback_local
                 self.logger.debug(
@@ -1634,8 +1651,8 @@ class DownloadManagementService:
             
             self.logger.info(f"Starting Audible download for ASIN: {book_asin}")
             
-            # Create download directory
-            temp_path = os.path.join(self.temp_download_path, str(download_id))
+            # Create download directory in audible_dl (hardcoded path)
+            temp_path = os.path.join(self.audible_dl_path, str(download_id))
             os.makedirs(temp_path, exist_ok=True)
 
             # Determine preferred format/quality from queue metadata or config defaults
@@ -2365,7 +2382,7 @@ class DownloadManagementService:
                     return
             
             # Setup output path for conversion
-            conversion_temp_dir = os.path.join(self.temp_conversion_path, f"convert_{download_id}")
+            conversion_temp_dir = os.path.join(self.conversion_path, f"convert_{download_id}")
             os.makedirs(conversion_temp_dir, exist_ok=True)
             
             output_filename = f"{book_data.get('Title', 'audiobook')}.m4b"
@@ -2825,7 +2842,7 @@ class DownloadManagementService:
         base_path = (
             self.torrent_download_root_local
             or self.torrent_download_root
-            or self.temp_download_path
+            or self.downloads_path
         )
         os.makedirs(base_path, exist_ok=True)
 

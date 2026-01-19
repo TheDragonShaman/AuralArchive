@@ -86,7 +86,7 @@ def discover_page():
         author_counter: Counter = Counter()
 
         for book in books:
-            runtime = (book.get('Runtime') or '').strip()
+            runtime = str(book.get('Runtime') or '').strip()
             if 'hrs' in runtime:
                 try:
                     hours_part, _, minutes_part = runtime.partition(' hrs ')
@@ -102,11 +102,11 @@ def discover_page():
             if status_value == 'downloading':
                 downloading_count += 1
 
-            series_value = book.get('Series') or ''
+            series_value = str(book.get('Series') or '').strip()
             if series_value and series_value not in {'N/A', 'Unknown', ''}:
-                series_counter[series_value.strip()] += 1
+                series_counter[series_value] += 1
 
-            language_value = (book.get('Language') or '').strip()
+            language_value = str(book.get('Language') or '').strip()
             if language_value:
                 language_counter[language_value] += 1
 

@@ -15,6 +15,7 @@ Location:
 import os
 import hashlib
 import requests
+import tempfile
 from pathlib import Path
 from typing import Optional, Dict, Any
 from urllib.parse import urlparse
@@ -126,16 +127,29 @@ class ImageCacheService:
                 self.logger.warning(f"URL does not return an image: {url} (content-type: {content_type})")
                 return False
             
-            # Write to temporary file first, then move to final location
-            temp_path = cache_path.with_suffix(cache_path.suffix + '.tmp')
-            
-            with open(temp_path, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-            
-            # Move to final location
-            temp_path.rename(cache_path)
+            # Write to a unique temporary file first, then move to final location
+            temp_path = None
+            try:
+                with tempfile.NamedTemporaryFile(
+                    mode='wb',
+                    delete=False,
+                    dir=str(cache_path.parent),
+                    prefix=cache_path.stem + '.',
+                    suffix=cache_path.suffix + '.tmp',
+                ) as temp_file:
+                    temp_path = Path(temp_file.name)
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if chunk:
+                            temp_file.write(chunk)
+                    temp_file.flush()
+                    os.fsync(temp_file.fileno())
+                os.replace(temp_path, cache_path)
+            finally:
+                if temp_path and temp_path.exists():
+                    try:
+                        temp_path.unlink()
+                    except OSError:
+                        pass
             
             self.logger.debug(f"Image cached successfully: {cache_path}")
             return True

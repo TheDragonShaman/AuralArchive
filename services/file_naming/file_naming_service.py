@@ -58,26 +58,10 @@ class FileNamingService:
                     self.sanitizer = PathSanitizer()
                     
                     # Default naming templates (can be overridden by config)
-                    # Structured to match expected library layout: Author/Series/Title folders
-                    # Title folders can include series sequence, year, and narrator in braces.
+                    # Only keep the minimal simple variants per user request.
                     self.templates = {
-                        # Series-first with year and narrator
-                        'standard': '{author}/{series}/{title}/Vol {series_number} - {year} - {title} {{{narrator}}}',
-                        'standard_asin': '{author}/{series}/{title}/Vol {series_number} - {year} - {title} {{{narrator}}} [{asin}]',
-
-                        # Series-first without narrator/year
-                        'series_basic': '{author}/{series}/{title}/Vol {series_number} - {title}',
-                        'series_basic_asin': '{author}/{series}/{title}/Vol {series_number} - {title} [{asin}]',
-
-                        # Title with year (non-series friendly)
-                        'title_year': '{author}/{title}/{year} - {title} {{{narrator}}}',
-                        'title_year_asin': '{author}/{title}/{year} - {title} {{{narrator}}} [{asin}]',
-
-                        # Minimal title-only variants
                         'simple': '{author}/{series}/{title}/{title}',
-                        'simple_asin': '{author}/{series}/{title}/{title} [{asin}]',
-                        'flat': '{author}/{title}/{title}',
-                        'flat_asin': '{author}/{title}/{title} [{asin}]'
+                        'simple_asin': '{author}/{series}/{title}/{title} [{asin}]'
                     }
                     
                     # ABS-specific settings
@@ -136,7 +120,7 @@ class FileNamingService:
             self._config_loaded = True  # Mark as attempted even if failed
     
     # Template management methods
-    def get_template(self, template_name: str = 'standard') -> str:
+    def get_template(self, template_name: str = 'simple') -> str:
         """Get a naming template by name."""
         return self.template_parser.get_template(template_name, self.templates)
     
@@ -149,14 +133,14 @@ class FileNamingService:
         return self.template_parser.validate_template(template)
     
     # Path generation methods
-    def generate_file_path(self, book_data: Dict, base_path: str, template_name: str = 'standard', 
+    def generate_file_path(self, book_data: Dict, base_path: str, template_name: str = 'simple', 
                           file_extension: str = 'm4b') -> str:
         """
         Generate a complete file path for an audiobook.
         
         Args:
             book_data: Dictionary containing book metadata (title, author, series, etc.)
-            base_path: Base directory path (e.g., /mnt/audiobooks)
+            base_path: Base directory path (e.g., /audiobooks)
             template_name: Name of the template to use
             file_extension: File extension (default: m4b)
             
@@ -197,7 +181,7 @@ class FileNamingService:
             sanitizer=self.sanitizer
         )
     
-    def generate_filename(self, book_data: Dict, template_name: str = 'standard', 
+    def generate_filename(self, book_data: Dict, template_name: str = 'simple', 
                          file_extension: str = 'm4b') -> str:
         """
         Generate just the filename (no path).

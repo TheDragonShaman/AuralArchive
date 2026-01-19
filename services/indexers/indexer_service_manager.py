@@ -140,12 +140,9 @@ class IndexerServiceManager:
     
     def _load_from_config_py(self):
         """Load indexer config from config.py"""
-        if not self.config_service:
-            self.logger.debug("Loading indexers from config.py")
-            from config.config import Config
-            return getattr(Config, 'INDEXERS', {})
-        else:
-            return self.config_service.get('INDEXERS', {})
+        self.logger.debug("Loading indexers from config.py")
+        from config.config import Config
+        return getattr(Config, 'INDEXERS', {})
     
     def test_all_connections(self) -> Dict[str, Dict[str, Any]]:
         """

@@ -18,6 +18,7 @@ import os
 from dotenv import load_dotenv
 
 from utils.logger import get_module_logger
+from utils.path_resolver import get_path_resolver
 
 # Load environment variables from .env file
 load_dotenv()
@@ -25,12 +26,18 @@ load_dotenv()
 _LOGGER = get_module_logger("Config.Config")
 
 
+def _resolve_config_dir() -> str:
+    """Get config directory using path resolver."""
+    return get_path_resolver().get_config_dir()
+
+
 class Config:
     # Basic Flask configuration
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
     
     # Database configuration
-    DATABASE_URL = os.environ.get('DATABASE_URL') or 'sqlite:///database/auralarchive_database.db'
+    _CONFIG_DIR = _resolve_config_dir()
+    DATABASE_URL = os.environ.get('DATABASE_URL') or f"sqlite:///{os.path.join(_CONFIG_DIR, 'auralarchive_database.db')}"
     
     # Logging configuration
     LOG_LEVEL = os.environ.get('LOG_LEVEL') or 'INFO'

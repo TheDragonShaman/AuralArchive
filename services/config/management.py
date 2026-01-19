@@ -13,6 +13,7 @@ Location:
 import configparser
 import json
 import os
+import tempfile
 import threading
 from typing import Dict, Any, Optional, Set
 
@@ -20,6 +21,12 @@ from .defaults import ConfigDefaults
 from .validation import ConfigValidation
 from .export_import import ConfigExportImport
 from utils.logger import get_module_logger
+from utils.path_resolver import get_path_resolver
+
+
+def _get_default_config_dir():
+    """Get config directory using path resolver."""
+    return get_path_resolver().get_config_dir()
 
 
 class ConfigService:
@@ -38,7 +45,7 @@ class ConfigService:
 
     def __init__(
         self,
-        config_file: str = "config/config.txt",
+        config_file: str = "config.txt",
         *,
         logger=None,
         defaults: Optional[ConfigDefaults] = None,
@@ -48,7 +55,13 @@ class ConfigService:
         if not self._initialized:
             with self._lock:
                 if not self._initialized:
-                    self.config_file = os.path.join(os.path.dirname(__file__), "..", "..", config_file)
+                    # Use path resolver for config directory
+                    base_dir = _get_default_config_dir()
+
+                    if os.path.isabs(config_file):
+                        self.config_file = config_file
+                    else:
+                        self.config_file = os.path.join(base_dir, os.path.basename(config_file))
                     self.logger = logger or get_module_logger("Service.Config.Service")
 
                     # Initialize modular components
@@ -739,8 +752,31 @@ class ConfigService:
     # ------------------------------------------------------------------
     def _write_config(self, config: configparser.ConfigParser) -> None:
         """Persist the current configuration parser to disk."""
-        with open(self.config_file, "w", encoding="utf-8") as configfile:
-            config.write(configfile)
+        os.makedirs(os.path.dirname(self.config_file), exist_ok=True)
+        temp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                delete=False,
+                dir=os.path.dirname(self.config_file),
+                prefix=os.path.basename(self.config_file) + ".",
+                suffix=".tmp",
+            ) as configfile:
+                temp_path = configfile.name
+                config.write(configfile)
+                configfile.flush()
+                os.fsync(configfile.fileno())
+            os.replace(temp_path, self.config_file)
+        except FileNotFoundError:
+            with open(self.config_file, "w", encoding="utf-8") as configfile:
+                config.write(configfile)
+        finally:
+            if temp_path and os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except OSError:
+                    pass
 
     @staticmethod
     def _coerce_value(value: Any) -> str:
@@ -797,6 +833,7 @@ class ConfigService:
         data['session_id'] = items.get('session_id', '')
         data['type'] = items.get('type', 'jackett')
         data['protocol'] = items.get('protocol', 'torznab')
+        data['search_type'] = items.get('search_type', 'all').lower() or 'all'
         data['priority'] = config.getint(section, 'priority', fallback=999)
         categories = items.get('categories', '')
         if categories:
@@ -834,6 +871,7 @@ class ConfigService:
         normalized['session_id'] = self._coerce_value(config_data.get('session_id', ''))
         normalized['type'] = self._coerce_value(config_data.get('type', 'jackett')).lower()
         normalized['protocol'] = self._coerce_value(config_data.get('protocol', 'torznab')).lower()
+        normalized['search_type'] = self._coerce_value(str(config_data.get('search_type', 'all')).lower()) or 'all'
         normalized['priority'] = self._coerce_value(config_data.get('priority', 999))
 
         categories = config_data.get('categories') or []

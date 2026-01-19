@@ -25,9 +25,18 @@ from .migrations import DatabaseMigrations
 from .series import SeriesOperations
 from .stats import DatabaseStats
 from utils.logger import get_module_logger
+from utils.path_resolver import get_path_resolver
 
 DEFAULT_DB_FILENAME = "auralarchive_database.db"
-DEFAULT_DB_PATH = os.path.join("database", DEFAULT_DB_FILENAME)
+
+
+def _resolve_default_db_path() -> str:
+    """Get database path using path resolver."""
+    config_dir = get_path_resolver().get_config_dir()
+    return os.path.join(config_dir, DEFAULT_DB_FILENAME)
+
+
+DEFAULT_DB_PATH = _resolve_default_db_path()
 
 class DatabaseService:
     """Enhanced singleton service for database operations with modular components"""
@@ -101,9 +110,10 @@ class DatabaseService:
         """Initialize database and perform necessary migrations."""
         try:
             self.migrations.initialize_database()
+            self.migrations.migrate_database()
             self.logger.success(
-                "Database ready (schema frozen)",
-                extra={"database_file": self.db_file, "migrations": "skipped"},
+                "Database ready",
+                extra={"database_file": self.db_file, "migrations": "applied"},
             )
         except Exception as exc:
             self.logger.exception(

@@ -1,0 +1,87 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.pytest_cache/
+.venv/
+venv/
+env/
+ENV/
+
+# Git
+.git
+.gitignore
+.github/
+
+# IDEs
+.idea
+.vscode
+.DS_Store
+
+# Logs
+*.log
+logs/
+auralarchive_web.log*
+
+# Database files - exclude all DBs
+*.db
+*.sqlite3
+*.db-journal
+database/*.db
+database/auralarchive_database.db
+
+# Config files - exclude user configs
+config/config.txt
+config/users.json
+.env
+.env.*
+!.env.example
+
+# Auth files - exclude all auth data
+auth/audible_auth.json
+auth/*.json
+
+# Backups
+backups/
+*.backup
+
+# Cache
+static/cache/
+cache/
+*.cache
+
+# Downloads and imports - exclude user data
+downloads/
+audible_dl/*
+!audible_dl/.gitkeep
+conversion/*
+!conversion/.gitkeep
+import/*
+!import/.gitkeep
+
+# Media files
+media/
+*.mp3
+*.m4a
+*.m4b
+*.aax
+*.aaxc
+
+# Test files
+test_*.py
+*_test.py
+
+# Temporary files
+*.tmp
+*.temp
+*.pid
+*.seed
+node_modules/
+
+# Documentation (optional - remove if you want docs in image)
+*.md
+!README.md

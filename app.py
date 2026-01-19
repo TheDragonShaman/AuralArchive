@@ -400,6 +400,29 @@ def handle_ping():
     socketio.emit('pong', {'message': 'Server is alive'})
 
 if __name__ == '__main__':
+    import sys
+    
+    # CLI argument handling
+    if len(sys.argv) > 1 and sys.argv[1] == '--show-paths':
+        # Show detected paths for troubleshooting
+        from utils.path_resolver import get_path_resolver
+        pr = get_path_resolver()
+        
+        print("=" * 60)
+        print("AuralArchive Path Configuration")
+        print("=" * 60)
+        print(f"Environment: {'Docker' if pr.is_docker() else 'Bare Metal'}")
+        print("-" * 60)
+        print(f"Config:      {pr.get_config_dir()}")
+        print(f"Downloads:   {pr.get_downloads_dir()}")
+        print(f"Import:      {pr.get_import_dir()}")
+        print(f"Conversion:  {pr.get_conversion_dir()}")
+        print(f"Cache:       {pr.get_cache_dir()}")
+        print(f"Logs:        {pr.get_logs_dir()}")
+        print(f"Auth:        {pr.get_auth_dir()}")
+        print("=" * 60)
+        sys.exit(0)
+    
     logger.info("AuralArchive starting", extra={"mode": "development"})
     
     # Initialize wishlist service in background after startup
@@ -487,4 +510,4 @@ if __name__ == '__main__':
     services_thread.start()
     
     # Run with SocketIO support
-    socketio.run(app, debug=True, host='0.0.0.0', port=5000)
+    socketio.run(app, debug=False, host='0.0.0.0', port=5000)

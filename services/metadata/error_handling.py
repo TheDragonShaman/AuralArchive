@@ -240,12 +240,12 @@ class MetadataErrorHandler:
         if success:
             self.logger.info(
                 "Metadata update successful",
-                extra={"book_id": book_id, "message": message},
+                extra={"book_id": book_id, "result_message": message},
             )
         else:
             self.logger.warning(
                 "Metadata update failed",
-                extra={"book_id": book_id, "message": message},
+                extra={"book_id": book_id, "result_message": message},
             )
 
 # Global instance for easy access

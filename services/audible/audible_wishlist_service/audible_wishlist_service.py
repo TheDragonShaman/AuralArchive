@@ -12,10 +12,12 @@ Location:
 
 import threading
 import time
+from urllib.parse import urlparse
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
 from utils.logger import get_module_logger
+from config.config import Config
 from ..audible_service_manager import get_audible_manager
 
 class AudibleWishlistService:
@@ -257,7 +259,13 @@ class AudibleWishlistService:
                 }
             
             # Connect to database
-            db_path = "database/auralarchive_database.db"
+            db_path = self._resolve_db_path()
+            if not db_path:
+                self.logger.error("Database not configured")
+                return {
+                    'success': False,
+                    'error': 'Database not configured'
+                }
             if not os.path.exists(db_path):
                 self.logger.error("Database not found", extra={"db_path": db_path})
                 return {
@@ -488,6 +496,16 @@ class AudibleWishlistService:
         }
 
         return '' if normalized.lower() in placeholder_values else normalized
+
+    @staticmethod
+    def _resolve_db_path() -> str:
+        database_url = Config.DATABASE_URL
+        if not database_url:
+            return ""
+        if database_url.startswith("sqlite"):
+            parsed = urlparse(database_url)
+            return parsed.path or ""
+        return ""
     
     def get_status(self) -> Dict[str, Any]:
         """Get current service status."""
