@@ -1,3 +1,5 @@
+I would like to say I am a beginner with no experience and I have been teaching myself during this build. This project has taken many, many months. Things will break, things will have bugs. Things will get fixed. This is my first application and it is currently an Alpha build. Please have some patience. Thank you for your interest and please enjoy AuralArchive. 
+
 # AuralArchive Features
 
 ## Dashboard
@@ -38,11 +40,45 @@ Track complete series with ownership status and one-click import capabilities.
 
 Series modals display all books in order with detailed tracking. See at a glance how many books you own versus how many are missing. Each entry shows book number, full title, ASIN, author, ownership status (Owned, Not Owned, or Wanted), rating, and import options. Import entire series with a single click, automatically matching author context for proper organization.
 
-## Indexer Integration
+## AudioBookShelf Integration
+
+Seamlessly connect AuralArchive with your AudioBookShelf server for unified audiobook management.
+
+Configure your AudioBookShelf server connection through the settings interface with your server URL and API key. Once connected, AuralArchive can:
+
+- **Library Sync** - Import your existing AudioBookShelf library into AuralArchive for tracking and management
+- **Auto-Match** - Automatically match imported books with metadata from Audible and other sources
+- **Organized Imports** - Send completed downloads directly to your AudioBookShelf library with proper file naming and structure
+- **Configurable Naming** - Choose from multiple naming templates (simple, detailed, series-aware) to organize your library
+- **Sync Scheduling** - Configure automatic sync intervals to keep libraries in sync
+
+The integration ensures your AudioBookShelf library stays organized while AuralArchive handles acquisition, conversion, and metadata management.
+
+**Initial Setup Tip:** After your first library sync from AudioBookShelf, perform a bulk metadata update in AuralArchive to enrich your library with comprehensive information from Audible and other sources. This ensures you have the most complete metadata, including series information, narrators, ratings, and descriptions.
+
+## Import & Conversion
+
+Advanced import capabilities with automatic format conversion for maximum compatibility.
+
+### File Import
+
+![Import](screenshots/import.jpeg)
+
+Import existing audiobook files into your library with intelligent processing:
+
+- **Directory Monitoring** - Place audiobook files in your configured import directory for automatic processing
+- **Format Support** - Handles M4B, MP3, and other common audiobook formats
+- **Metadata Matching** - Automatically matches imported files with Audible metadata by ASIN or title
+- **Smart Organization** - Files are organized into your library with proper naming and structure
+- **Cleanup Options** - Configure whether to keep or remove source files after successful import
+
+## Indexer and Download Client Integration
 
 Connect to multiple indexers and direct download sources for comprehensive audiobook acquisition.
 
 AuralArchive supports various popular indexers, allowing you to search across multiple sources simultaneously. Configure your preferred indexers through the settings interface with secure credential storage. The system intelligently queries all enabled sources and aggregates results for seamless browsing.
+
+Current indexer application support is limited to Jackett for now. Direct Indexers are the preferred method. They are not dependent on supporting programs and have superior API communication for more reliable searches. Current download client support is limited to qBittorrent only. Support will be expanded over time for additional programs. 
 
 ### Automatic Downloads
 
