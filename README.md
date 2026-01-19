@@ -82,6 +82,54 @@ When Audible authentication is configured, AuralArchive automatically syncs with
 
 ---
 
+## Docker Deployment
+
+Pull the image from GitHub Container Registry:
+
+```bash
+docker pull ghcr.io/thedragonshaman/auralarchive:latest
+```
+
+### Sample Docker Compose
+
+Create a `docker-compose.yml` file:
+
+```yaml
+version: '3.8'
+
+services:
+  auralarchive:
+    image: ghcr.io/thedragonshaman/auralarchive:latest
+    container_name: auralarchive
+    ports:
+      - "8765:8765"
+    volumes:
+      - path-to-your-config:/config          # Configuration and database
+      - path-to-your-downloads:/downloads    # Downloaded audiobooks
+      - path-to-your-import:/import          # Import directory for processing
+    environment:
+      - DOCKER_CONTAINER=true
+      - TZ=America/New_York       # Set your timezone
+    restart: unless-stopped
+```
+
+Then start the container:
+
+```bash
+docker-compose up -d
+```
+
+Access the application at `http://localhost:8765`
+
+**Volume Paths:**
+- `/config` - Stores configuration files, Audible auth, and the SQLite database
+- `/downloads` - Default location for downloaded audiobooks
+- `/import` - Directory for importing existing audiobook files
+
+You can customize download/import paths in the application settings after first launch.
+
+---
+
 ## Disclaimer
 
 **This software is intended solely for downloading your own legally owned titles and copyright-free or public domain audio content.**

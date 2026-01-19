@@ -510,4 +510,4 @@ if __name__ == '__main__':
     services_thread.start()
     
     # Run with SocketIO support
-    socketio.run(app, debug=False, host='0.0.0.0', port=5000)
+    socketio.run(app, debug=False, host='0.0.0.0', port=8765)
