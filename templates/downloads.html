@@ -1,0 +1,120 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="space-y-8" id="downloadsRoot">
+    <section>
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+                <h1 class="text-lg font-semibold uppercase tracking-[0.25em] text-base-content/70">Download Operations</h1>
+                <p class="text-sm text-base-content/60">Monitor queued jobs, live client transfers, and seeding activity.</p>
+            </div>
+            <div class="flex gap-2 text-xs text-base-content/50">
+                <span class="badge badge-outline">Polling every <span id="stat-polling">{{ service_status.get('polling_interval', 2) }}</span>s</span>
+                <span class="badge badge-outline" id="badgeMonitorState">Monitor {{ 'active' if service_status.get('monitor_running') else 'stopped' }}</span>
+            </div>
+        </div>
+
+        <div class="mt-6 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            <div class="card bg-base-200 border border-base-content/10 shadow-sm">
+                <div class="card-body p-4 space-y-2">
+                    <span class="text-xs uppercase tracking-[0.3em] text-base-content/50">Active Queue</span>
+                    <span class="text-xl font-semibold" id="stat-active">{{ service_status.get('queue_statistics', {}).get('total_active', 0) }}</span>
+                    <span class="text-[11px] text-base-content/60">Items currently in-flight</span>
+                </div>
+            </div>
+            <div class="card bg-base-200 border border-base-content/10 shadow-sm">
+                <div class="card-body p-4 space-y-2">
+                    <span class="text-xs uppercase tracking-[0.3em] text-base-content/50">Downloading</span>
+                    <span class="text-xl font-semibold" id="stat-downloading">{{ service_status.get('queue_statistics', {}).get('DOWNLOADING', 0) }}</span>
+                    <span class="text-[11px] text-base-content/60">Client transfers in progress</span>
+                </div>
+            </div>
+            <div class="card bg-base-200 border border-base-content/10 shadow-sm">
+                <div class="card-body p-4 space-y-2">
+                    <span class="text-xs uppercase tracking-[0.3em] text-base-content/50">Converting</span>
+                    <span class="text-xl font-semibold" id="stat-converting">{{ service_status.get('queue_statistics', {}).get('CONVERTING', 0) }}</span>
+                    <span class="text-[11px] text-base-content/60">Audible post-processing</span>
+                </div>
+            </div>
+            <div class="card bg-base-200 border border-base-content/10 shadow-sm">
+                <div class="card-body p-4 space-y-2">
+                    <span class="text-xs uppercase tracking-[0.3em] text-base-content/50">Seeding</span>
+                    <span class="text-xl font-semibold" id="stat-seeding">{{ service_status.get('queue_statistics', {}).get('SEEDING', 0) }}</span>
+                    <span class="text-[11px] text-base-content/60">Torrents currently seeding</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="grid grid-cols-1 xl:grid-cols-3 gap-7 items-start">
+        <div class="xl:col-span-2 space-y-5">
+            <header class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                    <h2 class="text-sm font-semibold uppercase tracking-[0.25em] text-base-content/60">Download Activity</h2>
+                    <p class="text-xs text-base-content/50">Monitor active transfers and seeding jobs supervised by the coordinator.</p>
+                </div>
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+                    <div id="queueTabs" class="tabs tabs-boxed hidden">
+                        <button id="tabDownloads" type="button" class="tab tab-active" data-tab="downloads">
+                            Downloads
+                        </button>
+                        <button id="tabSeeding" type="button" class="tab" data-tab="seeding">
+                            Seeding
+                        </button>
+                    </div>
+                    <div class="flex items-center gap-2 justify-end">
+                        <button id="clearQueue" class="btn btn-outline btn-error btn-xs" type="button">
+                            <i class="fas fa-trash-can"></i>
+                            Clear Queue
+                        </button>
+                        <button id="refreshPipeline" class="btn btn-ghost btn-xs" type="button">
+                            <i class="fas fa-rotate"></i>
+                            Refresh
+                        </button>
+                    </div>
+                </div>
+            </header>
+            <div id="downloadsPanel" class="space-y-3">
+                <div id="pipelineContainer" class="space-y-3"></div>
+                <div id="pipelineEmpty" class="hidden">
+                    <div class="alert alert-info">
+                        <span>No active downloads yet. Start a search or manual download to populate the queue.</span>
+                    </div>
+                </div>
+            </div>
+            <div id="seedingPanel" class="space-y-3 hidden">
+                <div id="seedingContainer" class="space-y-3"></div>
+                <div id="seedingEmpty" class="hidden">
+                    <div class="alert alert-info">
+                        <span>No torrents are currently seeding. Completed items will appear here while finishing their ratios/time.</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <aside class="flex flex-col gap-5 xl:pt-[3.25rem]">
+            <section class="card bg-base-200 border border-base-content/10">
+                <div class="card-body p-4 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-sm font-semibold uppercase tracking-[0.25em] text-base-content/60">Recently Imported</h2>
+                            <p class="text-xs text-base-content/50">Latest completions from the pipeline.</p>
+                        </div>
+                        <button id="refreshHistory" class="btn btn-ghost btn-xs" type="button">
+                            <i class="fas fa-clock-rotate-left"></i>
+                        </button>
+                    </div>
+                    <ul id="historyContainer" class="space-y-1 text-sm"></ul>
+                    <div id="historyEmpty" class="hidden text-xs text-base-content/60">
+                        No completed downloads yet.
+                    </div>
+                </div>
+            </section>
+        </aside>
+    </section>
+</div>
+
+<script id="initialQueueData" type="application/json">{{ pipeline_items | tojson }}</script>
+<script id="initialStatusData" type="application/json">{{ service_status | tojson }}</script>
+<script id="initialHistoryData" type="application/json">{{ completed_items | tojson }}</script>
+<script src="{{ url_for('static', filename='js/downloads.js') }}" defer></script>
+{% endblock %}

@@ -1,0 +1,135 @@
+{% extends 'base.html' %}
+
+{% block title %}Series - AuralArchive{% endblock %}
+
+{% block content %}
+<div class="w-full">
+    
+    <!-- Top Control Bar -->
+    <div class="bg-base-200 border-y border-base-content/10 px-4 sm:px-6 lg:px-10 py-5 -mt-px">
+        <div class="flex flex-wrap items-center gap-4">
+            
+            <!-- Search Series -->
+            <div class="flex-1 min-w-[200px] max-w-md">
+                <label class="text-xs font-semibold uppercase tracking-wider text-base-content/60 block mb-1">
+                    Search Series
+                </label>
+                <input type="text" id="searchInput" placeholder="Search series by title..." 
+                       class="input input-sm input-bordered w-full bg-base-100">
+            </div>
+
+            <!-- Sort By -->
+            <div class="min-w-[140px]">
+                <label class="text-xs font-semibold uppercase tracking-wider text-base-content/60 block mb-1">
+                    Sort By
+                </label>
+                <select id="sortFilter" class="select select-sm select-bordered w-full bg-base-100">
+                    <option value="title">Title</option>
+                    <option value="total_books">Book Count</option>
+                    <option value="completion">Completion %</option>
+                </select>
+            </div>
+
+            <!-- View Controls -->
+            <div class="min-w-[80px]">
+                <label class="text-xs font-semibold uppercase tracking-wider text-base-content/60 block mb-1">
+                    View
+                </label>
+                <div class="join" role="group" aria-label="View options">
+                    <button class="join-item btn btn-soft" id="tableViewBtn" onclick="setView('table')" aria-label="Table view">
+                        <i class="fas fa-list"></i>
+                    </button>
+                    <button class="join-item btn btn-soft btn-primary" id="compactViewBtn" onclick="setView('compact')" aria-label="Compact list view">
+                        <i class="fas fa-th-list"></i>
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Loading State -->
+    <div id="loadingState" class="flex justify-center items-center py-24">
+        <span class="loading loading-spinner loading-lg"></span>
+    </div>
+
+    <!-- Error State -->
+    <div id="errorState" class="hidden text-center py-24">
+        <i class="fas fa-exclamation-triangle text-6xl text-error mb-4"></i>
+        <h3 class="text-2xl font-bold mb-2">Error Loading Series</h3>
+        <p class="text-base-content/60 mb-6" id="errorMessage"></p>
+        <button class="btn btn-soft btn-primary" onclick="loadSeries()">
+            <i class="fas fa-refresh"></i> Try Again
+        </button>
+    </div>
+
+    <!-- Empty State -->
+    <div id="emptyState" class="hidden text-center py-24">
+        <i class="fas fa-layer-group text-6xl text-base-content/20 mb-4"></i>
+        <h3 class="text-2xl font-bold mb-2">No Series Found</h3>
+        <p class="text-base-content/60 mb-6">Add books to your library that are part of a series</p>
+        <a href="/library" class="btn btn-soft btn-primary">
+            <i class="fas fa-books"></i> Go to Library
+        </a>
+    </div>
+
+    <!-- Content Container -->
+    <div id="seriesContent" class="hidden">
+        
+        <!-- Table View -->
+        <div id="tableView" class="p-6 hidden">
+            <div class="overflow-x-auto">
+                <table class="table table-zebra">
+                    <thead>
+                        <tr>
+                            <th>Series Title</th>
+                            <th class="text-center">Total Books</th>
+                            <th class="text-center">Owned</th>
+                            <th class="text-center">Missing</th>
+                            <th class="text-center">Progress</th>
+                            <th class="text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody">
+                        <!-- Populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Compact View -->
+        <div id="compactView" class="p-6">
+            <div class="space-y-2" id="compactList">
+                <!-- Populated by JavaScript -->
+            </div>
+        </div>
+
+    </div>
+
+</div>
+
+<!-- Series Detail Modal -->
+<dialog id="seriesModal" class="modal modal-bottom sm:modal-middle">
+    <div class="modal-box max-w-6xl">
+        <div id="seriesModalContent">
+            <!-- Modal content will be loaded dynamically -->
+            <div class="flex justify-center py-8">
+                <span class="loading loading-spinner loading-lg"></span>
+            </div>
+        </div>
+        <div class="modal-action">
+            <form method="dialog">
+                <button class="btn btn-soft btn-md">Close</button>
+            </form>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+    </form>
+</dialog>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/series.js') }}"></script>
+{% endblock %}

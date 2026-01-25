@@ -1,0 +1,275 @@
+{% extends 'base.html' %}
+
+{% block title %}Library - AuralArchive{% endblock %}
+
+{% block content %}
+<div class="w-full space-y-4">
+    <!-- Top Control Bar -->
+    <div class="library-panel">
+        <div class="library-panel__header">
+            <div class="library-panel__actions">
+                <button type="button" class="btn btn-ghost btn-sm" id="clearFiltersBtn">
+                    <i class="fas fa-rotate-left"></i>
+                    <span class="hidden sm:inline">Clear filters</span>
+                    <span class="sm:hidden">Reset</span>
+                </button>
+                <button type="button" class="btn btn-soft btn-primary" id="selectModeBtn">
+                    <i class="fas fa-check-square"></i>
+                    <span class="hidden sm:inline">Select Books</span>
+                    <span class="sm:hidden">Select</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="library-toolbar" role="group" aria-label="Library filters">
+            <!-- Search Library -->
+            <div class="form-control library-field library-field--wide">
+                <label for="searchInput" class="library-label">Search Library</label>
+                <input type="text" id="searchInput" placeholder="Search by title, author, or series" 
+                       class="input input-sm input-bordered w-full bg-base-100">
+            </div>
+
+            <!-- Status Filter -->
+            <div class="form-control library-field">
+                <label for="statusFilter" class="library-label">Status</label>
+                <select id="statusFilter" class="select select-sm select-bordered w-full bg-base-100">
+                    <option value="">All Status</option>
+                    <option value="owned">Owned</option>
+                    <option value="audible_library">Audible Library</option>
+                    <option value="wanted">Wanted</option>
+                    <option value="downloading">Downloading</option>
+                </select>
+            </div>
+
+            <!-- Genre Filter -->
+            <div class="form-control library-field">
+                <label for="genreFilter" class="library-label">Genre</label>
+                <select id="genreFilter" class="select select-sm select-bordered w-full bg-base-100">
+                    <option value="">All Genres</option>
+                    <option value="fiction">Fiction</option>
+                    <option value="non-fiction">Non-Fiction</option>
+                    <option value="self-help">Self-Help</option>
+                    <option value="science">Science</option>
+                    <option value="history">History</option>
+                </select>
+            </div>
+
+            <!-- Sort By -->
+            <div class="form-control library-field">
+                <label for="sortFilter" class="library-label">Sort By</label>
+                <select id="sortFilter" class="select select-sm select-bordered w-full bg-base-100">
+                    <option value="title">Title</option>
+                    <option value="author">Author</option>
+                    <option value="rating">Rating</option>
+                    <option value="date">Date Added</option>
+                </select>
+            </div>
+
+            <!-- Size Slider -->
+            <div class="library-size" aria-label="Adjust card size">
+                <label for="sizeSlider" class="library-label">Card Density</label>
+                <div class="library-size__control">
+                    <i class="fas fa-image text-xs text-base-content/60"></i>
+                    <input type="range" id="sizeSlider" min="0" max="100" value="50" 
+                           class="range range-primary range-xs flex-1" step="1">
+                    <i class="fas fa-image text-sm text-base-content/60"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Selection Toolbar (Hidden by default) -->
+    <div class="alert shadow-lg bg-primary/10 border border-primary/40 selection-toolbar hidden" id="selectionToolbar">
+        <div class="flex-1">
+            <i class="fas fa-check-square text-primary"></i>
+            <span id="selectedCount" class="font-semibold">0 books selected</span>
+        </div>
+        <div class="flex flex-wrap gap-2 justify-end">
+            <button class="btn btn-soft" id="selectAllBtn">
+                <i class="fas fa-check-double"></i> Select All
+            </button>
+            <button class="btn btn-soft" id="clearSelectionBtn">
+                <i class="fas fa-times"></i> Clear Selection
+            </button>
+            <button class="btn btn-soft btn-primary" id="updateMetadataBtn">
+                <i class="fas fa-sync"></i> Update Metadata
+            </button>
+            <button class="btn btn-soft btn-accent" id="changeStatusBtn">
+                <i class="fas fa-exchange-alt"></i> Change Status
+            </button>
+            <button class="btn btn-soft btn-error" id="deleteSelectedBtn">
+                <i class="fas fa-trash"></i> Delete Selected
+            </button>
+        </div>
+    </div>
+
+    <!-- Books Grid -->
+    <div class="library-grid-panel">
+        <div class="grid gap-4 size-md library-grid" id="booksGrid"></div>
+
+        <div id="emptyState" class="hidden col-span-full text-center py-24">
+            <i class="fas fa-books text-6xl text-base-content/20 mb-4"></i>
+            <h3 class="text-2xl font-bold mb-2">Your library is empty</h3>
+            <p class="text-base-content/60 mb-6">Start adding audiobooks to build your collection</p>
+            <a href="/discover" class="btn btn-soft btn-primary">
+                <i class="fas fa-compass"></i> Discover Books
+            </a>
+        </div>
+
+        <div id="lazyLoader" class="hidden flex justify-center py-4">
+            <span class="loading loading-spinner loading-sm"></span>
+        </div>
+        <div id="lazySentinel" class="h-1"></div>
+    </div>
+
+</div>
+
+<!-- Book Details Modal -->
+<dialog id="bookModal" class="modal modal-bottom sm:modal-middle">
+    <div class="modal-box max-w-5xl">
+        <div id="modalContent">
+            <!-- Modal content will be loaded dynamically -->
+            <div class="flex justify-center py-8">
+                <span class="loading loading-spinner loading-lg"></span>
+            </div>
+        </div>
+        <div class="modal-action">
+            <form method="dialog">
+                <button class="btn btn-soft btn-md">Close</button>
+            </form>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+    </form>
+</dialog>
+
+<script>
+    window.libraryBooks = {{ books|tojson|safe }};
+</script>
+
+<!-- Bulk Progress Modal -->
+<dialog id="progressModal" class="modal">
+    <div class="modal-box">
+        <h3 class="font-bold text-lg flex items-center gap-2">
+            <span class="loading loading-spinner loading-sm"></span>
+            <span id="progressTitle">Processing...</span>
+        </h3>
+        
+        <div class="py-4 space-y-4">
+            <div id="progressDetails" class="text-sm opacity-70">
+                Preparing operation...
+            </div>
+            
+            <progress id="progressBar" class="progress progress-primary w-full" value="0" max="100"></progress>
+            
+            <div class="flex justify-between text-sm">
+                <span id="progressCount">0 / 0</span>
+                <span id="progressPercent">0%</span>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4">
+                <div class="stat bg-base-200 rounded-lg">
+                    <div class="stat-title">Success</div>
+                    <div class="stat-value text-success text-2xl" id="progressSuccess">0</div>
+                </div>
+                <div class="stat bg-base-200 rounded-lg">
+                    <div class="stat-title">Failed</div>
+                    <div class="stat-value text-error text-2xl" id="progressFailed">0</div>
+                </div>
+            </div>
+            
+            <div id="errorsList" class="collapse collapse-arrow bg-base-200 hidden">
+                <input type="checkbox" /> 
+                <div class="collapse-title font-medium text-error">
+                    View Errors
+                </div>
+                <div class="collapse-content"> 
+                    <div id="errorsContent" class="space-y-2 max-h-40 overflow-y-auto"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="modal-action">
+            <button class="btn btn-soft btn-primary hidden" id="progressCloseBtn" onclick="closeProgressModal()">Close</button>
+        </div>
+    </div>
+</dialog>
+
+<!-- Search/Download Modal -->
+<dialog id="searchModal" class="modal modal-bottom sm:modal-middle">
+    <div class="modal-box max-w-7xl w-full">
+        <h3 class="font-bold text-lg flex items-center gap-2">
+            <i class="fas fa-download"></i>
+            <span id="searchModalTitle">Interactive Download</span>
+        </h3>
+        
+        <!-- Book Info -->
+        <div class="bg-base-200 rounded-lg p-3 my-4" id="searchBookInfo">
+            <div class="text-sm">
+                <strong>Searching for:</strong> <span id="searchBookTitle"></span>
+            </div>
+            <div class="text-xs text-base-content/60">
+                <span id="searchBookAuthor"></span>
+            </div>
+        </div>
+        
+        <!-- Loading State -->
+        <div id="searchLoading" class="text-center py-8">
+            <span class="loading loading-spinner loading-lg text-primary"></span>
+            <p class="mt-2 text-base-content/60">Searching for downloads...</p>
+        </div>
+        
+        <!-- Results -->
+        <div id="searchResults" class="hidden">
+            <div class="mb-4">
+                <span class="text-sm font-semibold"><span id="resultsCount">0</span> results found</span>
+            </div>
+            
+            <div class="overflow-x-auto max-h-96">
+                <table class="table table-zebra table-sm">
+                    <thead>
+                        <tr>
+                            <th>Title</th>
+                            <th>Format</th>
+                            <th>Size</th>
+                            <th>Quality</th>
+                            <th>Confidence</th>
+                            <th>Seeders/Peers</th>
+                            <th>Source</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="searchResultsBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- No Results -->
+        <div id="searchNoResults" class="hidden text-center py-8">
+            <i class="fas fa-search text-4xl text-base-content/20 mb-2"></i>
+            <p class="text-base-content/60">No results found</p>
+        </div>
+        
+        <!-- Error -->
+        <div id="searchError" class="hidden">
+            <div class="alert alert-error">
+                <i class="fas fa-exclamation-circle"></i>
+                <span id="searchErrorMessage"></span>
+            </div>
+        </div>
+        
+        <div class="modal-action">
+            <form method="dialog">
+                <button class="btn btn-soft">Close</button>
+            </form>
+        </div>
+    </div>
+</dialog>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/library.js') }}"></script>
+{% endblock %}

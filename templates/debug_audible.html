@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-4">
+    <h2>Audible Debug Console</h2>
+    <p class="text-muted">This tool is token-gated and intended for internal debugging only.</p>
+    {% if error %}
+    <div class="alert alert-danger" role="alert">{{ error }}</div>
+    {% endif %}
+    <form method="post" class="mb-3">
+        <div class="mb-3">
+            <label for="asin" class="form-label">ASIN</label>
+            <input type="text" class="form-control" id="asin" name="asin" value="{{ asin }}" placeholder="Enter ASIN" required>
+        </div>
+        <div class="mb-3">
+            <label for="call_type" class="form-label">API Call</label>
+            <select class="form-select" id="call_type" name="call_type">
+                <option value="library_item" {% if call_type == 'library_item' %}selected{% endif %}>GET /1.0/library/&lt;asin&gt;</option>
+            </select>
+        </div>
+        <div class="mb-3">
+            <label for="response_groups" class="form-label">Response Groups</label>
+            <textarea class="form-control" id="response_groups" name="response_groups" rows="3">{{ response_groups }}</textarea>
+            <div class="form-text">Comma-separated response groups passed through to Audible.</div>
+        </div>
+        <button type="submit" class="btn btn-primary">Fetch</button>
+    </form>
+    {% if result %}
+    <h5>Response</h5>
+    <pre class="bg-light p-3 border rounded" style="max-height: 500px; overflow:auto;">{{ result | tojson(indent=2) }}</pre>
+    {% endif %}
+</div>
+{% endblock %}

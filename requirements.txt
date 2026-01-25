@@ -1,0 +1,17 @@
+Flask==2.3.3
+Flask-SocketIO==5.3.6
+Flask-Login==0.6.3
+python-dotenv==1.0.0
+mutagen==1.47.0
+markdownify==0.11.6
+watchdog==3.0.0
+requests==2.31.0
+python-socketio==5.8.0
+eventlet==0.33.3
+psutil==5.8.0
+beautifulsoup4==4.12.2
+lxml>=5.0.0
+gunicorn==21.2.0
+audible==0.10.0
+cryptography>=41.0.0
+loguru==0.7.2

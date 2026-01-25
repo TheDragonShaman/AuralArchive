@@ -1,0 +1,547 @@
+{% extends 'base.html' %}
+
+{% block title %}Import - AuralArchive{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="bg-base-200 border border-base-content/10 rounded-xl p-6">
+        <div class="flex flex-col gap-2">
+            <div class="flex items-center gap-3">
+                <span class="badge badge-primary badge-sm">New</span>
+                <h1 class="text-xl font-semibold">Manual Import Pipeline</h1>
+            </div>
+            <p class="text-base-content/70 text-sm max-w-3xl">
+                Point AuralArchive to audiobook files that already exist on your server. We'll inspect ID3 tags, enrich the metadata, move or copy the files into the library structure, and update the database automatically.
+            </p>
+            <ul class="list-disc pl-6 text-sm text-base-content/70 mt-2 space-y-1">
+                <li>No uploads are performed — the server must have direct access to everything you select.</li>
+                <li>Destination folder and naming follow Settings → Media Management; adjust them there once.</li>
+                <li>Preview files first to verify metadata, then import only the ready entries.</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="grid gap-6 lg:grid-cols-2">
+        <div class="card bg-base-200 border border-base-content/10">
+            <div class="card-body gap-5">
+                <div class="flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                        <h2 class="card-title">Browse staging directory</h2>
+                        <p class="text-sm text-base-content/70 mt-1 max-w-xl">
+                            Files placed inside <code class="text-xs">{{ import_directory }}</code> become available here instantly. Drill into folders, add the files you want to preview, then run the import.
+                        </p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button class="btn btn-ghost btn-sm" id="stagingRootBtn" type="button">
+                            <i class="fas fa-home"></i>
+                            Root
+                        </button>
+                        <button class="btn btn-ghost btn-sm" id="stagingRefreshBtn" type="button">
+                            <i class="fas fa-rotate"></i>
+                            Refresh
+                        </button>
+                    </div>
+                </div>
+                <div class="rounded-lg border border-base-content/10 bg-base-100 p-4 space-y-3">
+                    <div class="text-xs font-semibold uppercase tracking-wide text-base-content/60">Current directory</div>
+                    <div id="stagingBreadcrumbs" class="flex flex-wrap gap-2 text-sm"></div>
+                    <div class="text-xs text-base-content/60">
+                        Root: <code id="stagingRootPath">{{ import_directory }}</code>
+                    </div>
+                </div>
+                <div id="stagingStatus" class="text-xs text-info hidden">Loading staging directory…</div>
+                <div class="overflow-x-auto rounded-lg border border-base-content/10 bg-base-100">
+                    <table class="table table-sm table-fixed w-full align-middle" id="stagingTable">
+                        <colgroup>
+                            <col class="col-type" />
+                            <col class="col-name" />
+                            <col class="col-size" />
+                            <col class="col-modified" />
+                            <col class="col-action" />
+                        </colgroup>
+                        <thead>
+                            <tr>
+                                <th class="w-16">Type</th>
+                                <th>Name</th>
+                                <th class="w-32">Size</th>
+                                <th class="w-48">Modified</th>
+                                <th class="w-32 text-right">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="stagingTableBody">
+                            <tr>
+                                <td colspan="5" class="text-center text-sm py-6 text-base-content/60">Loading…</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div id="stagingEmptyState" class="hidden alert alert-info text-sm">
+                    Nothing is in this directory yet. Drop audiobook files under <code>{{ import_directory }}</code> on the server and refresh.
+                </div>
+                <div class="divider my-0"></div>
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-semibold">Selected entries</span>
+                        <button class="btn btn-ghost btn-xs" id="clearPathsBtn" type="button">
+                            <i class="fas fa-eraser"></i>
+                            Clear
+                        </button>
+                    </div>
+                    <div id="selectedFilesContainer" class="min-h-[4rem] rounded-lg border border-base-content/10 bg-base-100 p-3 text-sm text-base-content/70 flex flex-col gap-2"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card bg-base-200 border border-base-content/10">
+            <div class="card-body gap-5">
+                <div class="flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                        <h2 class="card-title">Staged Cards</h2>
+                        <p class="text-sm text-base-content/70">Review metadata, adjust matches, and double-check destinations before importing.</p>
+                    </div>
+                    <div class="text-xs text-base-content/60" id="batchMetaInfo"></div>
+                </div>
+                <div class="flex flex-wrap items-center gap-3">
+                    <button class="btn btn-primary" id="previewBtn">
+                        <i class="fas fa-layer-group"></i>
+                        Stage Files
+                    </button>
+                    <button class="btn btn-accent" id="importBtn" disabled>
+                        <i class="fas fa-file-import"></i>
+                        Import Selected Cards
+                    </button>
+                    <label class="flex items-center gap-2 text-sm text-base-content/70">
+                        <input type="checkbox" class="checkbox checkbox-sm" id="cardSelectAll" disabled />
+                        <span>Select all ready cards</span>
+                    </label>
+                </div>
+                <div id="cardEmptyState" class="rounded-lg border border-dashed border-base-content/20 bg-base-100/80 p-6 text-center text-sm text-base-content/60">
+                    No cards staged yet. Add files from the left, then click <span class="font-semibold">Stage Files</span> to build review cards.
+                </div>
+                <div id="cardGrid" class="flex flex-col gap-3"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="previewSummary" class="hidden grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+        <div class="stat bg-base-200 border border-base-content/10 rounded-xl">
+            <div class="stat-title">Total</div>
+            <div class="stat-value text-lg" id="summaryTotal">0</div>
+            <div class="stat-desc">Files evaluated</div>
+        </div>
+        <div class="stat bg-success/10 border border-success/20 rounded-xl">
+            <div class="stat-title">Ready</div>
+            <div class="stat-value text-lg" id="summaryReady">0</div>
+            <div class="stat-desc">Valid and importable</div>
+        </div>
+        <div class="stat bg-base-200 border border-base-content/10 rounded-xl">
+            <div class="stat-title">Pending</div>
+            <div class="stat-value text-lg" id="summaryPending">0</div>
+            <div class="stat-desc">Awaiting metadata</div>
+        </div>
+        <div class="stat bg-warning/10 border border-warning/20 rounded-xl">
+            <div class="stat-title">Missing</div>
+            <div class="stat-value text-lg" id="summaryMissing">0</div>
+            <div class="stat-desc">Paths not reachable</div>
+        </div>
+        <div class="stat bg-error/10 border border-error/20 rounded-xl">
+            <div class="stat-title">Invalid</div>
+            <div class="stat-value text-lg" id="summaryInvalid">0</div>
+            <div class="stat-desc">Format or validation errors</div>
+        </div>
+        <div class="stat bg-error/10 border border-error/30 rounded-xl">
+            <div class="stat-title">Errors</div>
+            <div class="stat-value text-lg" id="summaryError">0</div>
+            <div class="stat-desc">Failed or blocked</div>
+        </div>
+        <div class="stat bg-info/10 border border-info/20 rounded-xl">
+            <div class="stat-title">Imported</div>
+            <div class="stat-value text-lg" id="summaryImported">0</div>
+            <div class="stat-desc">Already completed</div>
+        </div>
+    </div>
+
+    <div id="importResultCard" class="hidden card bg-base-200 border border-base-content/10">
+        <div class="card-body gap-4">
+            <div class="flex items-center justify-between">
+                <h2 class="card-title">Import Results</h2>
+                <span class="text-xs text-base-content/60">Latest import status</span>
+            </div>
+            <div class="grid gap-4 md:grid-cols-3">
+                <div class="stat bg-base-100 border border-base-content/10 rounded-xl">
+                    <div class="stat-title">Successful</div>
+                    <div class="stat-value text-lg" id="importSuccess">0</div>
+                </div>
+                <div class="stat bg-base-100 border border-base-content/10 rounded-xl">
+                    <div class="stat-title">Failed</div>
+                    <div class="stat-value text-lg" id="importFailed">0</div>
+                </div>
+                <div class="stat bg-base-100 border border-base-content/10 rounded-xl">
+                    <div class="stat-title">Total</div>
+                    <div class="stat-value text-lg" id="importTotal">0</div>
+                </div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="table text-sm">
+                    <thead>
+                        <tr>
+                            <th>Path</th>
+                            <th>Status</th>
+                            <th>Message</th>
+                            <th>Destination</th>
+                        </tr>
+                    </thead>
+                    <tbody id="importResultsBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <dialog id="metadataSearchModal" class="modal">
+        <div class="modal-box max-w-4xl">
+            <form method="dialog" class="absolute right-4 top-4">
+                <button class="btn btn-ghost btn-sm" id="metadataSearchClose" type="submit">
+                    <i class="fas fa-times"></i>
+                </button>
+            </form>
+            <div class="space-y-4">
+                <div>
+                    <h3 class="font-semibold text-lg">Remap Metadata</h3>
+                    <p class="text-sm text-base-content/70" id="metadataSearchCardTitle">
+                        Enter a title, author, or ASIN to locate the correct match for this card.
+                    </p>
+                </div>
+                <form id="metadataSearchForm" class="grid gap-4 md:grid-cols-3">
+                    <label class="form-control w-full">
+                        <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Title Keywords</span>
+                        <input type="text" class="input input-sm input-bordered" id="metadataSearchQuery" placeholder="Audiobook Title" />
+                    </label>
+                    <label class="form-control w-full">
+                        <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Author</span>
+                        <input type="text" class="input input-sm input-bordered" id="metadataSearchAuthor" placeholder="Author" />
+                    </label>
+                    <label class="form-control w-full">
+                        <span class="label-text text-xs uppercase tracking-wide text-base-content/60">ASIN (optional)</span>
+                        <input type="text" class="input input-sm input-bordered" id="metadataSearchAsin" placeholder="B00XXXXXXX" />
+                    </label>
+                    <div class="md:col-span-3 flex flex-wrap gap-3">
+                        <button class="btn btn-primary btn-sm" type="submit" id="metadataSearchSubmit">
+                            <i class="fas fa-search"></i>
+                            Search
+                        </button>
+                        <button class="btn btn-ghost btn-sm" type="button" id="metadataApplyAsinBtn">
+                            <i class="fas fa-bolt"></i>
+                            Force refresh with ASIN
+                        </button>
+                    </div>
+                </form>
+                <div id="metadataSearchStatus" class="text-sm text-base-content/60">Enter a query to search for matches.</div>
+                <div id="metadataSearchResults" class="grid gap-3"></div>
+            </div>
+        </div>
+        <form method="dialog" class="modal-backdrop">
+            <button type="submit">close</button>
+        </form>
+    </dialog>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    #stagingTable {
+        min-width: 720px;
+    }
+
+    .table.table-fixed th,
+    .table.table-fixed td {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        vertical-align: middle;
+    }
+
+    #stagingTable td:nth-child(2) {
+        white-space: normal;
+        overflow: visible;
+    }
+
+    #stagingTable col.col-type { width: 4.5rem; }
+    #stagingTable col.col-size { width: 7rem; }
+    #stagingTable col.col-modified { width: 11rem; }
+    #stagingTable col.col-action { width: 7.75rem; min-width: 7.75rem; }
+
+    #stagingTable td:nth-child(5),
+    #stagingTable th:nth-child(5) {
+        text-align: right;
+    }
+
+    #stagingTable .import-action-buttons {
+        display: flex;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+    }
+
+    #stagingTable .import-action-buttons .btn {
+        min-width: 5.25rem;
+        justify-content: center;
+    }
+
+    .import-card {
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 0.75rem;
+        background-color: rgba(0, 0, 0, 0.08);
+        padding: 0.85rem 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.65rem;
+    }
+
+    :where(.dark) .import-card {
+        background-color: rgba(255, 255, 255, 0.04);
+        border-color: rgba(255, 255, 255, 0.08);
+    }
+
+    .import-card-main {
+        display: flex;
+        align-items: stretch;
+        gap: 0.85rem;
+    }
+
+    .import-card-checkbox {
+        padding-top: 0.35rem;
+    }
+
+    .import-card-body {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+    }
+
+    .import-card-header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+    }
+
+    .import-card-status {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: rgba(255, 255, 255, 0.65);
+    }
+
+    :where(.light) .import-card-status {
+        color: rgba(0, 0, 0, 0.65);
+    }
+
+    .import-card-format {
+        font-size: 0.65rem;
+        letter-spacing: 0.1em;
+    }
+
+    .import-card-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+    }
+
+    .import-card-title {
+        font-size: 1rem;
+        font-weight: 600;
+        line-height: 1.3;
+    }
+
+    .import-card-subtitle {
+        font-size: 0.85rem;
+        color: rgba(255, 255, 255, 0.75);
+    }
+
+    :where(.light) .import-card-subtitle {
+        color: rgba(0, 0, 0, 0.65);
+    }
+
+    .import-card-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+    }
+
+    .import-card-chip {
+        font-size: 0.7rem;
+        border-radius: 9999px;
+        padding: 0.25rem 0.65rem;
+        background-color: rgba(255, 255, 255, 0.08);
+        color: inherit;
+        display: inline-flex;
+        gap: 0.25rem;
+        align-items: center;
+    }
+
+    :where(.light) .import-card-chip {
+        background-color: rgba(0, 0, 0, 0.05);
+    }
+
+    .import-card-chip-label {
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-size: 0.6rem;
+        opacity: 0.8;
+    }
+
+    .import-card-chip--muted {
+        opacity: 0.7;
+    }
+
+    .import-card-footer {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        font-size: 0.75rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        padding-top: 0.5rem;
+    }
+
+    :where(.light) .import-card-footer {
+        border-color: rgba(0, 0, 0, 0.06);
+    }
+
+    .import-card-footer-label {
+        display: block;
+    .import-card-people {
+        display: flex;
+        flex-direction: column;
+        gap: 0.2rem;
+        font-size: 0.8rem;
+    }
+
+    .import-card-people-row {
+        display: flex;
+        gap: 0.4rem;
+        align-items: baseline;
+        flex-wrap: wrap;
+    }
+
+    .import-card-people-label {
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-size: 0.6rem;
+        opacity: 0.65;
+    }
+
+    .import-card-people-value {
+        font-weight: 500;
+    }
+
+        font-size: 0.6rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: rgba(255, 255, 255, 0.6);
+        margin-bottom: 0.15rem;
+    }
+
+    :where(.light) .import-card-footer-label {
+        color: rgba(0, 0, 0, 0.55);
+    }
+
+    .import-card .messages-list {
+        background-color: rgba(255, 255, 255, 0.05);
+        border-radius: 0.5rem;
+        padding: 0.5rem 0.75rem;
+        font-size: 0.75rem;
+    }
+
+    .import-card .messages-list div + div {
+        margin-top: 0.25rem;
+    }
+
+    .import-card-cover {
+        width: 5.25rem;
+        height: 5.25rem;
+        border-radius: 0.6rem;
+        overflow: hidden;
+        background-color: rgba(0, 0, 0, 0.15);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+    }
+
+    .import-card-cover--sm {
+        width: 3.75rem;
+        height: 3.75rem;
+    }
+
+    .import-card-cover img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+
+    .import-card-cover--empty {
+        background-color: rgba(255, 255, 255, 0.08);
+    }
+
+    :where(.dark) .import-card-cover--empty {
+        background-color: rgba(255, 255, 255, 0.02);
+    }
+
+    .import-card-summary {
+        border-radius: 0.65rem;
+        background-color: rgba(255, 255, 255, 0.04);
+        padding: 0.75rem 0.9rem;
+        font-size: 0.85rem;
+        line-height: 1.3;
+    }
+
+    .import-card-summary-label {
+        display: inline-block;
+        font-size: 0.65rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: rgba(255, 255, 255, 0.6);
+        margin-bottom: 0.15rem;
+    }
+
+    :where(.light) .import-card-summary-label {
+        color: rgba(0, 0, 0, 0.45);
+    }
+
+    .metadata-result-card {
+        background-color: rgba(15, 23, 42, 0.04);
+        border-color: rgba(15, 23, 42, 0.12);
+    }
+
+    :where(.dark) .metadata-result-card {
+        background-color: rgba(255, 255, 255, 0.04);
+        border-color: rgba(255, 255, 255, 0.08);
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+window.importPageData = {
+    batchPreviewEndpoint: "{{ url_for('import_api.create_batch_preview') }}",
+    batchGetEndpointTemplate: "{{ url_for('import_api.get_batch_preview', batch_id='__batch__') }}",
+    batchDeleteEndpointTemplate: "{{ url_for('import_api.delete_batch_preview', batch_id='__batch__') }}",
+    batchImportEndpointTemplate: "{{ url_for('import_api.import_batch_cards', batch_id='__batch__') }}",
+    batchCardRefreshEndpointTemplate: "{{ url_for('import_api.refresh_batch_card', batch_id='__batch__', card_id='__card__') }}",
+    metadataSearchEndpoint: "{{ url_for('import_api.search_import_metadata') }}",
+    defaultLibraryPath: "{{ default_library_path }}",
+    defaultTemplate: "{{ default_template }}",
+    importDirectory: "{{ import_directory }}",
+    stagingListEndpoint: "{{ url_for('import_api.list_import_staging_directory') }}",
+    stagingScanEndpoint: "{{ url_for('import_api.scan_import_staging_directory') }}"
+};
+</script>
+<script src="{{ url_for('static', filename='js/import.js') }}" defer></script>
+{% endblock %}

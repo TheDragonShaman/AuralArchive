@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Setup - AuralArchive</title>
+    <script>
+        (function() {
+            try {
+                var savedTheme = localStorage.getItem('theme');
+                if (savedTheme) {
+                    document.documentElement.setAttribute('data-theme', savedTheme);
+                }
+            } catch (err) {
+                console.warn('Theme preload failed:', err);
+            }
+        })();
+    </script>
+    
+    <!-- DaisyUI from CDN (includes light and dark themes) -->
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- DaisyUI Docs Typeface (Outfit) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Custom Theme Definitions -->
+    <style>
+        [data-theme="dark"] {
+            color-scheme: dark;
+            --color-base-100: oklch(28% 0.045 255);
+            --color-base-200: oklch(23% 0.04 255);
+            --color-base-300: oklch(18% 0.035 255);
+            --color-base-content: oklch(92% 0.012 255);
+            --color-primary: oklch(58% 0.18 276);
+            --color-primary-content: oklch(97% 0.024 276);
+            --color-secondary: oklch(63% 0.12 181);
+            --color-secondary-content: oklch(96% 0.015 181);
+            --color-accent: oklch(64% 0.14 163);
+            --color-accent-content: oklch(96% 0.012 163);
+            --color-neutral: oklch(32% 0.03 255);
+            --color-neutral-content: oklch(90% 0.01 255);
+            --color-info: oklch(72% 0.12 231);
+            --color-info-content: oklch(97% 0.015 231);
+            --color-success: oklch(70% 0.14 152);
+            --color-success-content: oklch(97% 0.02 152);
+            --color-warning: oklch(78% 0.21 82);
+            --color-warning-content: oklch(98% 0.025 82);
+            --color-error: oklch(66% 0.24 24);
+            --color-error-content: oklch(97% 0.02 24);
+            --b1: var(--color-base-100);
+            --b2: var(--color-base-200);
+            --b3: var(--color-base-300);
+            --bc: var(--color-base-content);
+            --p: var(--color-primary);
+            --pc: var(--color-primary-content);
+            --s: var(--color-secondary);
+            --sc: var(--color-secondary-content);
+            --a: var(--color-accent);
+            --ac: var(--color-accent-content);
+            --n: var(--color-neutral);
+            --nc: var(--color-neutral-content);
+            --in: var(--color-info);
+            --inc: var(--color-info-content);
+            --su: var(--color-success);
+            --suc: var(--color-success-content);
+            --wa: var(--color-warning);
+            --wac: var(--color-warning-content);
+            --er: var(--color-error);
+            --erc: var(--color-error-content);
+            --rounded-box: 0.25rem;
+            --rounded-btn: 0.25rem;
+            --rounded-badge: 0.25rem;
+        }
+
+        [data-theme="light"] {
+            color-scheme: light;
+            --color-base-100: oklch(100% 0 0);
+            --color-base-200: oklch(98% 0 0);
+            --color-base-300: oklch(95% 0 0);
+            --color-base-content: oklch(21% 0.006 285.885);
+            --color-primary: oklch(45% 0.24 277.023);
+            --color-primary-content: oklch(93% 0.034 272.788);
+            --color-secondary: oklch(65% 0.241 354.308);
+            --color-secondary-content: oklch(94% 0.028 342.258);
+            --color-accent: oklch(77% 0.152 181.912);
+            --color-accent-content: oklch(38% 0.063 188.416);
+            --color-neutral: oklch(14% 0.005 285.823);
+            --color-neutral-content: oklch(92% 0.004 286.32);
+            --color-info: oklch(74% 0.16 232.661);
+            --color-info-content: oklch(29% 0.066 243.157);
+            --color-success: oklch(76% 0.177 163.223);
+            --color-success-content: oklch(37% 0.077 168.94);
+            --color-warning: oklch(82% 0.189 84.429);
+            --color-warning-content: oklch(41% 0.112 45.904);
+            --color-error: oklch(71% 0.194 13.428);
+            --color-error-content: oklch(27% 0.105 12.094);
+            --b1: var(--color-base-100);
+            --b2: var(--color-base-200);
+            --b3: var(--color-base-300);
+            --bc: var(--color-base-content);
+            --p: var(--color-primary);
+            --pc: var(--color-primary-content);
+            --s: var(--color-secondary);
+            --sc: var(--color-secondary-content);
+            --a: var(--color-accent);
+            --ac: var(--color-accent-content);
+            --n: var(--color-neutral);
+            --nc: var(--color-neutral-content);
+            --in: var(--color-info);
+            --inc: var(--color-info-content);
+            --su: var(--color-success);
+            --suc: var(--color-success-content);
+            --wa: var(--color-warning);
+            --wac: var(--color-warning-content);
+            --er: var(--color-error);
+            --erc: var(--color-error-content);
+            --rounded-box: 0.25rem;
+            --rounded-btn: 0.25rem;
+            --rounded-badge: 0.25rem;
+        }
+
+        [data-theme="nord"] {
+            color-scheme: light;
+            --color-base-100: oklch(95.127% 0.007 260.731);
+            --color-base-200: oklch(93.299% 0.01 261.788);
+            --color-base-300: oklch(89.925% 0.016 262.749);
+            --color-base-content: oklch(32.437% 0.022 264.182);
+            --p: 59.435% 0.077 254.027;
+            --pc: 11.887% 0.015 254.027;
+            --s: 69.651% 0.059 248.687;
+            --sc: 13.93% 0.011 248.687;
+            --a: 77.464% 0.062 217.469;
+            --ac: 15.492% 0.012 217.469;
+            --n: 45.229% 0.035 264.131;
+            --nc: 89.925% 0.016 262.749;
+            --b1: var(--color-base-100);
+            --b2: var(--color-base-200);
+            --b3: var(--color-base-300);
+            --bc: var(--color-base-content);
+            --in: 69.207% 0.062 332.664;
+            --inc: 13.841% 0.012 332.664;
+            --su: 76.827% 0.074 131.063;
+            --suc: 15.365% 0.014 131.063;
+            --wa: 85.486% 0.089 84.093;
+            --wac: 17.097% 0.017 84.093;
+            --er: 60.61% 0.12 15.341;
+            --erc: 12.122% 0.024 15.341;
+            --rounded-box: 0.5rem;
+            --rounded-btn: 1rem;
+            --rounded-badge: 0.5rem;
+        }
+
+        [data-theme="blueberry"] {
+            color-scheme: dark;
+            --color-base-100: oklch(29% 0.066 243.157);
+            --color-base-200: oklch(39% 0.09 240.876);
+            --color-base-300: oklch(44% 0.11 240.79);
+            --color-base-content: oklch(95% 0.026 236.824);
+            --color-primary: oklch(68% 0.169 237.323);
+            --color-primary-content: oklch(100% 0 0);
+            --color-secondary: oklch(62% 0.214 259.815);
+            --color-secondary-content: oklch(98% 0.026 102.212);
+            --color-accent: oklch(68% 0.169 237.323);
+            --color-accent-content: oklch(98% 0.003 247.858);
+            --color-neutral: oklch(44% 0.11 240.79);
+            --color-neutral-content: oklch(97% 0.013 236.62);
+            --color-info: oklch(68% 0.169 237.323);
+            --color-info-content: oklch(97% 0.013 236.62);
+            --color-success: oklch(69% 0.17 162.48);
+            --color-success-content: oklch(97% 0.021 166.113);
+            --color-warning: oklch(76% 0.188 70.08);
+            --color-warning-content: oklch(98% 0.022 95.277);
+            --color-error: oklch(63% 0.237 25.331);
+            --color-error-content: oklch(97% 0.013 17.38);
+            --b1: var(--color-base-100);
+            --b2: var(--color-base-200);
+            --b3: var(--color-base-300);
+            --bc: var(--color-base-content);
+            --p: var(--color-primary);
+            --pc: var(--color-primary-content);
+            --s: var(--color-secondary);
+            --sc: var(--color-secondary-content);
+            --a: var(--color-accent);
+            --ac: var(--color-accent-content);
+            --n: var(--color-neutral);
+            --nc: var(--color-neutral-content);
+            --in: var(--color-info);
+            --inc: var(--color-info-content);
+            --su: var(--color-success);
+            --suc: var(--color-success-content);
+            --wa: var(--color-warning);
+            --wac: var(--color-warning-content);
+            --er: var(--color-error);
+            --erc: var(--color-error-content);
+            --rounded-box: 0.25rem;
+            --rounded-btn: 0.25rem;
+            --rounded-badge: 0.25rem;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Outfit', system-ui, -apple-system, sans-serif;
+            min-height: 100vh;
+        }
+
+        .setup-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem 1rem;
+            background: linear-gradient(135deg, 
+                oklch(from var(--color-base-200) calc(l - 0.02) c h), 
+                var(--color-base-200));
+        }
+
+        .setup-card {
+            width: 100%;
+            max-width: 1200px;
+        }
+
+        .card {
+            background: var(--color-base-100);
+            border-radius: 0.25rem;
+            padding: 2rem;
+        }
+
+        .form-layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            align-items: start;
+        }
+
+        .form-fields {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-bottom {
+            grid-column: 1 / -1;
+        }
+
+        .logo-text {
+            font-size: 2.5rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.5rem;
+        }
+
+        .input-group {
+            display: flex;
+            width: 100%;
+        }
+
+        .input-group span {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--color-base-200);
+            border: 1px solid oklch(from var(--color-base-content) l c h / 0.2);
+            border-right: none;
+            border-radius: 0.25rem 0 0 0.25rem;
+            padding: 0 1rem;
+        }
+
+        .input-group input {
+            flex: 1;
+            border: 1px solid oklch(from var(--color-base-content) l c h / 0.2);
+            border-radius: 0 0.25rem 0.25rem 0;
+            padding: 0.75rem 1rem;
+            background: var(--color-base-100);
+            color: var(--color-base-content);
+            font-size: 0.95rem;
+            outline: none;
+            transition: all 0.2s;
+        }
+
+        .input-group input:focus {
+            border-color: var(--color-primary);
+            box-shadow: 0 0 0 3px oklch(from var(--color-primary) l c h / 0.1);
+        }
+
+        .input-group input::placeholder {
+            color: oklch(from var(--color-base-content) l c h / 0.4);
+        }
+
+        .btn-primary {
+            background: var(--color-primary);
+            color: var(--color-primary-content);
+            border: none;
+            border-radius: 0.25rem;
+            padding: 0.875rem 1.5rem;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .btn-primary:hover {
+            background: oklch(from var(--color-primary) calc(l - 0.05) c h);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px oklch(from var(--color-primary) l c h / 0.3);
+        }
+
+        .alert {
+            padding: 1rem;
+            border-radius: 0.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 0.875rem;
+        }
+
+        .alert-info {
+            background: oklch(from var(--color-info) l c h / 0.15);
+            color: var(--color-info);
+            border: 1px solid oklch(from var(--color-info) l c h / 0.3);
+        }
+
+        .alert-error {
+            background: oklch(from var(--color-error) l c h / 0.15);
+            color: var(--color-error);
+            border: 1px solid oklch(from var(--color-error) l c h / 0.3);
+        }
+
+        .label-text {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--color-base-content);
+            margin-bottom: 0.5rem;
+            display: block;
+        }
+
+        .label-text-alt {
+            font-size: 0.75rem;
+            color: oklch(from var(--color-base-content) l c h / 0.6);
+            margin-top: 0.25rem;
+            display: block;
+        }
+
+        .divider {
+            height: 1px;
+            background: oklch(from var(--color-base-content) l c h / 0.1);
+            margin: 1.5rem 0;
+        }
+
+        .disclaimer-box {
+            background: oklch(from var(--color-warning) l c h / 0.1);
+            border: 2px solid oklch(from var(--color-warning) l c h / 0.3);
+            border-radius: 0.25rem;
+            padding: 1rem;
+            height: 100%;
+            overflow-y: auto;
+        }
+
+        .disclaimer-box h3 {
+            color: var(--color-warning);
+            font-size: 1rem;
+            font-weight: 700;
+            margin-bottom: 0.75rem;
+            text-align: center;
+        }
+
+        .disclaimer-box p {
+            font-size: 0.8rem;
+            line-height: 1.6;
+            color: var(--color-base-content);
+            text-align: justify;
+        }
+
+        .terms-checkbox {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+            padding: 1rem;
+            background: oklch(from var(--color-base-200) l c h / 0.5);
+            border-radius: 0.25rem;
+            border: 1px solid var(--color-base-300);
+        }
+
+        .terms-checkbox input[type="checkbox"] {
+            margin-top: 0.25rem;
+            width: 1.25rem;
+            height: 1.25rem;
+            cursor: pointer;
+            accent-color: var(--color-primary);
+            flex-shrink: 0;
+        }
+
+        .terms-checkbox label {
+            font-size: 0.875rem;
+            color: var(--color-base-content);
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            background: var(--color-base-300);
+        }
+
+        .btn-primary:disabled:hover {
+            transform: none;
+            box-shadow: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="setup-container">
+        <div class="setup-card">
+            <div class="card shadow-2xl">
+                <div style="padding: 0;">
+                    <!-- Logo/Branding -->
+                    <div style="text-align: center; margin-bottom: 2rem;">
+                        <h1 class="logo-text">AuralArchive</h1>
+                        <p style="color: oklch(from var(--color-base-content) l c h / 0.6); font-size: 1rem;">Welcome! Let's get started</p>
+                    </div>
+
+                    <!-- Setup Message -->
+                    <div class="alert alert-info" style="margin-bottom: 1.5rem;">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" style="width: 1.25rem; height: 1.25rem; flex-shrink: 0;" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <span>Create your admin account to secure AuralArchive</span>
+                    </div>
+
+                    <!-- Error Message -->
+                    {% if error %}
+                    <div class="alert alert-error" style="margin-bottom: 1.5rem;">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" style="width: 1.25rem; height: 1.25rem; flex-shrink: 0;" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>{{ error }}</span>
+                    </div>
+                    {% endif %}
+
+                    <!-- Setup Form -->
+                    <form method="POST" action="{{ url_for('auth.setup') }}">
+                        <div class="form-layout">
+                            <!-- Left Column: Form Fields -->
+                            <div class="form-fields">
+                                <div style="margin-bottom: 1.5rem;">
+                                    <label class="label-text">Username</label>
+                                    <div class="input-group">
+                                        <span>
+                                            <svg xmlns="http://www.w3.org/2000/svg" style="width: 1.25rem; height: 1.25rem; opacity: 0.6;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                            </svg>
+                                        </span>
+                                        <input 
+                                            type="text" 
+                                            name="username" 
+                                            placeholder="Enter username" 
+                                            required
+                                            minlength="3"
+                                            autocomplete="username"
+                                            autofocus
+                                        />
+                                    </div>
+                                    <span class="label-text-alt">At least 3 characters</span>
+                                </div>
+
+                                <div style="margin-bottom: 1.5rem;">
+                                    <label class="label-text">Password</label>
+                                    <div class="input-group">
+                                        <span>
+                                            <svg xmlns="http://www.w3.org/2000/svg" style="width: 1.25rem; height: 1.25rem; opacity: 0.6;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                            </svg>
+                                        </span>
+                                        <input 
+                                            type="password" 
+                                            name="password" 
+                                            placeholder="Enter password" 
+                                            required
+                                            minlength="6"
+                                            autocomplete="new-password"
+                                            id="password"
+                                        />
+                                    </div>
+                                    <span class="label-text-alt">At least 6 characters</span>
+                                </div>
+
+                                <div style="margin-bottom: 1.5rem;">
+                                    <label class="label-text">Confirm Password</label>
+                                    <div class="input-group">
+                                        <span>
+                                            <svg xmlns="http://www.w3.org/2000/svg" style="width: 1.25rem; height: 1.25rem; opacity: 0.6;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                            </svg>
+                                        </span>
+                                        <input 
+                                            type="password" 
+                                            name="confirm_password" 
+                                            placeholder="Confirm password" 
+                                            required
+                                            minlength="6"
+                                            autocomplete="new-password"
+                                            id="confirm_password"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Right Column: Disclaimer -->
+                            <div class="disclaimer-box">
+                                <h3>⚠️ DISCLAIMER AND TERMS OF USE ⚠️</h3>
+                                <p>
+                                    This software is intended solely for downloading your own legally owned titles and copyright-free or public domain audio content. 
+                                    This software is provided "AS IS," without warranty of any kind, either express or implied, including but not limited to the implied warranties of merchantability, fitness for a particular purpose, or non-infringement.
+                                    <br><br>
+                                    The developer(s) make no representations or warranties regarding the accuracy, functionality, reliability, or suitability of this software for any purpose.
+                                    <br><br>
+                                    You acknowledge and agree that you assume full responsibility for how you choose to use this software. The developer(s) are not responsible for any misuse of this software and do not endorse or condone copyright infringement or any illegal activity.
+                                    <br><br>
+                                    You are solely responsible for ensuring compliance with all applicable local, state, national, and international laws, including copyright laws and intellectual property rights, and for obtaining proper authorization before downloading any content.
+                                    <br><br>
+                                    The developer(s) shall not be held liable for any legal consequences, damages, losses, or claims arising from your use or misuse of this software.
+                                    <br><br>
+                                    By using this software, you acknowledge that you have read, understood, and agree to these terms, and you accept all risks associated with its use.
+                                    <br><br>
+                                    <strong>USE AT YOUR OWN RISK.</strong>
+                                </p>
+                            </div>
+
+                            <!-- Bottom: Terms Acceptance and Submit -->
+                            <div class="form-bottom">
+                                <div class="terms-checkbox">
+                                    <input 
+                                        type="checkbox" 
+                                        id="accept_terms" 
+                                        name="accept_terms"
+                                        required
+                                    />
+                                    <label for="accept_terms">
+                                        I have read, understood, and agree to the disclaimer and terms of use. I acknowledge that I am solely responsible for ensuring my use of this software complies with all applicable laws.
+                                    </label>
+                                </div>
+
+                                <button type="submit" class="btn-primary" style="width: 100%;" id="submitBtn" disabled>
+                            <svg xmlns="http://www.w3.org/2000/svg" style="width: 1.25rem; height: 1.25rem;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                            Create Account & Continue
+                        </button>
+                            </div>
+                        </div>
+                    </form>
+
+                    <!-- Footer Info -->
+                    <div class="divider"></div>
+                    <div style="text-align: center; font-size: 0.75rem; color: oklch(from var(--color-base-content) l c h / 0.5); display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+                        <svg xmlns="http://www.w3.org/2000/svg" style="width: 1rem; height: 1rem;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                        </svg>
+                        <span>Your password is securely hashed and stored locally</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Password Match Validation and Terms Acceptance -->
+    <script>
+        const password = document.getElementById('password');
+        const confirmPassword = document.getElementById('confirm_password');
+        const acceptTerms = document.getElementById('accept_terms');
+        const submitBtn = document.getElementById('submitBtn');
+
+        function validatePassword() {
+            if (password.value !== confirmPassword.value) {
+                confirmPassword.setCustomValidity("Passwords don't match");
+            } else {
+                confirmPassword.setCustomValidity('');
+            }
+        }
+
+        function updateSubmitButton() {
+            submitBtn.disabled = !acceptTerms.checked;
+        }
+
+        password.addEventListener('change', validatePassword);
+        confirmPassword.addEventListener('keyup', validatePassword);
+        acceptTerms.addEventListener('change', updateSubmitButton);
+
+        // Ensure form submission validates terms acceptance
+        document.querySelector('form').addEventListener('submit', function(e) {
+            if (!acceptTerms.checked) {
+                e.preventDefault();
+                alert('You must accept the disclaimer and terms of use to continue.');
+                return false;
+            }
+        });
+    </script>
+</body>
+</html>
