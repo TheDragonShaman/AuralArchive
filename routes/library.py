@@ -21,6 +21,7 @@ from services.service_manager import (
     get_database_service,
     get_metadata_update_service,
 )
+from services.audiobookshelf.sync_task_manager import get_sync_task_manager
 from utils.logger import get_module_logger
 
 library_bp = Blueprint('library', __name__)
@@ -567,29 +568,41 @@ def get_download_status():
 
 @library_bp.route('/sync/from-audiobookshelf', methods=['POST'])
 def sync_from_audiobookshelf():
-    """Sync books FROM AudioBookShelf TO AuralArchive using new service architecture."""
+    """Start background sync FROM AudioBookShelf TO AuralArchive."""
     try:
         db_service = get_database_service()
         abs_service = get_audiobookshelf_service()
+        task_manager = get_sync_task_manager()
         
-        logger.info("Starting AudioBookShelf to AuralArchive sync...")
+        # Check if a sync is already running
+        current_status = task_manager.get_sync_status()
+        if current_status and current_status.get('status') == 'running':
+            return jsonify({
+                'success': False,
+                'message': 'A sync is already in progress'
+            }), 409
         
-        # Use the refactored sync method
-        success, synced_count, message = abs_service.sync_from_audiobookshelf(db_service)
+        logger.info("Starting AudioBookShelf to AuralArchive background sync...")
         
-        if success:
-            logger.info(f"AudioBookShelf sync completed: {message}")
+        # Start background sync
+        from app import socketio  # Import here to avoid circular dependency
+        result = task_manager.start_sync(abs_service, db_service, socketio)
+        
+        if result.get('success'):
+            logger.info("AudioBookShelf sync started in background")
             return jsonify({
                 'success': True,
-                'synced_count': synced_count,
-                'message': message
+                'message': result.get('message', 'Sync started in background')
             })
         else:
-            logger.error(f"AudioBookShelf sync failed: {message}")
-            return jsonify({'success': False, 'error': message}), 500
+            logger.error("Failed to start AudioBookShelf sync task")
+            return jsonify({
+                'success': False,
+                'message': result.get('message', 'Failed to start sync task')
+            }), 500
     
     except Exception as e:
-        logger.error(f"Error syncing from AudioBookShelf: {e}")
+        logger.error(f"Error starting AudioBookShelf sync: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 # ============================================================================

@@ -180,10 +180,24 @@ class AudioBookShelfLibraries:
                 'desc': 1
             }
             
-            response = self.connection.session.get(url, params=params, timeout=60)
+            response = self.connection.session.get(url, params=params, timeout=120)
             
             if response.status_code == 200:
-                data = response.json()
+                try:
+                    data = response.json()
+                except ValueError as json_err:
+                    # Response is not valid JSON - likely an HTML error page
+                    error_preview = response.text[:500] if response.text else "No response body"
+                    self.logger.error(
+                        "Failed to parse JSON response - likely timeout or server error",
+                        extra={
+                            "status_code": response.status_code,
+                            "content_type": response.headers.get('content-type', 'unknown'),
+                            "response_preview": error_preview
+                        }
+                    )
+                    return False, [], f"Server returned invalid JSON (possible timeout) - try reducing page size"
+                
                 items = []
                 
                 for item in data.get('results', []):

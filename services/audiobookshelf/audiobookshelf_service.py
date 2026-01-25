@@ -73,6 +73,10 @@ class AudioBookShelfService:
             'synced_count': count,
             'message': message
         }
+    
+    def sync_from_audiobookshelf_with_progress(self, database_service, progress_callback=None):
+        """Sync books FROM AudioBookShelf TO AuralArchive database with progress callback."""
+        return self.sync.sync_from_audiobookshelf_with_progress(database_service, progress_callback)
 
     # Matching helpers
     def auto_match_imported_item(

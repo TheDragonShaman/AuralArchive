@@ -44,6 +44,7 @@ from services.service_manager import (
     get_metadata_update_service,
     service_manager
 )
+from services.audiobookshelf.sync_task_manager import get_sync_task_manager
 import os
 import json
 import psutil
@@ -1635,25 +1636,80 @@ def get_audiobookshelf_libraries():
 
 @settings_api_bp.route('/audiobookshelf/sync', methods=['POST'])
 def sync_from_audiobookshelf():
-    """Sync books from AudioBookShelf to AuralArchive."""
+    """Start background sync from AudioBookShelf to AuralArchive."""
     try:
         abs_service = get_audiobookshelf_service()
+        db_service = get_database_service()
+        task_manager = get_sync_task_manager()
         
-        result = abs_service.sync_from_audiobookshelf()
+        # Check if a sync is already running
+        current_status = task_manager.get_sync_status()
+        if current_status and current_status.get('status') == 'running':
+            return jsonify({
+                'success': False,
+                'message': 'A sync is already in progress'
+            }), 409
         
-        return jsonify({
-            'success': result.get('success', False),
-            'synced_count': result.get('synced_count', 0),
-            'message': result.get('message', 'Unknown error')
-        })
+        # Start background sync
+        from app import socketio  # Import here to avoid circular dependency
+        result = task_manager.start_sync(abs_service, db_service, socketio)
+        
+        if result.get('success'):
+            return jsonify({
+                'success': True,
+                'message': result.get('message', 'Sync started in background')
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': result.get('message', 'Failed to start sync task')
+            }), 500
         
     except Exception as e:
-        logger.error(f"Error syncing from AudioBookShelf: {e}")
+        logger.error(f"Error starting AudioBookShelf sync: {e}")
         return jsonify({
             'success': False,
-            'synced_count': 0,
-            'message': f'Sync failed: {str(e)}'
-        })
+            'message': f'Failed to start sync: {str(e)}'
+        }), 500
+
+@settings_api_bp.route('/audiobookshelf/sync/status', methods=['GET'])
+def get_sync_status():
+    """Get current sync status."""
+    try:
+        task_manager = get_sync_task_manager()
+        status = task_manager.get_sync_status()
+        return jsonify(status)
+    except Exception as e:
+        logger.error(f"Error getting sync status: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Failed to get status: {str(e)}'
+        }), 500
+
+@settings_api_bp.route('/audiobookshelf/sync/cancel', methods=['POST'])
+def cancel_sync():
+    """Cancel the current sync operation."""
+    try:
+        task_manager = get_sync_task_manager()
+        success = task_manager.cancel_sync()
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': 'Sync cancellation requested'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'No active sync to cancel'
+            }), 404
+            
+    except Exception as e:
+        logger.error(f"Error cancelling sync: {e}")
+        return jsonify({
+            'success': False,
+            'message': f'Failed to cancel sync: {str(e)}'
+        }), 500
 
 # ============================================================================
 # MEDIA MANAGEMENT ENDPOINTS

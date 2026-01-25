@@ -154,8 +154,11 @@ services:
       - path-to-your-downloads:/downloads    # Downloaded audiobooks
       - path-to-your-import:/import          # Import directory for processing
     environment:
+      - PUID=1000                # User ID to run as (match your host user)
+      - PGID=1000                # Group ID to run as (match your host user)
       - DOCKER_CONTAINER=true
       - TZ=America/New_York       # Set your timezone
+      - ABS_SYNC_PAGE_SIZE=500    # AudioBookShelf sync pagination (default: 5 for testing, use 500+ for large libraries)
     restart: unless-stopped
 ```
 
@@ -171,6 +174,22 @@ Access the application at `http://localhost:8765`
 - `/config` - Stores configuration files, Audible auth, and the SQLite database
 - `/downloads` - Default location for downloaded audiobooks
 - `/import` - Directory for importing existing audiobook files
+
+**Environment Variables:**
+- `PUID` - User ID to run as inside the container (default: 0/root). Set to your host user ID (usually 1000) to avoid permission issues
+- `PGID` - Group ID to run as inside the container (default: 0/root). Set to your host group ID (usually 1000)
+- `DOCKER_CONTAINER` - Set to `true` to enable Docker-specific paths
+- `TZ` - Your local timezone (e.g., `America/New_York`)
+- `ABS_SYNC_PAGE_SIZE` - Number of items to fetch per page when syncing from AudioBookShelf (default: 5 for testing, recommended 500+ for production libraries with 10,000+ items to avoid timeouts)
+- `AURALARCHIVE_PORT` or `PORT` - Port to run the application on (default: 8765)
+- `SOCKETIO_ASYNC_MODE` - SocketIO async mode (default: `eventlet`, options: `threading`, `eventlet`, `gevent`)
+
+**Finding Your PUID and PGID (Linux/NAS):**
+```bash
+id your_username
+# Example output: uid=1000(brandon) gid=1000(brandon)
+# Use PUID=1000 and PGID=1000
+```
 
 You can customize download/import paths in the application settings after first launch.
 

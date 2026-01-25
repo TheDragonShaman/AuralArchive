@@ -1369,3 +1369,80 @@ window.searchForBook = searchForBook;
 window.deleteBook = deleteBook;
 window.downloadResult = downloadResult;
 window.autoDownloadBook = autoDownloadBook;
+
+// ==============================================
+// Real-time sync notifications
+// ==============================================
+const socket = typeof window.io === 'function' ? window.io() : null;
+if (socket) {
+    socket.on('abs_sync_progress', (data) => {
+        // Only show notifications when sync completes
+        if (data.status === 'completed') {
+            const count = data.synced_count || 0;
+            const message = count > 0 
+                ? `Sync completed! ${count} book${count !== 1 ? 's' : ''} added/updated.`
+                : 'Sync completed.';
+            
+            showSyncCompleteBanner(message, count);
+        }
+    });
+}
+
+function showSyncCompleteBanner(message, count) {
+    // Remove existing banner if any
+    const existingBanner = document.getElementById('syncCompleteBanner');
+    if (existingBanner) {
+        existingBanner.remove();
+    }
+    
+    // Only show banner if books were actually added/updated
+    if (count === 0) return;
+    
+    // Create banner
+    const banner = document.createElement('div');
+    banner.id = 'syncCompleteBanner';
+    banner.className = 'alert alert-success shadow-lg mb-4 flex justify-between items-center';
+    banner.innerHTML = `
+        <div class="flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>${message}</span>
+        </div>
+        <div class="flex gap-2">
+            <button onclick="refreshLibrary()" class="btn btn-sm btn-primary">
+                Refresh Now
+            </button>
+            <button onclick="dismissSyncBanner()" class="btn btn-sm btn-ghost">
+                Dismiss
+            </button>
+        </div>
+    `;
+    
+    // Insert at top of page content
+    const container = document.querySelector('.container') || document.querySelector('main') || document.body;
+    container.insertBefore(banner, container.firstChild);
+    
+    // Auto-dismiss after 30 seconds
+    setTimeout(() => {
+        if (document.getElementById('syncCompleteBanner')) {
+            dismissSyncBanner();
+        }
+    }, 30000);
+}
+
+function refreshLibrary() {
+    window.location.reload();
+}
+
+function dismissSyncBanner() {
+    const banner = document.getElementById('syncCompleteBanner');
+    if (banner) {
+        banner.style.transition = 'opacity 0.3s';
+        banner.style.opacity = '0';
+        setTimeout(() => banner.remove(), 300);
+    }
+}
+
+window.refreshLibrary = refreshLibrary;
+window.dismissSyncBanner = dismissSyncBanner;

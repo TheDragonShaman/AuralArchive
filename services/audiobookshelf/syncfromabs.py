@@ -2,7 +2,7 @@
 Module Name: syncfromabs.py
 Author: TheDragonShaman
 Created: August 26, 2025
-Last Modified: December 24, 2025
+Last Modified: January 24, 2026
 Description:
     Sync books from AudioBookShelf into the AuralArchive database with caching and duplicate handling.
 Location:
@@ -10,7 +10,7 @@ Location:
 
 """
 import re
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Callable
 from utils.logger import get_module_logger
 
 ASIN_PATTERN = re.compile(r"(B[0-9A-Z]{9})", re.IGNORECASE)
@@ -25,7 +25,15 @@ class AudioBookShelfSync:
         self.logger = logger or get_module_logger("Service.AudioBookShelf.Sync")
     
     def sync_from_audiobookshelf(self, database_service) -> Tuple[bool, int, str]:
-        """Sync books FROM AudioBookShelf TO AuralArchive database."""
+        """Sync books FROM AudioBookShelf TO AuralArchive database (synchronous)."""
+        return self.sync_from_audiobookshelf_with_progress(database_service, progress_callback=None)
+    
+    def sync_from_audiobookshelf_with_progress(
+        self, 
+        database_service, 
+        progress_callback: Optional[Callable[[Dict], None]] = None
+    ) -> Tuple[bool, int, str]:
+        """Sync books FROM AudioBookShelf TO AuralArchive database with progress tracking."""
         try:
             if not self.config_service.is_audiobookshelf_enabled():
                 return False, 0, "AudioBookShelf integration is disabled"
@@ -41,16 +49,26 @@ class AudioBookShelfSync:
                 extra={"library_id": library_id},
             )
             
+            if progress_callback:
+                progress_callback({'message': 'Fetching library items...', 'current_page': 0})
+            
             # Get ALL items using pagination
-            all_abs_items = self._fetch_all_library_items(library_id)
+            all_abs_items = self._fetch_all_library_items(library_id, progress_callback)
             if not all_abs_items:
                 return False, 0, "No items found in AudioBookShelf library"
+            
+            if progress_callback:
+                progress_callback({
+                    'message': 'Loading existing books...',
+                    'items_processed': 0,
+                    'total_items': len(all_abs_items)
+                })
             
             # Pre-load existing books for comparison
             existing_books = self._load_existing_books(database_service)
             
             # Process items with reduced logging
-            return self._process_sync_items(all_abs_items, existing_books, database_service)
+            return self._process_sync_items(all_abs_items, existing_books, database_service, progress_callback)
         
         except Exception as exc:
             self.logger.error(
@@ -59,24 +77,81 @@ class AudioBookShelfSync:
             )
             return False, 0, f"Sync error: {str(exc)}"
     
-    def _fetch_all_library_items(self, library_id: str) -> List[Dict]:
-        """Fetch all items from library using limit=0 (no limit)."""
+    def _fetch_all_library_items(self, library_id: str, progress_callback: Optional[Callable[[Dict], None]] = None) -> List[Dict]:
+        """Fetch all items from library using pagination to avoid timeouts."""
         try:
-            # Get all items at once using limit=0 (most efficient for full sync)
-            success, all_items, message = self.libraries.get_library_items(library_id, limit=0, page=0)
+            import os
+            all_items = []
+            page = 0
+            # Configurable page size via env var (default 5 for testing, use 500 for production)
+            limit = int(os.environ.get('ABS_SYNC_PAGE_SIZE', '500'))
+            total_items = None
             
-            if success:
-                self.logger.info(
-                    "Retrieved items from AudioBookShelf",
-                    extra={"count": len(all_items)},
+            self.logger.info("Starting paginated library fetch", extra={"library_id": library_id})
+            
+            while True:
+                self.logger.debug(
+                    f"Fetching page {page + 1}",
+                    extra={"page": page, "limit": limit, "fetched_so_far": len(all_items)}
                 )
-                return all_items
-            else:
-                self.logger.error(
-                    "Failed to fetch library items",
-                    extra={"message": message},
-                )
-                return []
+                
+                if progress_callback:
+                    progress_callback({
+                        'message': f'Fetching page {page + 1}...',
+                        'current_page': page + 1,
+                        'items_processed': len(all_items)
+                    })
+                
+                success, items, message = self.libraries.get_library_items(library_id, limit=limit, page=page)
+                
+                if not success:
+                    self.logger.error(
+                        "Failed to fetch library items page",
+                        extra={"page": page, "message": message},
+                    )
+                    # If we already have some items, return what we got
+                    if all_items:
+                        self.logger.warning(
+                            f"Partial fetch completed - returning {len(all_items)} items",
+                            extra={"completed_pages": page}
+                        )
+                        return all_items
+                    return []
+                
+                if not items:
+                    # No more items
+                    break
+                
+                all_items.extend(items)
+                
+                # Check if we've fetched everything
+                if len(items) < limit:
+                    # Last page (fewer items than limit)
+                    break
+                
+                page += 1
+                
+                # Safety check to prevent infinite loops
+                if page > 1000:
+                    self.logger.warning(
+                        f"Hit safety limit of 1000 pages - stopping fetch",
+                        extra={"items_fetched": len(all_items)}
+                    )
+                    break
+            
+            self.logger.info(
+                "Retrieved all items from AudioBookShelf",
+                extra={"count": len(all_items), "pages": page + 1},
+            )
+            
+            if progress_callback:
+                progress_callback({
+                    'message': f'Fetched {len(all_items)} items from AudioBookShelf',
+                    'total_pages': page + 1,
+                    'items_processed': len(all_items)
+                })
+            
+            return all_items
 
         except Exception as exc:
             self.logger.error(
@@ -104,7 +179,7 @@ class AudioBookShelfSync:
             'titles': existing_titles
         }
     
-    def _process_sync_items(self, all_abs_items: List[Dict], existing_books: Dict, database_service) -> Tuple[bool, int, str]:
+    def _process_sync_items(self, all_abs_items: List[Dict], existing_books: Dict, database_service, progress_callback: Optional[Callable[[Dict], None]] = None) -> Tuple[bool, int, str]:
         """Process all sync items with reduced logging."""
         added_count = 0
         updated_count = 0
@@ -120,6 +195,17 @@ class AudioBookShelfSync:
                         "Processing AudioBookShelf item",
                         extra={"index": i + 1, "total": len(all_abs_items)},
                     )
+                    
+                    # Report progress via callback
+                    if progress_callback:
+                        progress_callback({
+                            'message': f'Processing items: {i + 1}/{len(all_abs_items)}',
+                            'items_processed': i + 1,
+                            'total_items': len(all_abs_items),
+                            'items_added': added_count,
+                            'items_updated': updated_count,
+                            'items_skipped': skipped_count
+                        })
                 
                 # Convert AudioBookShelf item to AuralArchive format
                 book_data = self._convert_abs_item_to_auralarchive(abs_item)

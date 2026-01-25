@@ -32,6 +32,7 @@ from services.service_manager import (
     get_file_naming_service,
     get_metadata_update_service,
 )
+from services.audiobookshelf.sync_task_manager import get_sync_task_manager
 from utils.logger import get_module_logger
 
 logger = get_module_logger("Routes.Settings")
@@ -2114,13 +2115,34 @@ def list_audiobookshelf_libraries():
 
 @settings_bp.route('/audiobookshelf/manual-sync', methods=['POST'])
 def trigger_audiobookshelf_sync():
-    """Trigger a manual sync from AudioBookShelf into AuralArchive."""
+    """Start background sync from AudioBookShelf into AuralArchive."""
     try:
         abs_service = get_audiobookshelf_service()
-        result = abs_service.sync_from_audiobookshelf()
-
-        status_code = 200 if result.get('success') else 500
-        return jsonify(result), status_code
+        db_service = get_database_service()
+        task_manager = get_sync_task_manager()
+        
+        # Check if a sync is already running
+        current_status = task_manager.get_sync_status()
+        if current_status and current_status.get('status') == 'running':
+            return jsonify({
+                'success': False,
+                'message': 'A sync is already in progress'
+            }), 409
+        
+        # Start background sync
+        from app import socketio  # Import here to avoid circular dependency
+        result = task_manager.start_sync(abs_service, db_service, socketio)
+        
+        if result.get('success'):
+            return jsonify({
+                'success': True,
+                'message': result.get('message', 'Sync started in background')
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': result.get('message', 'Failed to start sync task')
+            }), 500
 
     except Exception as exc:
         logger.error(f"Error triggering AudioBookShelf sync: {exc}")

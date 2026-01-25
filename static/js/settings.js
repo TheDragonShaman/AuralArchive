@@ -1917,7 +1917,7 @@
 
         const statusTarget = document.getElementById("absConnectionStatus");
         if (statusTarget) {
-            statusTarget.textContent = "Triggering manual sync…";
+            statusTarget.textContent = "Starting sync…";
             statusTarget.className = "text-xs text-info";
         }
 
@@ -1926,19 +1926,19 @@
                 method: "POST"
             });
 
-            const message = payload.message || "Manual sync triggered.";
+            const message = payload.message || "Manual sync started in background.";
             if (statusTarget) {
                 statusTarget.textContent = message;
-                statusTarget.className = "text-xs text-success";
+                statusTarget.className = "text-xs text-info";
             }
-            showNotification(message, "success");
+            showNotification(message, "info");
         } catch (error) {
             console.error(error);
             if (statusTarget) {
                 statusTarget.textContent = error.message;
                 statusTarget.className = "text-xs text-error";
             }
-            showNotification(`Manual sync failed: ${error.message}`, "error");
+            showNotification(`Failed to start sync: ${error.message}`, "error");
         }
     }
 
@@ -3225,5 +3225,51 @@
             .split("_")
             .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
             .join(" ");
+    }
+
+    // Initialize SocketIO for AudioBookShelf sync progress
+    const socket = typeof window.io === 'function' ? window.io() : null;
+    if (socket) {
+        socket.on('abs_sync_progress', (data) => {
+            const statusTarget = document.getElementById("absConnectionStatus");
+            if (!statusTarget) {
+                return;
+            }
+
+            const message = data.message || "Syncing…";
+            const progress = data.progress || {};
+            const itemsProcessed = progress.items_processed || 0;
+            const totalItems = progress.total_items || 0;
+            
+            if (data.status === 'running' || data.status === 'progress') {
+                // Calculate percentage if we have totals
+                let progressText = message;
+                if (totalItems > 0) {
+                    const percent = Math.round((itemsProcessed / totalItems) * 100);
+                    progressText = `${message} (${percent}% - ${itemsProcessed}/${totalItems})`;
+                } else if (itemsProcessed > 0) {
+                    progressText = `${message} (${itemsProcessed} items)`;
+                }
+                
+                statusTarget.textContent = progressText;
+                statusTarget.className = "text-xs text-info";
+            } else if (data.status === 'completed') {
+                const count = data.synced_count || 0;
+                const completedMsg = count > 0 
+                    ? `Sync completed! ${count} book${count !== 1 ? 's' : ''} added/updated.`
+                    : 'Sync completed.';
+                statusTarget.textContent = completedMsg;
+                statusTarget.className = "text-xs text-success";
+                showNotification(completedMsg, "success");
+            } else if (data.status === 'failed') {
+                statusTarget.textContent = data.message || "Sync failed.";
+                statusTarget.className = "text-xs text-error";
+                showNotification(data.message || "Sync failed", "error");
+            } else if (data.status === 'cancelled') {
+                statusTarget.textContent = "Sync cancelled.";
+                statusTarget.className = "text-xs text-warning";
+                showNotification("Sync cancelled", "warning");
+            }
+        });
     }
 })();

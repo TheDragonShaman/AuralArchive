@@ -43,8 +43,8 @@ class Config:
     LOG_LEVEL = os.environ.get('LOG_LEVEL') or 'INFO'
     LOG_FILE = os.environ.get('LOG_FILE') or 'auralarchive_web.log'
     
-    # SocketIO configuration (default to eventlet in containers)
-    SOCKETIO_ASYNC_MODE = os.environ.get('SOCKETIO_ASYNC_MODE', 'eventlet')
+    # SocketIO configuration (default to threading for development, eventlet for production)
+    SOCKETIO_ASYNC_MODE = os.environ.get('SOCKETIO_ASYNC_MODE', 'threading')
     
     # Application settings
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB max file upload
