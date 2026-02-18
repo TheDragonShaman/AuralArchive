@@ -77,6 +77,5 @@ review-index.md
 ROADMAP.md
 
 # Docker and environment files
-docker-compose.yml
-Dockerfile.dev
-.dockerignoreconfig/users.json
+.dockerignore
+config/users.json

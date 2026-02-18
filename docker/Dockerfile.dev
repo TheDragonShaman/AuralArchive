@@ -1,0 +1,44 @@
+# Development image for AuralArchive
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    FLASK_ENV=development
+
+WORKDIR /app/auralarchive
+
+# Install system dependencies, including FFmpeg and gosu
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends \
+        build-essential \
+        libffi-dev \
+        libssl-dev \
+        libxml2 \
+        libxslt1-dev \
+        libpng-dev \
+        ffmpeg \
+        gosu \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt ./
+RUN pip install -r requirements.txt
+
+# Copy application code (excludes user data via .dockerignore)
+COPY . .
+
+# Create runtime directories for user data
+RUN mkdir -p /app/auralarchive/logs /app/auralarchive/database /app/auralarchive/config /app/auralarchive/auth \
+    /app/auralarchive/audible_dl /app/auralarchive/conversion /app/auralarchive/import \
+    /app/auralarchive/static/cache
+
+# Copy and setup entrypoint script
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+EXPOSE 5000
+
+# Use entrypoint script to handle PUID/PGID
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["python", "app.py"]
+

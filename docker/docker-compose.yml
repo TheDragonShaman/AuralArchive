@@ -1,0 +1,27 @@
+services:
+  auralarchive:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dev
+    image: auralarchive:v0.01.1
+    container_name: auralarchive
+    environment:
+      - FLASK_ENV=development
+      - PYTHONUNBUFFERED=1
+      - LOG_FILE=auralarchive_web.log
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/New_York
+      - DOCKER_CONTAINER=true
+      - AURALARCHIVE_CONFIG_DIR=/config
+    ports:
+      - "8765:8765"
+    volumes:
+      - /media/MS_TV2/Audiobooks/Library:/audiobooks
+      - /media/MS_Server/Downloads:/downloads
+      - /media/MS_Server/Import:/import
+      - /media/MS_Server/Home_Server/config/auralarchive:/config
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+
