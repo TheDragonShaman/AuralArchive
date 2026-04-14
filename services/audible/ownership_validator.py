@@ -180,8 +180,6 @@ class OwnershipValidator:
 
         if purchase_date:
             ownership_hints.append("purchase_date")
-        if metadata_source and "audible" in metadata_source:
-            ownership_hints.append(f"metadata_source:{metadata_source}")
         if status_value and "audible" in status_value:
             ownership_hints.append(f"status:{status_value}")
         if ownership_status and "audible" in ownership_status:
@@ -190,16 +188,7 @@ class OwnershipValidator:
         tag_hints = tags.intersection(self.audible_ownership_tag_hints)
         hints = ownership_hints + list(tag_hints)
 
-        # Relaxed rule for testing: allow trusted Audible hints even without purchase_date
         if not purchase_date:
-            if hints:
-                details["hints"] = sorted(hints)
-                details["reason"] = "Accepted via Audible metadata hints without purchase date (relaxed)."
-                self.logger.debug(
-                    "Ownership validation accepted (relaxed)",
-                    extra={"asin": entry.get("asin") or entry.get("ASIN"), "hints": details["hints"], "reason": details["reason"]},
-                )
-                return True, details
             details["hints"] = []
             details["reason"] = "Audible entry missing purchase date confirmation."
             self.logger.debug(

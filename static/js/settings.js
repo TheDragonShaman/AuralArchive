@@ -37,6 +37,34 @@
                 username: "transmission",
                 password: ""
             }
+        },
+        sabnzbd: {
+            label: "SABnzbd",
+            defaults: {
+                enabled: true,
+                auto_download: false,
+                host: "127.0.0.1",
+                port: 8080,
+                api_key: "",
+                url_base: "/api",
+                use_ssl: false,
+                verify_cert: true,
+                category: ""
+            }
+        },
+        nzbget: {
+            label: "NZBGet",
+            defaults: {
+                enabled: true,
+                auto_download: false,
+                host: "127.0.0.1",
+                port: 6789,
+                username: "nzbget",
+                password: "",
+                use_ssl: false,
+                verify_cert: true,
+                category: ""
+            }
         }
     };
 
@@ -93,11 +121,32 @@
         return (type || "").toLowerCase() === "direct";
     }
 
+    function isNzbhydra2Type(type) {
+        return (type || "").toLowerCase() === "nzbhydra2";
+    }
+
+    function isProwlarrType(type) {
+        return (type || "").toLowerCase() === "prowlarr";
+    }
+
     function updateIndexerFieldVisibility(typeValue) {
         const isDirect = isDirectIndexerType(typeValue);
+        const isNzbhydra2 = isNzbhydra2Type(typeValue);
+        const isProwlarr = isProwlarrType(typeValue);
+
+        // feed_url: jackett only
         document.querySelectorAll('[data-indexer-field="standard"]').forEach((element) => {
+            element.classList.toggle("hidden", isDirect || isNzbhydra2 || isProwlarr);
+        });
+        // api_key: standard + nzbhydra2 + prowlarr
+        document.querySelectorAll('[data-indexer-field="api-key"]').forEach((element) => {
             element.classList.toggle("hidden", isDirect);
         });
+        // base_url: direct + nzbhydra2 + prowlarr
+        document.querySelectorAll('[data-indexer-field="base-url"]').forEach((element) => {
+            element.classList.toggle("hidden", !isDirect && !isNzbhydra2 && !isProwlarr);
+        });
+        // session_id + search scope: direct only
         document.querySelectorAll('[data-indexer-field="direct"]').forEach((element) => {
             element.classList.toggle("hidden", !isDirect);
         });
@@ -227,6 +276,16 @@
         safeAddEventListener("indexerAddButton", "click", () => openIndexerEditor());
         safeAddEventListener("indexerDeleteButton", "click", handleIndexerDelete);
         safeAddEventListener("indexerRefreshButton", "click", refreshIndexersList);
+        safeAddEventListener("indexerSyncButton", "click", handleProwlarrSync);
+        safeAddEventListener("prowlarrSyncCancel", "click", closeProwlarrSyncModal);
+        safeAddEventListener("prowlarrSyncConfirm", "click", handleProwlarrSyncConfirm);
+        safeAddEventListener("prowlarrSyncSelectAll", "change", handleProwlarrSyncSelectAll);
+        safeAddEventListener("prowlarrSaveButton", "click", () => handleAggregatorSave("prowlarr"));
+        safeAddEventListener("prowlarrTestButton", "click", () => handleAggregatorTest("prowlarr"));
+        safeAddEventListener("prowlarrSyncButton", "click", (e) => { e.preventDefault(); openAggregatorSyncModal("prowlarr"); });
+        safeAddEventListener("nzbhydra2SaveButton", "click", () => handleAggregatorSave("nzbhydra2"));
+        safeAddEventListener("nzbhydra2TestButton", "click", () => handleAggregatorTest("nzbhydra2"));
+        safeAddEventListener("nzbhydra2SyncButton", "click", (e) => { e.preventDefault(); openAggregatorSyncModal("nzbhydra2"); });
         safeAddEventListener("indexerTestButton", "click", handleIndexerTest);
         safeAddEventListener("indexer_name", "input", handleIndexerNameInput);
         safeAddEventListener("indexer_custom_key", "input", handleIndexerKeyInput);
@@ -293,12 +352,13 @@
         }
 
         try {
-            const [configPayload, indexersPayload, templatesPayload, mediaPayload, downloadPayload] = await Promise.all([
+            const [configPayload, indexersPayload, templatesPayload, mediaPayload, downloadPayload, aggsPayload] = await Promise.all([
                 fetchJson("/settings/config"),
                 fetchJson("/settings/api/indexers"),
                 fetchJson("/settings/audiobookshelf/naming-templates"),
                 fetchJson("/settings/api/media-management"),
-                fetchJson("/settings/api/download-management")
+                fetchJson("/settings/api/download-management"),
+                fetchJson("/settings/api/aggregators"),
             ]);
 
             state.config = configPayload.config || {};
@@ -307,6 +367,7 @@
             state.mediaSettings = mediaPayload.config || {};
             state.downloadSettings = downloadPayload.config || {};
             buildDownloadClientsState();
+            populateAggregatorConnections(aggsPayload.aggregators || {});
             state.lastLoaded = new Date();
             state.addingIndexer = false;
 
@@ -522,6 +583,28 @@
                     normalized.username = section.transmission_username || section.username || defaults.username;
                     normalized.password = stripQuotes(section.transmission_password || section.password || defaults.password);
                     break;
+                case "sabnzbd":
+                    normalized.enabled = toBoolean(section.enabled);
+                    normalized.auto_download = toBoolean(section.auto_download);
+                    normalized.host = section.host || defaults.host;
+                    normalized.port = toNumeric(section.port, defaults.port);
+                    normalized.api_key = section.api_key || defaults.api_key;
+                    normalized.url_base = section.url_base || defaults.url_base;
+                    normalized.use_ssl = toBoolean(section.use_ssl);
+                    normalized.verify_cert = section.verify_cert !== undefined ? toBoolean(section.verify_cert) : true;
+                    normalized.category = section.category || defaults.category;
+                    break;
+                case "nzbget":
+                    normalized.enabled = toBoolean(section.enabled);
+                    normalized.auto_download = toBoolean(section.auto_download);
+                    normalized.host = section.host || defaults.host;
+                    normalized.port = toNumeric(section.port, defaults.port);
+                    normalized.username = section.username || defaults.username;
+                    normalized.password = stripQuotes(section.password || defaults.password);
+                    normalized.use_ssl = toBoolean(section.use_ssl);
+                    normalized.verify_cert = section.verify_cert !== undefined ? toBoolean(section.verify_cert) : true;
+                    normalized.category = section.category || defaults.category;
+                    break;
                 default:
                     break;
             }
@@ -658,6 +741,28 @@
                 setNumericInput("transmission_port", data.port, CLIENT_DEFINITIONS.transmission.defaults.port);
                 setInputValue("transmission_username", data.username);
                 setInputValue("transmission_password", data.password);
+                renderQbPathMappings();
+                break;
+            case "sabnzbd":
+                setInputValue("sabnzbd_host", data.host);
+                setNumericInput("sabnzbd_port", data.port, CLIENT_DEFINITIONS.sabnzbd.defaults.port);
+                setInputValue("sabnzbd_api_key", data.api_key);
+                setInputValue("sabnzbd_url_base", data.url_base || CLIENT_DEFINITIONS.sabnzbd.defaults.url_base);
+                setInputValue("sabnzbd_category", data.category);
+                setCheckboxValue("sabnzbd_use_ssl", data.use_ssl);
+                setCheckboxValue("sabnzbd_verify_cert", data.verify_cert !== false);
+                setInputValue("sabnzbd_remote_path", data.remote_path || "");
+                setInputValue("sabnzbd_local_path", data.local_path || "");
+                renderQbPathMappings();
+                break;
+            case "nzbget":
+                setInputValue("nzbget_host", data.host);
+                setNumericInput("nzbget_port", data.port, CLIENT_DEFINITIONS.nzbget.defaults.port);
+                setInputValue("nzbget_username", data.username);
+                setInputValue("nzbget_password", data.password);
+                setInputValue("nzbget_category", data.category);
+                setCheckboxValue("nzbget_use_ssl", data.use_ssl);
+                setCheckboxValue("nzbget_verify_cert", data.verify_cert !== false);
                 renderQbPathMappings();
                 break;
             default:
@@ -1123,6 +1228,26 @@
                 payload.username = getInputValue("transmission_username");
                 payload.password = getInputValue("transmission_password");
                 break;
+            case "sabnzbd":
+                payload.host = getInputValue("sabnzbd_host") || CLIENT_DEFINITIONS.sabnzbd.defaults.host;
+                payload.port = toNumeric(getInputValue("sabnzbd_port"), CLIENT_DEFINITIONS.sabnzbd.defaults.port);
+                payload.api_key = getInputValue("sabnzbd_api_key");
+                payload.url_base = getInputValue("sabnzbd_url_base") || CLIENT_DEFINITIONS.sabnzbd.defaults.url_base;
+                payload.category = getInputValue("sabnzbd_category");
+                payload.use_ssl = getCheckboxValue("sabnzbd_use_ssl");
+                payload.verify_cert = getCheckboxValue("sabnzbd_verify_cert");
+                payload.remote_path = getInputValue("sabnzbd_remote_path") || "";
+                payload.local_path = getInputValue("sabnzbd_local_path") || "";
+                break;
+            case "nzbget":
+                payload.host = getInputValue("nzbget_host") || CLIENT_DEFINITIONS.nzbget.defaults.host;
+                payload.port = toNumeric(getInputValue("nzbget_port"), CLIENT_DEFINITIONS.nzbget.defaults.port);
+                payload.username = getInputValue("nzbget_username");
+                payload.password = getInputValue("nzbget_password");
+                payload.category = getInputValue("nzbget_category");
+                payload.use_ssl = getCheckboxValue("nzbget_use_ssl");
+                payload.verify_cert = getCheckboxValue("nzbget_verify_cert");
+                break;
             default:
                 break;
         }
@@ -1172,7 +1297,13 @@
                     ? Boolean(indexer.session_id.trim())
                     : Boolean(indexer.has_session_id);
                 const isDirect = isDirectIndexerType(indexer.type);
-                const isConfigured = isDirect ? Boolean(baseUrl && hasSessionId) : Boolean(feedUrl && hasApiKey);
+                const isNzbhydra2 = isNzbhydra2Type(indexer.type);
+                const isProwlarr = isProwlarrType(indexer.type);
+                const isConfigured = isDirect
+                    ? Boolean(baseUrl && hasSessionId)
+                    : (isNzbhydra2 || isProwlarr)
+                        ? Boolean(baseUrl && hasApiKey)
+                        : Boolean(feedUrl && hasApiKey);
 
                 const label = document.createElement("span");
                 label.textContent = indexer.name || key;
@@ -1240,6 +1371,9 @@
             const helperBits = [];
             if (isDirectIndexerType(indexer.type)) {
                 helperBits.push(indexer.base_url ? "Base URL configured" : "Base URL missing");
+            } else if (isNzbhydra2Type(indexer.type) || isProwlarrType(indexer.type)) {
+                helperBits.push(indexer.base_url ? "Base URL configured" : "Base URL missing");
+                helperBits.push(indexer.has_api_key ? `API key set (${indexer.api_key_masked || "hidden"})` : "API key missing");
             } else {
                 helperBits.push(indexer.feed_url ? "Feed URL configured" : "Feed URL missing");
                 helperBits.push(indexer.has_api_key ? `API key set (${indexer.api_key_masked || "hidden"})` : "API key missing");
@@ -1322,7 +1456,9 @@
             if (helper) {
                 helper.textContent = isDirectIndexerType(typeValue)
                     ? "Provide the base URL and session ID for your direct provider. Priority determines search order."
-                    : "Provide the torznab endpoint and API key. Priority determines search order.";
+                    : isNzbhydra2Type(typeValue)
+                        ? "Provide the NZBHydra2 base URL and API key. Priority determines search order."
+                        : "Provide the torznab endpoint and API key. Priority determines search order.";
             }
         }
 
@@ -1343,6 +1479,9 @@
     }
 
     function inferIndexerType(key, protocol) {
+        if (key && key.toLowerCase().includes("nzbhydra")) {
+            return "nzbhydra2";
+        }
         if (key && key.toLowerCase().includes("prowlarr")) {
             return "prowlarr";
         }
@@ -1393,6 +1532,11 @@
             payload.session_id = getInputValue("indexer_session_id");
             payload.feed_url = "";
             payload.api_key = "";
+        } else if (isNzbhydra2Type(typeValue) || isProwlarrType(typeValue)) {
+            payload.base_url = getInputValue("indexer_base_url");
+            payload.api_key = getInputValue("indexer_api_key");
+            payload.feed_url = "";
+            payload.session_id = "";
         } else {
             payload.feed_url = getInputValue("indexer_feed_url");
             payload.api_key = getInputValue("indexer_api_key");
@@ -1402,15 +1546,19 @@
 
         if (existingIndexer) {
             if (existingIndexer.protocol) {
-                payload.protocol = existingIndexer.protocol === "direct" ? "direct" : "torznab";
+                payload.protocol = existingIndexer.protocol === "direct" ? "direct" : existingIndexer.protocol === "newznab" ? "newznab" : "torznab";
             } else if (isDirectIndexerType(typeValue)) {
                 payload.protocol = "direct";
+            } else if (isNzbhydra2Type(typeValue)) {
+                payload.protocol = "newznab";
             } else {
                 payload.protocol = "torznab";
             }
         } else {
             if (isDirectIndexerType(typeValue)) {
                 payload.protocol = "direct";
+            } else if (isNzbhydra2Type(typeValue)) {
+                payload.protocol = "newznab";
             } else {
                 payload.protocol = "torznab";
             }
@@ -1426,6 +1574,12 @@
 
         if (existingIndexer && existingIndexer.rate_limit) {
             payload.rate_limit = existingIndexer.rate_limit;
+        }
+
+        // Preserve indexer_id for synced Prowlarr indexers so the correct
+        // per-indexer endpoint is kept after a manual edit & save.
+        if (existingIndexer && existingIndexer.indexer_id) {
+            payload.indexer_id = existingIndexer.indexer_id;
         }
 
         statusTarget.textContent = "Saving indexer…";
@@ -1459,6 +1613,326 @@
         } finally {
             submitButton.classList.remove("loading");
             submitButton.disabled = false;
+        }
+    }
+
+    // ── Aggregator connection helpers ────────────────────────────────────────
+
+    function populateAggregatorConnections(aggregators) {
+        for (const [agg, conn] of Object.entries(aggregators)) {
+            const urlInput = document.getElementById(`${agg}_base_url`);
+            const keyInput = document.getElementById(`${agg}_api_key`);
+            const statusBadge = document.getElementById(`${agg}ConnectionStatus`);
+
+            if (urlInput) urlInput.value = conn.base_url || '';
+
+            if (keyInput) {
+                // Show a placeholder sentinel when a key is already saved
+                keyInput.value = '';
+                keyInput.placeholder = conn.has_api_key ? '••••••••  (saved)' : 'Paste API key';
+                keyInput.dataset.hasSavedKey = conn.has_api_key ? '1' : '0';
+            }
+
+            if (statusBadge && conn.base_url) {
+                statusBadge.textContent = 'Configured';
+                statusBadge.className = 'badge badge-success badge-sm';
+                statusBadge.classList.remove('hidden');
+            } else if (statusBadge) {
+                statusBadge.classList.add('hidden');
+            }
+
+            // Auto-expand the panel if at least one aggregator is configured
+            if (conn.base_url) {
+                const toggle = document.getElementById('aggregatorConnectionsToggle');
+                if (toggle) toggle.checked = true;
+            }
+        }
+    }
+
+    async function handleAggregatorSave(aggregator) {
+        const urlInput = document.getElementById(`${aggregator}_base_url`);
+        const keyInput = document.getElementById(`${aggregator}_api_key`);
+        const saveBtn = document.getElementById(`${aggregator}SaveButton`);
+
+        const base_url = (urlInput?.value || '').trim();
+        const api_key_raw = (keyInput?.value || '').trim();
+        const hasSavedKey = keyInput?.dataset.hasSavedKey === '1';
+
+        if (!base_url) {
+            showNotification('Base URL is required.', 'warning');
+            return;
+        }
+
+        // If the field is empty and there's already a saved key, send a sentinel
+        // so the backend preserves the existing value
+        const api_key = api_key_raw || (hasSavedKey ? '***' : '');
+
+        if (saveBtn) { saveBtn.classList.add('loading'); saveBtn.disabled = true; }
+
+        try {
+            const response = await fetchJson(`/settings/api/aggregators/${aggregator}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ base_url, api_key }),
+            });
+
+            if (response.success) {
+                showNotification(response.message || 'Saved', 'success');
+                // Re-load to refresh the badge and placeholder
+                const aggsPayload = await fetchJson('/settings/api/aggregators');
+                populateAggregatorConnections(aggsPayload.aggregators || {});
+            } else {
+                showNotification(response.error || 'Save failed', 'error');
+            }
+        } catch (err) {
+            showNotification(`Save failed: ${err.message}`, 'error');
+        } finally {
+            if (saveBtn) { saveBtn.classList.remove('loading'); saveBtn.disabled = false; }
+        }
+    }
+
+    async function handleAggregatorTest(aggregator) {
+        const urlInput = document.getElementById(`${aggregator}_base_url`);
+        const keyInput = document.getElementById(`${aggregator}_api_key`);
+        const testBtn = document.getElementById(`${aggregator}TestButton`);
+        const statusBadge = document.getElementById(`${aggregator}ConnectionStatus`);
+
+        const base_url = (urlInput?.value || '').trim();
+        const api_key_raw = (keyInput?.value || '').trim();
+        const hasSavedKey = keyInput?.dataset.hasSavedKey === '1';
+        const api_key = api_key_raw || (hasSavedKey ? '***' : '');
+
+        if (testBtn) { testBtn.classList.add('loading'); testBtn.disabled = true; }
+        if (statusBadge) {
+            statusBadge.textContent = 'Testing…';
+            statusBadge.className = 'badge badge-info badge-sm';
+            statusBadge.classList.remove('hidden');
+        }
+
+        try {
+            const response = await fetchJson(`/settings/api/aggregators/${aggregator}/test`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ base_url, api_key }),
+            });
+
+            if (response.success) {
+                showNotification(response.message || 'Connection OK', 'success');
+                if (statusBadge) {
+                    statusBadge.textContent = 'Connected';
+                    statusBadge.className = 'badge badge-success badge-sm';
+                }
+            } else {
+                showNotification(response.error || 'Connection failed', 'error');
+                if (statusBadge) {
+                    statusBadge.textContent = 'Failed';
+                    statusBadge.className = 'badge badge-error badge-sm';
+                }
+            }
+        } catch (err) {
+            showNotification(`Test failed: ${err.message}`, 'error');
+            if (statusBadge) {
+                statusBadge.textContent = 'Error';
+                statusBadge.className = 'badge badge-error badge-sm';
+            }
+        } finally {
+            if (testBtn) { testBtn.classList.remove('loading'); testBtn.disabled = false; }
+        }
+    }
+
+    // ── Aggregator sync modal (shared for Prowlarr & NZBHydra2) ─────────────
+
+    const AGGREGATOR_LABELS = {
+        prowlarr: 'Prowlarr',
+        nzbhydra2: 'NZBHydra2',
+    };
+
+    function openProwlarrSyncModal() {
+        const modal = document.getElementById("prowlarrSyncModal");
+        if (modal) modal.showModal();
+    }
+
+    function closeProwlarrSyncModal() {
+        const modal = document.getElementById("prowlarrSyncModal");
+        if (modal) modal.close();
+    }
+
+    function setProwlarrSyncState(viewState) {
+        // viewState: 'loading' | 'error' | 'list'
+        document.getElementById("prowlarrSyncLoading").classList.toggle("hidden", viewState !== "loading");
+        document.getElementById("prowlarrSyncError").classList.toggle("hidden", viewState !== "error");
+        document.getElementById("prowlarrSyncList").classList.toggle("hidden", viewState !== "list");
+        document.getElementById("prowlarrSyncConfirm").disabled = viewState !== "list";
+    }
+
+    function handleProwlarrSyncSelectAll(event) {
+        const checked = event.target.checked;
+        document.querySelectorAll(".prowlarr-sync-item-cb").forEach((cb) => {
+            cb.checked = checked;
+        });
+        updateSyncConfirmButton();
+    }
+
+    function updateSyncConfirmButton() {
+        const any = [...document.querySelectorAll(".prowlarr-sync-item-cb")].some((cb) => cb.checked);
+        document.getElementById("prowlarrSyncConfirm").disabled = !any;
+    }
+
+    /**
+     * Open the sync modal for the given aggregator ('prowlarr' or 'nzbhydra2').
+     * Used by both the sidebar Sync button and the card Sync buttons.
+     */
+    async function openAggregatorSyncModal(aggregator) {
+        const label = AGGREGATOR_LABELS[aggregator] || aggregator;
+
+        // Update modal labels
+        const titleSpan = document.getElementById("prowlarrSyncModalProvider");
+        const loadingSpan = document.getElementById("prowlarrSyncLoadingProvider");
+        if (titleSpan) titleSpan.textContent = label;
+        if (loadingSpan) loadingSpan.textContent = label;
+
+        // Reset
+        document.getElementById("prowlarrSyncItems").innerHTML = "";
+        document.getElementById("prowlarrSyncSelectAll").checked = true;
+        setProwlarrSyncState("loading");
+        document.getElementById("prowlarrSyncConfirm").dataset.aggregator = aggregator;
+        openProwlarrSyncModal();
+
+        const previewUrl = aggregator === 'nzbhydra2'
+            ? "/settings/api/indexers/nzbhydra2-preview"
+            : "/settings/api/indexers/prowlarr-preview";
+
+        try {
+            const response = await fetchJson(previewUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({}),
+            });
+
+            if (!response.success) {
+                document.getElementById("prowlarrSyncErrorMsg").textContent = response.error || "Unknown error";
+                setProwlarrSyncState("error");
+                return;
+            }
+
+            const items = response.indexers || [];
+            const container = document.getElementById("prowlarrSyncItems");
+            container.innerHTML = "";
+
+            if (items.length === 0) {
+                container.innerHTML = `<p class="text-sm text-base-content/60 py-2">No indexers found in ${label}.</p>`;
+                setProwlarrSyncState("list");
+                return;
+            }
+
+            for (const indexer of items) {
+                const protocolBadge = indexer.protocol === "newznab"
+                    ? '<span class="badge badge-outline badge-xs">NZB</span>'
+                    : '<span class="badge badge-outline badge-xs">Torrent</span>';
+                const syncedBadge = indexer.already_synced
+                    ? '<span class="badge badge-success badge-xs gap-1"><i class="fas fa-check"></i>Synced</span>'
+                    : '';
+                const disabledHint = !indexer.enabled
+                    ? `<span class="badge badge-ghost badge-xs">Disabled in ${label}</span>`
+                    : '';
+
+                const row = document.createElement("label");
+                row.className = "flex items-center gap-3 p-2 rounded-lg hover:bg-base-200 cursor-pointer";
+                row.innerHTML = `
+                    <input type="checkbox" class="checkbox checkbox-sm prowlarr-sync-item-cb" value="${indexer.id}" ${!indexer.already_synced ? 'checked' : ''} />
+                    <span class="flex-1 text-sm font-medium truncate">${indexer.name}</span>
+                    <span class="flex items-center gap-1 shrink-0">${protocolBadge}${syncedBadge}${disabledHint}</span>
+                `;
+                container.appendChild(row);
+            }
+
+            container.querySelectorAll(".prowlarr-sync-item-cb").forEach((cb) => {
+                cb.addEventListener("change", updateSyncConfirmButton);
+            });
+
+            const allChecked = [...container.querySelectorAll(".prowlarr-sync-item-cb")].every((cb) => cb.checked);
+            document.getElementById("prowlarrSyncSelectAll").checked = allChecked;
+
+            setProwlarrSyncState("list");
+            updateSyncConfirmButton();
+
+            // Store extra data on the confirm button for use in confirm handler
+            if (response.prowlarr_key) {
+                document.getElementById("prowlarrSyncConfirm").dataset.prowlarrKey = response.prowlarr_key;
+            }
+
+        } catch (error) {
+            console.error(error);
+            document.getElementById("prowlarrSyncErrorMsg").textContent = error.message || "Failed to fetch indexers";
+            setProwlarrSyncState("error");
+        }
+    }
+
+    async function handleProwlarrSync(event) {
+        event.preventDefault();
+        // Sidebar "Sync" button always targets Prowlarr
+        const hasProwlarr = Object.values(state.indexers || {}).some(
+            (idx) => isProwlarrType(idx.type) && idx.base_url && idx.has_api_key
+        );
+        // Also check the dedicated aggregator connection
+        // (backend will handle it; just check if we have any Prowlarr config at all)
+        // Allow through — backend will return a clear error if not configured
+        await openAggregatorSyncModal('prowlarr');
+    }
+
+    async function handleProwlarrSyncConfirm(event) {
+        event.preventDefault();
+
+        const confirmBtn = document.getElementById("prowlarrSyncConfirm");
+        const aggregator = confirmBtn.dataset.aggregator || 'prowlarr';
+        const prowlarrKey = confirmBtn.dataset.prowlarrKey || "";
+
+        const selectedIds = [...document.querySelectorAll(".prowlarr-sync-item-cb:checked")].map((cb) =>
+            // NZBHydra2 uses string names as IDs; Prowlarr uses integers
+            aggregator === 'nzbhydra2' ? cb.value : parseInt(cb.value, 10)
+        );
+
+        if (selectedIds.length === 0) {
+            showNotification("Select at least one indexer to import.", "warning");
+            return;
+        }
+
+        confirmBtn.classList.add("loading");
+        confirmBtn.disabled = true;
+
+        const syncUrl = aggregator === 'nzbhydra2'
+            ? "/settings/api/indexers/nzbhydra2-sync"
+            : "/settings/api/indexers/prowlarr-sync";
+
+        try {
+            const body = { selected_ids: selectedIds };
+            if (aggregator === 'prowlarr' && prowlarrKey) body.prowlarr_key = prowlarrKey;
+
+            const response = await fetchJson(syncUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body),
+            });
+
+            closeProwlarrSyncModal();
+
+            const msg = response.message || `Synced ${response.total ?? 0} indexer(s)`;
+            showNotification(msg, "success");
+
+            if (response.errors && response.errors.length) {
+                const errNames = response.errors.map((e) => e.name).join(", ");
+                showNotification(`Some indexers failed to save: ${errNames}`, "warning");
+            }
+
+            await refreshIndexersList();
+
+        } catch (error) {
+            console.error(error);
+            const label = AGGREGATOR_LABELS[aggregator] || aggregator;
+            showNotification(`${label} sync failed: ${error.message}`, "error");
+        } finally {
+            confirmBtn.classList.remove("loading");
+            confirmBtn.disabled = false;
         }
     }
 
@@ -1511,7 +1985,7 @@
         }
 
         try {
-            const payload = await fetchJson("/settings/api/indexers");
+            const payload = await fetchJson(`/settings/api/indexers?_=${Date.now()}`);
             setIndexersState(payload.indexers || {});
             state.addingIndexer = false;
             renderIndexerList();
@@ -3228,7 +3702,7 @@
     }
 
     // Initialize SocketIO for AudioBookShelf sync progress
-    const socket = typeof window.io === 'function' ? window.io() : null;
+    const socket = window._appSocket || null;
     if (socket) {
         socket.on('abs_sync_progress', (data) => {
             const statusTarget = document.getElementById("absConnectionStatus");

@@ -34,6 +34,7 @@ def _resolve_config_dir() -> str:
 class Config:
     # Basic Flask configuration
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
+    DEBUG = os.environ.get('FLASK_DEBUG', 'true').lower() in ('1', 'true', 'yes')
     
     # Database configuration
     _CONFIG_DIR = _resolve_config_dir()
@@ -59,9 +60,15 @@ class Config:
     # User credentials are stored in config/config.txt as hashed passwords
     # Session lifetime: remember me = 30 days, otherwise session-only
     REMEMBER_COOKIE_DURATION = 30 * 24 * 60 * 60  # 30 days in seconds
-    SESSION_COOKIE_SECURE = False  # Set to True if using HTTPS
+    SESSION_COOKIE_SECURE = os.environ.get('HTTPS_ENABLED', 'false').lower() == 'true'
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = 'Lax'
+
+    # CORS configuration for SocketIO.
+    # Set CORS_ALLOWED_ORIGINS to a comma-separated list of origins to restrict.
+    # Unset (default) allows all origins, which is fine for most self-hosted deployments.
+    _cors_env = os.environ.get('CORS_ALLOWED_ORIGINS', '')
+    CORS_ALLOWED_ORIGINS = [o.strip() for o in _cors_env.split(',') if o.strip()] if _cors_env else '*'
     
     # Download Client Configuration
     # Multiple clients can be configured with priority (1-10, lower = higher priority)
@@ -116,44 +123,9 @@ class Config:
     }
     
     # Indexer Configuration
-    # Multiple indexers can be configured with priority (1-10, lower = higher priority)
-    # Supports Jackett and Prowlarr (Torznab)
-    # Simply copy/paste the full Torznab feed URL from your indexer
-    INDEXERS = {
-        'jackett_audiobookbay': {
-            'enabled': False,  # Set to True to enable
-            'priority': 1,     # Lower number = higher priority (1-10)
-            'type': 'jackett',
-            'protocol': 'torznab',
-            'feed_url': 'http://localhost:9117/api/v2.0/indexers/audiobookbay/results/torznab',  # Full Torznab feed URL
-            'api_key': '',     # Get from Jackett dashboard
-            'categories': ['3030'],  # 3030 = Audiobooks category
-            'timeout': 30,
-            'verify_ssl': True
-        },
-        'jackett_all': {
-            'enabled': False,
-            'priority': 2,
-            'type': 'jackett',
-            'protocol': 'torznab',
-            'feed_url': 'http://localhost:9117/api/v2.0/indexers/all/results/torznab',  # Search all configured indexers
-            'api_key': '',     # Same API key as above
-            'categories': ['3030'],
-            'timeout': 30,
-            'verify_ssl': True
-        },
-        'prowlarr': {
-            'enabled': False,
-            'priority': 3,
-            'type': 'prowlarr',
-            'protocol': 'torznab',
-            'feed_url': 'http://localhost:9696/api/v2.0/indexers/all/results/torznab',  # Prowlarr Torznab URL
-            'api_key': '',     # Get from Prowlarr settings
-            'categories': ['3030'],
-            'timeout': 30,
-            'verify_ssl': True
-        }
-    }
+    # Indexers are configured by the user via the Settings UI and stored in config.txt.
+    # No defaults are provided — the indexer list will be empty until the user adds one.
+    INDEXERS = {}
     
     # Indexer Search Settings
     INDEXER_SEARCH_SETTINGS = {

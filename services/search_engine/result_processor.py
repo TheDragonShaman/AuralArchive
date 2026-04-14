@@ -88,7 +88,10 @@ class ResultProcessor:
                     'peers': result.get('peers', 0),  # Include peers for health display
                     'download_url': result.get('download_url', ''),
                     'info_hash': result.get('info_hash', ''),
-                    'quality_score': result.get('quality_score', 0.0)
+                    'quality_score': result.get('quality_score', 0.0),
+                    'result_type': result.get('result_type', ''),
+                    'protocol': result.get('protocol', ''),
+                    'download_type': result.get('download_type', ''),
                 }
                 
                 # Include quality_assessment if available

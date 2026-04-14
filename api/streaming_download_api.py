@@ -21,6 +21,7 @@ Endpoints:
 """
 
 from flask import Blueprint, request, jsonify
+from flask_login import current_user
 
 from services.service_manager import get_database_service
 from services.audible.ownership_validator import assess_audible_ownership, fetch_audible_library_entry
@@ -28,6 +29,13 @@ from utils.logger import get_module_logger
 
 # Create blueprint
 streaming_download_api = Blueprint('streaming_download_api', __name__)
+
+
+@streaming_download_api.before_request
+def _require_auth():
+    if not current_user.is_authenticated:
+        return jsonify({'error': 'Authentication required'}), 401
+
 
 # Initialize logger
 logger = get_module_logger("API.StreamingDownload")

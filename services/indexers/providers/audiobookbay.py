@@ -254,7 +254,14 @@ class AudiobookBayAdapter(DirectProviderAdapter):
     @staticmethod
     def _extract_table_value(soup: BeautifulSoup, label: str) -> Optional[str]:
         label_lower = label.lower()
-        for cell in soup.select("table.torrent_info td"):
+        selectors = ("table.torrent_info td", "table.torrent_infos td", "table td")
+        seen_cells = []
+        for selector in selectors:
+            cells = soup.select(selector)
+            if cells:
+                seen_cells = cells
+                break
+        for cell in seen_cells:
             text = cell.get_text(" ", strip=True).lower()
             if label_lower in text:
                 sibling = cell.find_next_sibling("td")
@@ -300,7 +307,14 @@ class AudiobookBayAdapter(DirectProviderAdapter):
     @staticmethod
     def _extract_trackers(soup: BeautifulSoup) -> List[str]:
         trackers: List[str] = []
-        for cell in soup.select("table.torrent_info td"):
+        selectors = ("table.torrent_info td", "table.torrent_infos td", "table td")
+        seen_cells = []
+        for selector in selectors:
+            cells = soup.select(selector)
+            if cells:
+                seen_cells = cells
+                break
+        for cell in seen_cells:
             text = cell.get_text(" ", strip=True).lower()
             if text.startswith("tracker") or text.startswith("announce"):
                 sibling = cell.find_next_sibling("td")

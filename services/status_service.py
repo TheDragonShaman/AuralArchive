@@ -22,6 +22,7 @@ from collections import deque
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timedelta
 from threading import Lock
+from time import monotonic
 from typing import Any, Deque, Dict, List, Optional
 
 from utils.logger import get_module_logger
@@ -79,6 +80,10 @@ class StatusService:
         self._events_lock = Lock()
         self._counter = 0
         self._retention = timedelta(minutes=20)
+        # Debounce tracking for _push_event (no lock needed — CPython GIL + acceptable
+        # worst-case of one extra emit are both fine here)
+        self._push_state: Dict[int, str]   = {}  # event_id → last pushed state
+        self._push_time:  Dict[int, float] = {}  # event_id → monotonic timestamp of last push
         self._initialized = True
 
         self.logger.success(
@@ -96,15 +101,66 @@ class StatusService:
 
     def _prune(self):
         now = datetime.utcnow()
+        pruned: List[int] = []
         with self._events_lock:
             while self._events and self._events[0].expires_at < now:
                 expired = self._events.popleft()
                 self._index.pop(expired.id, None)
+                pruned.append(expired.id)
+        for eid in pruned:
+            self._push_state.pop(eid, None)
+            self._push_time.pop(eid, None)
 
     def _touch_event(self, event: StatusEvent):
         now = datetime.utcnow()
         event.updated_at = now.isoformat()
         event.expires_at = now + self._retention
+
+    # ------------------------------------------------------------------
+    # SocketIO push helper
+    # ------------------------------------------------------------------
+    def _push_event(self, event_dict: Dict[str, Any]):
+        """Push a SocketIO notification with debouncing.
+
+        State changes always emit immediately. Same-state updates (e.g. download
+        progress ticks) are throttled to at most one push per 2 seconds per event
+        to avoid flooding the socket with high-frequency progress callbacks.
+        The full event dict is sent so the frontend can patch in-place without
+        making a follow-up HTTP request.
+        """
+        event_id  = event_dict.get('id')
+        new_state = event_dict.get('state', '')
+
+        if event_id is not None:
+            prev_state = self._push_state.get(event_id)
+            prev_time  = self._push_time.get(event_id, 0.0)
+            now_mono   = monotonic()
+            if prev_state == new_state and (now_mono - prev_time) < 2.0:
+                self.logger.debug(
+                    "Status push throttled (same state)",
+                    extra={"event_id": event_id, "state": new_state},
+                )
+                return
+            self._push_state[event_id] = new_state
+            self._push_time[event_id]  = now_mono
+
+        try:
+            from app import app, socketio  # lazy import to avoid circular dependency
+            with app.app_context():
+                socketio.emit('status:updated', event_dict)
+            self.logger.debug(
+                "Status push: status:updated emitted",
+                extra={
+                    "event_id": event_id,
+                    "state": new_state,
+                    "title": event_dict.get('title'),
+                },
+            )
+        except Exception as exc:
+            self.logger.error(
+                "Status push failed",
+                extra={"event_id": event_id, "state": new_state, "error": str(exc)},
+            )
 
     # ------------------------------------------------------------------
     # Public API
@@ -154,6 +210,7 @@ class StatusService:
             },
         )
 
+        self._push_event(event.to_dict())
         return event.to_dict()
 
     def update_event(self, event_id: int, **updates) -> Optional[Dict[str, Any]]:
@@ -188,7 +245,10 @@ class StatusService:
                     "keys": list(updates.keys()),
                 },
             )
-            return event.to_dict()
+            result = event.to_dict()
+
+        self._push_event(result)
+        return result
 
     def complete_event(
         self,

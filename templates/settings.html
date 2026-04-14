@@ -2,25 +2,32 @@
 {% block title %}Settings · AuralArchive{% endblock %}
 
 {% block content %}
-<div class="max-w-6xl mx-auto space-y-8">
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-            <h1 class="text-3xl font-semibold tracking-tight">Control Center</h1>
-            <p class="text-sm text-base-content/70">Tune integrations, automation, and download behavior.</p>
-            <p id="configUpdatedAt" class="text-xs text-base-content/50 mt-2">Loading configuration…</p>
+<div class="w-full space-y-0">
+    <!-- Save Toolbar (Sonarr style) -->
+    <div class="save-toolbar -mx-4 sm:-mx-6 lg:-mx-10 -mt-6 mb-6 px-4 sm:px-6 lg:px-10">
+        <div class="flex items-center gap-4">
+            <h1 class="text-lg font-semibold" id="settingsSectionTitle">General</h1>
+            <span id="configUpdatedAt" class="text-xs text-base-content/50"></span>
+            <div class="text-xs text-warning items-center gap-1.5 hidden" id="unsavedIndicator">
+                <i class="fas fa-circle text-[6px]"></i>
+                <span>Unsaved changes</span>
+            </div>
         </div>
-        <button type="button" id="refreshSettings" class="btn btn-outline btn-sm gap-2">
-            <i class="fas fa-rotate"></i>
-            <span>Refresh</span>
-        </button>
+        <div class="flex items-center gap-2">
+            <button type="button" id="refreshSettings" class="btn btn-ghost btn-sm gap-2">
+                <i class="fas fa-rotate"></i>
+                <span>Refresh</span>
+            </button>
+        </div>
     </div>
 
-    <div class="tabs tabs-border w-full" id="settingsTabs">
-        <input type="radio" name="settings_tabs" role="tab" class="tab" aria-label="General" checked />
-        <div role="tabpanel" class="tab-content border border-base-300 bg-base-100 p-6 space-y-6">
-            <div class="space-y-2">
-                <h2 class="text-lg font-semibold">General</h2>
-                <p class="text-sm text-base-content/60">Adjust logging verbosity and automatic search defaults.</p>
+    <!-- ══════════════ GENERAL ══════════════ -->
+    <div id="settingsPanel-general" class="settings-panel active">
+        <div class="space-y-6">
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div class="space-y-1">
+                    <p class="text-sm text-base-content/60">Adjust logging verbosity and automatic search defaults.</p>
+                </div>
             </div>
             <form id="generalForm" data-status-target="generalStatus" class="space-y-6" novalidate>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -71,12 +78,13 @@
                 </div>
             </form>
         </div>
+    </div>
 
-        <input type="radio" name="settings_tabs" role="tab" class="tab" aria-label="AudioBookShelf" />
-        <div role="tabpanel" class="tab-content border border-base-300 bg-base-100 p-6 space-y-6">
+    <!-- ══════════════ AUDIOBOOKSHELF ══════════════ -->
+    <div id="settingsPanel-audiobookshelf" class="settings-panel">
+        <div class="space-y-6">
             <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div class="space-y-1">
-                    <h2 class="text-lg font-semibold">AudioBookShelf</h2>
                     <p class="text-sm text-base-content/60">Configure library sync, API access, and import preferences.</p>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
@@ -177,15 +185,16 @@
                 </div>
             </form>
         </div>
+    </div>
 
-        <input type="radio" name="settings_tabs" role="tab" class="tab" aria-label="Audible" />
-        <div role="tabpanel" class="tab-content border border-base-300 bg-base-100 p-6 space-y-6">
-            <div class="space-y-2">
-                <h2 class="text-lg font-semibold">Audible</h2>
-                <p class="text-sm text-base-content/60">Authenticate with Audible, monitor connection health, and manage library sync operations.</p>
-            </div>
+    <!-- ══════════════ AUDIBLE ══════════════ -->
+    <div id="settingsPanel-audible" class="settings-panel">
+        <div class="space-y-6">
             <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <p id="audibleStatusHelper" class="text-xs text-base-content/60">Loading Audible status…</p>
+                <div class="space-y-1">
+                    <p class="text-sm text-base-content/60">Authenticate with Audible, monitor connection health, and manage library sync operations.</p>
+                    <p id="audibleStatusHelper" class="text-xs text-base-content/50">Loading Audible status…</p>
+                </div>
                 <div class="flex flex-wrap items-center gap-2">
                     <button type="button" id="audibleRefreshButton" class="btn btn-outline btn-sm gap-2">
                         <i class="fas fa-sync-alt"></i>
@@ -303,12 +312,15 @@
                 </div>
             </div>
         </div>
+    </div>
 
-        <input type="radio" name="settings_tabs" role="tab" class="tab" aria-label="Download Clients" />
-        <div role="tabpanel" class="tab-content border border-base-300 bg-base-100 p-6 space-y-6">
-            <div class="space-y-2">
-                <h2 class="text-lg font-semibold">Download Clients</h2>
-                <p class="text-sm text-base-content/60">Manage multiple torrent clients. Add a client to make it available to download workflows.</p>
+    <!-- ══════════════ DOWNLOAD CLIENTS ══════════════ -->
+    <div id="settingsPanel-download-clients" class="settings-panel">
+        <div class="space-y-6">
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div class="space-y-1">
+                    <p class="text-sm text-base-content/60">Manage torrent and Usenet download clients. Add a client to make it available to download workflows.</p>
+                </div>
             </div>
             <div class="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
                 <aside class="space-y-4">
@@ -353,12 +365,18 @@
                                     <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Client Type</span>
                                 </label>
                                 <select id="download_client_type" class="select select-bordered w-full">
-                                    <option value="qbittorrent">qBittorrent</option>
-                                    <option value="deluge" disabled>Deluge (coming soon)</option>
-                                    <option value="transmission" disabled>Transmission (coming soon)</option>
+                                    <optgroup label="Torrent">
+                                        <option value="qbittorrent">qBittorrent</option>
+                                        <option value="deluge" disabled>Deluge (coming soon)</option>
+                                        <option value="transmission" disabled>Transmission (coming soon)</option>
+                                    </optgroup>
+                                    <optgroup label="Usenet">
+                                        <option value="sabnzbd">SABnzbd</option>
+                                        <option value="nzbget">NZBGet</option>
+                                    </optgroup>
                                 </select>
                                 <label class="label">
-                                    <span id="downloadClientTypeHelper" class="label-text-alt text-base-content/60">qBittorrent is supported today. Deluge and Transmission are coming soon.</span>
+                                    <span id="downloadClientTypeHelper" class="label-text-alt text-base-content/60">Torrent: qBittorrent. Usenet: SABnzbd, NZBGet. Deluge and Transmission coming soon.</span>
                                 </label>
                             </div>
                             <div class="form-control">
@@ -469,6 +487,120 @@
                             </div>
                         </div>
 
+                        <div data-client-panel="sabnzbd" class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden">
+                            <div class="form-control">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Host</span>
+                                </label>
+                                <input id="sabnzbd_host" type="text" class="input input-bordered w-full" placeholder="127.0.0.1" />
+                            </div>
+                            <div class="form-control">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Port</span>
+                                </label>
+                                <input id="sabnzbd_port" type="number" min="1" step="1" class="input input-bordered w-full" placeholder="8080" />
+                            </div>
+                            <div class="form-control md:col-span-2">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">API Key</span>
+                                </label>
+                                <input id="sabnzbd_api_key" type="password" class="input input-bordered w-full" autocomplete="off" placeholder="SABnzbd API key" />
+                            </div>
+                            <div class="form-control">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">URL Base</span>
+                                </label>
+                                <input id="sabnzbd_url_base" type="text" class="input input-bordered w-full" placeholder="/api" />
+                                <label class="label">
+                                    <span class="label-text-alt text-base-content/60">Default: /api (use /sabnzbd/api if behind a reverse proxy with URL base configured)</span>
+                                </label>
+                            </div>
+                            <div class="form-control">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Category</span>
+                                </label>
+                                <input id="sabnzbd_category" type="text" class="input input-bordered w-full" placeholder="audiobooks" />
+                            </div>
+                            <div class="form-control">
+                                <label class="label cursor-pointer">
+                                    <span class="label-text">Use SSL</span>
+                                    <input id="sabnzbd_use_ssl" type="checkbox" class="toggle toggle-primary" />
+                                </label>
+                            </div>
+                            <div class="form-control">
+                                <label class="label cursor-pointer">
+                                    <span class="label-text">Verify certificate</span>
+                                    <input id="sabnzbd_verify_cert" type="checkbox" class="toggle toggle-primary" checked />
+                                </label>
+                            </div>
+                            <div class="form-control">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">SABnzbd Download Path (remote)</span>
+                                </label>
+                                <input id="sabnzbd_remote_path" type="text" class="input input-bordered w-full" placeholder="/downloads" />
+                                <label class="label">
+                                    <span class="label-text-alt text-base-content/60">Path as SABnzbd sees it (e.g. /downloads). Leave blank if paths match.</span>
+                                </label>
+                            </div>
+                            <div class="form-control">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">SABnzbd Download Path (local)</span>
+                                </label>
+                                <input id="sabnzbd_local_path" type="text" class="input input-bordered w-full" placeholder="/media/MS_Server/Downloads" />
+                                <label class="label">
+                                    <span class="label-text-alt text-base-content/60">Corresponding path on this machine.</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div data-client-panel="nzbget" class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden">
+                            <div class="form-control">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Host</span>
+                                </label>
+                                <input id="nzbget_host" type="text" class="input input-bordered w-full" placeholder="127.0.0.1" />
+                            </div>
+                            <div class="form-control">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Port</span>
+                                </label>
+                                <input id="nzbget_port" type="number" min="1" step="1" class="input input-bordered w-full" placeholder="6789" />
+                            </div>
+                            <div class="form-control">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Username</span>
+                                </label>
+                                <input id="nzbget_username" type="text" class="input input-bordered w-full" placeholder="nzbget" />
+                            </div>
+                            <div class="form-control">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Password</span>
+                                </label>
+                                <input id="nzbget_password" type="password" class="input input-bordered w-full" autocomplete="off" />
+                            </div>
+                            <div class="form-control">
+                                <label class="label pb-1">
+                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Category</span>
+                                </label>
+                                <input id="nzbget_category" type="text" class="input input-bordered w-full" placeholder="audiobooks" />
+                            </div>
+                            <div class="form-control">
+                                <!-- spacer -->
+                            </div>
+                            <div class="form-control">
+                                <label class="label cursor-pointer">
+                                    <span class="label-text">Use SSL</span>
+                                    <input id="nzbget_use_ssl" type="checkbox" class="toggle toggle-primary" />
+                                </label>
+                            </div>
+                            <div class="form-control">
+                                <label class="label cursor-pointer">
+                                    <span class="label-text">Verify certificate</span>
+                                    <input id="nzbget_verify_cert" type="checkbox" class="toggle toggle-primary" checked />
+                                </label>
+                            </div>
+                        </div>
+
                         
 
                         <div id="downloadClientStatus" class="text-xs text-base-content/60 h-4"></div>
@@ -482,21 +614,113 @@
                 </form>
             </div>
         </div>
+    </div>
 
-        <input type="radio" name="settings_tabs" role="tab" class="tab" aria-label="Indexers" />
-        <div role="tabpanel" class="tab-content border border-base-300 bg-base-100 p-6 space-y-6">
-            <div class="space-y-2">
-                <h2 class="text-lg font-semibold">Indexers</h2>
-                <p class="text-sm text-base-content/60">Connect multiple torznab sources and set the order they are queried.</p>
+    <!-- ══════════════ INDEXERS ══════════════ -->
+    <div id="settingsPanel-indexers" class="settings-panel">
+        <div class="space-y-6">
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div class="space-y-1">
+                    <p class="text-sm text-base-content/60">Connect multiple torznab sources and set the order they are queried.</p>
+                </div>
             </div>
+
+            <!-- Aggregator Connections -->
+            <div class="collapse collapse-arrow border border-base-300 rounded-lg bg-base-100" id="aggregatorConnectionsPanel">
+                <input type="checkbox" id="aggregatorConnectionsToggle" />
+                <div class="collapse-title text-sm font-semibold flex items-center gap-2">
+                    <i class="fas fa-plug text-base-content/50"></i>
+                    Aggregator Connections
+                    <span class="text-xs font-normal text-base-content/50 ml-1">Prowlarr &amp; NZBHydra2</span>
+                </div>
+                <div class="collapse-content space-y-4">
+                    <p class="text-xs text-base-content/60 -mt-1">Configure the base URL and API key for each aggregator. These credentials are used by the Sync feature to import indexers.</p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                        <!-- Prowlarr -->
+                        <div class="card border border-base-300 bg-base-200/40">
+                            <div class="card-body p-4 space-y-3">
+                                <div class="flex items-center gap-2">
+                                    <span class="font-semibold text-sm">Prowlarr</span>
+                                    <span id="prowlarrConnectionStatus" class="badge badge-ghost badge-sm hidden"></span>
+                                </div>
+                                <div class="form-control">
+                                    <label class="label py-0 pb-1">
+                                        <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Base URL</span>
+                                    </label>
+                                    <input id="prowlarr_base_url" type="text" class="input input-bordered input-sm w-full" placeholder="http://192.168.1.10:9696" autocomplete="off" />
+                                </div>
+                                <div class="form-control">
+                                    <label class="label py-0 pb-1">
+                                        <span class="label-text text-xs uppercase tracking-wide text-base-content/60">API Key</span>
+                                    </label>
+                                    <input id="prowlarr_api_key" type="password" class="input input-bordered input-sm w-full" autocomplete="off" placeholder="Paste API key" />
+                                </div>
+                                <div class="flex items-center gap-2 pt-1">
+                                    <button type="button" id="prowlarrTestButton" class="btn btn-outline btn-xs gap-1">
+                                        <i class="fas fa-plug"></i> Test
+                                    </button>
+                                    <button type="button" id="prowlarrSaveButton" class="btn btn-primary btn-xs gap-1">
+                                        <i class="fas fa-save"></i> Save
+                                    </button>
+                                    <button type="button" id="prowlarrSyncButton" class="btn btn-outline btn-xs gap-1 ml-auto" title="Sync indexers from Prowlarr">
+                                        <i class="fas fa-cloud-download-alt"></i> Sync
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- NZBHydra2 -->
+                        <div class="card border border-base-300 bg-base-200/40">
+                            <div class="card-body p-4 space-y-3">
+                                <div class="flex items-center gap-2">
+                                    <span class="font-semibold text-sm">NZBHydra2</span>
+                                    <span id="nzbhydra2ConnectionStatus" class="badge badge-ghost badge-sm hidden"></span>
+                                </div>
+                                <div class="form-control">
+                                    <label class="label py-0 pb-1">
+                                        <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Base URL</span>
+                                    </label>
+                                    <input id="nzbhydra2_base_url" type="text" class="input input-bordered input-sm w-full" placeholder="http://192.168.1.10:5076" autocomplete="off" />
+                                </div>
+                                <div class="form-control">
+                                    <label class="label py-0 pb-1">
+                                        <span class="label-text text-xs uppercase tracking-wide text-base-content/60">API Key</span>
+                                    </label>
+                                    <input id="nzbhydra2_api_key" type="password" class="input input-bordered input-sm w-full" autocomplete="off" placeholder="Paste API key" />
+                                </div>
+                                <div class="flex items-center gap-2 pt-1">
+                                    <button type="button" id="nzbhydra2TestButton" class="btn btn-outline btn-xs gap-1">
+                                        <i class="fas fa-plug"></i> Test
+                                    </button>
+                                    <button type="button" id="nzbhydra2SaveButton" class="btn btn-primary btn-xs gap-1">
+                                        <i class="fas fa-save"></i> Save
+                                    </button>
+                                    <button type="button" id="nzbhydra2SyncButton" class="btn btn-outline btn-xs gap-1 ml-auto" title="Sync indexers from NZBHydra2">
+                                        <i class="fas fa-cloud-download-alt"></i> Sync
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
             <div class="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
                 <aside class="space-y-4">
                     <div class="flex items-center justify-between">
                         <h3 class="text-sm font-semibold uppercase tracking-wide text-base-content/60">Configured Indexers</h3>
-                        <button type="button" id="indexerAddButton" class="btn btn-outline btn-xs">
-                            <i class="fas fa-plus"></i>
-                            <span>Add</span>
-                        </button>
+                        <div class="flex items-center gap-1">
+                            <button type="button" id="indexerSyncButton" class="btn btn-outline btn-xs gap-1" title="Sync indexers from a configured Prowlarr instance">
+                                <i class="fas fa-cloud-download-alt"></i>
+                                <span>Sync</span>
+                            </button>
+                            <button type="button" id="indexerAddButton" class="btn btn-outline btn-xs">
+                                <i class="fas fa-plus"></i>
+                                <span>Add</span>
+                            </button>
+                        </div>
                     </div>
                     <div id="indexersList" class="space-y-2">
                         <div class="rounded-lg border border-dashed border-base-300 p-4 text-sm text-base-content/60">
@@ -553,6 +777,7 @@
                                 <select id="indexer_type" class="select select-bordered w-full">
                                     <option value="jackett">Jackett</option>
                                     <option value="prowlarr">Prowlarr</option>
+                                    <option value="nzbhydra2">NZBHydra2</option>
                                     <option value="direct">Direct</option>
                                 </select>
                             </div>
@@ -570,19 +795,19 @@
                                 </label>
                                 <input id="indexer_feed_url" type="text" class="input input-bordered w-full" placeholder="http://127.0.0.1:9117/api/v2.0/indexers/all/results/torznab" />
                             </div>
-                            <div class="form-control md:col-span-2" data-indexer-field="standard">
+                            <div class="form-control md:col-span-2" data-indexer-field="api-key">
                                 <label class="label pb-1">
                                     <span class="label-text text-xs uppercase tracking-wide text-base-content/60">API Key</span>
                                 </label>
                                 <input id="indexer_api_key" type="text" class="input input-bordered w-full" autocomplete="off" />
                             </div>
-                            <div class="form-control md:col-span-2 hidden" data-indexer-field="direct">
+                            <div class="form-control md:col-span-2 hidden" data-indexer-field="base-url">
                                 <label class="label pb-1">
                                     <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Base URL</span>
                                 </label>
-                                <input id="indexer_base_url" type="text" class="input input-bordered w-full" placeholder="https://provider.example.com" />
+                                <input id="indexer_base_url" type="text" class="input input-bordered w-full" placeholder="http://127.0.0.1:5076" />
                                 <label class="label">
-                                    <span class="label-text-alt text-base-content/60">Root endpoint for the direct provider (no trailing slash).</span>
+                                    <span class="label-text-alt text-base-content/60">Root endpoint, no trailing slash.</span>
                                 </label>
                             </div>
                             <div class="form-control md:col-span-2 hidden" data-indexer-field="direct">
@@ -643,12 +868,15 @@
                 </form>
             </div>
         </div>
+    </div>
 
-        <input type="radio" name="settings_tabs" role="tab" class="tab" aria-label="Media Management" />
-        <div role="tabpanel" class="tab-content border border-base-300 bg-base-100 p-6 space-y-8">
-            <div class="space-y-2">
-                <h2 class="text-lg font-semibold">Media Management</h2>
-                <p class="text-sm text-base-content/60">Coordinate naming templates, staging paths, and download processing rules.</p>
+    <!-- ══════════════ MEDIA MANAGEMENT ══════════════ -->
+    <div id="settingsPanel-media" class="settings-panel">
+        <div class="space-y-6">
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div class="space-y-1">
+                    <p class="text-sm text-base-content/60">Coordinate naming templates, staging paths, and download processing rules.</p>
+                </div>
             </div>
             <form id="mediaManagementForm" data-status-target="mediaStatus" class="space-y-10" novalidate>
                 <section class="space-y-4">
@@ -868,6 +1096,51 @@
         </div>
     </div>
 
+    <!-- ══════════════ DIALOGS ══════════════ -->
+
+    <dialog id="prowlarrSyncModal" class="modal modal-bottom sm:modal-middle">
+        <div class="modal-box w-full max-w-lg space-y-4">
+            <h3 class="text-lg font-semibold">Sync Indexers from <span id="prowlarrSyncModalProvider">Prowlarr</span></h3>
+
+            <!-- Loading state -->
+            <div id="prowlarrSyncLoading" class="flex flex-col items-center gap-3 py-6">
+                <span class="loading loading-spinner loading-md"></span>
+                <span class="text-sm text-base-content/60">Fetching indexers from <span id="prowlarrSyncLoadingProvider">Prowlarr</span>…</span>
+            </div>
+
+            <!-- Error state -->
+            <div id="prowlarrSyncError" class="hidden">
+                <div class="alert alert-error text-sm">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <span id="prowlarrSyncErrorMsg"></span>
+                </div>
+            </div>
+
+            <!-- Indexer list -->
+            <div id="prowlarrSyncList" class="hidden space-y-2">
+                <div class="flex items-center justify-between pb-1 border-b border-base-300">
+                    <span class="text-xs text-base-content/60 uppercase tracking-wide">Select indexers to import</span>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" id="prowlarrSyncSelectAll" class="checkbox checkbox-xs" checked />
+                        <span class="text-xs">Select all</span>
+                    </label>
+                </div>
+                <div id="prowlarrSyncItems" class="max-h-72 overflow-y-auto space-y-1 pr-1"></div>
+            </div>
+
+            <div class="modal-action">
+                <button type="button" class="btn btn-ghost btn-sm" id="prowlarrSyncCancel">Cancel</button>
+                <button type="button" class="btn btn-primary btn-sm gap-2" id="prowlarrSyncConfirm" disabled>
+                    <i class="fas fa-cloud-download-alt"></i>
+                    Import Selected
+                </button>
+            </div>
+        </div>
+        <form method="dialog" class="modal-backdrop">
+            <button aria-label="Close"></button>
+        </form>
+    </dialog>
+
     <dialog id="autoDownloadConfirmModal" class="modal modal-bottom sm:modal-middle">
         <div class="modal-box w-full max-w-lg space-y-4">
             <h3 class="text-lg font-semibold text-warning">Enable automatic downloads?</h3>
@@ -993,5 +1266,53 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{{ url_for('static', filename='js/settings.js') }}?v=2"></script>
+<script>
+// ── Settings Panel Navigation (Sonarr-style sidebar sub-links) ──
+(function() {
+    const subnav = document.getElementById('settingsSubnav');
+    if (!subnav) return;
+
+    const links = subnav.querySelectorAll('.settings-sub-link');
+    const titleEl = document.getElementById('settingsSectionTitle');
+
+    // Restore last active section from sessionStorage
+    const saved = sessionStorage.getItem('settingsActiveSection');
+    if (saved) {
+        const target = document.getElementById('settingsPanel-' + saved);
+        if (target) {
+            document.querySelectorAll('.settings-panel').forEach(p => p.classList.remove('active'));
+            target.classList.add('active');
+            links.forEach(l => l.classList.remove('active'));
+            const activeLink = subnav.querySelector('[data-settings-section="' + saved + '"]');
+            if (activeLink) {
+                activeLink.classList.add('active');
+                if (titleEl) titleEl.textContent = activeLink.querySelector('span').textContent;
+            }
+        }
+    }
+
+    links.forEach(link => {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            const section = this.getAttribute('data-settings-section');
+
+            // Switch panels
+            document.querySelectorAll('.settings-panel').forEach(p => p.classList.remove('active'));
+            const panel = document.getElementById('settingsPanel-' + section);
+            if (panel) panel.classList.add('active');
+
+            // Switch active link
+            links.forEach(l => l.classList.remove('active'));
+            this.classList.add('active');
+
+            // Update toolbar title
+            if (titleEl) titleEl.textContent = this.querySelector('span').textContent;
+
+            // Persist selection
+            sessionStorage.setItem('settingsActiveSection', section);
+        });
+    });
+})();
+</script>
+<script src="{{ url_for('static', filename='js/settings.js') }}?v=4"></script>
 {% endblock %}

@@ -82,11 +82,33 @@ def create_app(config_class=Config):
     werkzeug_logger = logging.getLogger('werkzeug')
     werkzeug_logger.handlers = []
     werkzeug_logger.setLevel(logging.WARNING)  # Only show warnings/errors from werkzeug
+
+    # "Invalid session" from engineio.server is expected whenever the browser holds
+    # a stale session ID from before a server restart and tries to reconnect. The
+    # client detects the 400 response, drops the old ID, and opens a fresh session
+    # automatically. engineio_logger=False on the SocketIO constructor only disables
+    # verbose debug output; this particular message routes through the standard Python
+    # logging system and needs its own filter.
+    class _SuppressInvalidSession(logging.Filter):
+        def filter(self, record: logging.LogRecord) -> bool:
+            return 'Invalid session' not in record.getMessage()
+
+    logging.getLogger('engineio.server').addFilter(_SuppressInvalidSession())
     
     # Initialize SocketIO with CORS support
+    _async_mode = app.config.get('SOCKETIO_ASYNC_MODE', 'threading')
+    # In threading async_mode (Werkzeug dev server) engine.io tries to take over
+    # the raw socket on a WebSocket upgrade request without calling WSGI's
+    # start_response, which causes Werkzeug to raise:
+    #   AssertionError: write() before start_response
+    # Disabling upgrades server-side forces all clients to use HTTP long-polling,
+    # which works correctly through the WSGI interface. When running with eventlet
+    # or gevent the flag is left True so real WebSocket is available.
+    _allow_upgrades = _async_mode != 'threading'
     socketio = SocketIO(
         app,
-        async_mode=app.config.get('SOCKETIO_ASYNC_MODE', 'eventlet'),
+        async_mode=_async_mode,
+        allow_upgrades=_allow_upgrades,
         cors_allowed_origins=app.config.get('CORS_ALLOWED_ORIGINS'),
         logger=app.config.get('SOCKETIO_LOGGER', False),
         engineio_logger=app.config.get('ENGINEIO_LOGGER', False)
@@ -116,7 +138,7 @@ def create_app(config_class=Config):
             from auth.auth import has_users
             
             # For API requests, return JSON
-            if request.path.startswith('/api/'):
+            if request.path.startswith('/api/') or '/api/' in request.path:
                 return jsonify({'error': 'Authentication required'}), 401
             
             # For regular requests, redirect to setup or login
@@ -403,6 +425,9 @@ app, socketio = create_app()
 # SocketIO Event Handlers
 @socketio.on('connect')
 def handle_connect():
+    from flask_login import current_user
+    if not current_user.is_authenticated:
+        return False  # Reject unauthenticated WebSocket connections
     logger.info("SocketIO client connected", extra={"sid": request.sid})
     socketio.emit('connection_status', {'status': 'connected', 'message': 'Connected to AuralArchive'})
 
@@ -416,6 +441,20 @@ def handle_ping():
 
 if __name__ == '__main__':
     import sys
+
+    def _should_start_background_services() -> bool:
+        """Start background services only in the active serving process.
+
+        Werkzeug's debug reloader launches a parent watcher process plus a child
+        request-serving process. Background workers must run only in the child,
+        otherwise in-memory status events split across processes and sidebar
+        activity can appear stuck on older states.
+        """
+
+        run_main = os.environ.get('WERKZEUG_RUN_MAIN')
+        if run_main is None:
+            return True
+        return run_main.lower() == 'true'
     
     # CLI argument handling
     if len(sys.argv) > 1 and sys.argv[1] == '--show-paths':
@@ -519,16 +558,21 @@ if __name__ == '__main__':
                 extra={"error": str(exc)},
             )
     
-    # Start background services in separate thread
-    import threading
-    services_thread = threading.Thread(target=initialize_services, daemon=True)
-    services_thread.start()
+    # Start background services in separate thread.
+    # In debug/reloader mode, only the child process should bootstrap workers.
+    if _should_start_background_services():
+        import threading
+
+        services_thread = threading.Thread(target=initialize_services, daemon=True)
+        services_thread.start()
+    else:
+        logger.info("Skipping background service bootstrap in reloader parent process")
     
     # Run with SocketIO support
     listen_port = _get_listen_port()
     socketio.run(
         app,
-        debug=False,
+        debug=True,
         host='0.0.0.0',
         port=listen_port,
         allow_unsafe_werkzeug=True,  # Needed when running with Werkzeug in containers

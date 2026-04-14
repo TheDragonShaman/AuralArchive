@@ -51,7 +51,7 @@ class QBittorrentClient(BaseTorrentClient):
 
 	DEFAULT_TIMEOUT = 15
 	LOGIN_CACHE_SECONDS = 30
-	NEW_TORRENT_POLL_ATTEMPTS = 8
+	NEW_TORRENT_POLL_ATTEMPTS = 15
 	NEW_TORRENT_POLL_INTERVAL = 1.0
 
 	STATE_MAP: Dict[str, TorrentState] = {
@@ -197,9 +197,14 @@ class QBittorrentClient(BaseTorrentClient):
 					"message": "Torrent already existed in qBittorrent",
 				}
 
+			# qBittorrent accepted the request, but the torrent may not be visible in
+			# the info list yet (URL handoff and metadata retrieval can lag). Treat
+			# this as a soft success and let downstream logic resolve/store the hash.
 			return {
-				"success": False,
-				"error": "Torrent submission succeeded but hash could not be determined from qBittorrent",
+				"success": True,
+				"hash": None,
+				"message": "Torrent accepted by qBittorrent; hash pending",
+				"pending_hash": True,
 			}
 		except QBittorrentRequestError as exc:
 			duplicate_hash = None
@@ -227,10 +232,10 @@ class QBittorrentClient(BaseTorrentClient):
 		if not torrent_hash:
 			raise ValueError("torrent_hash is required")
 
-		torrents = self._request_json("torrents/info", params={"hashes": torrent_hash})
-		if not torrents:
+		resolved = self._resolve_torrent_by_identifier(torrent_hash)
+		if not resolved:
 			raise ValueError(f"Torrent {torrent_hash} not found")
-		return self._build_torrent_record(torrents[0])
+		return self._build_torrent_record(resolved)
 
 	def get_torrent_info(self, torrent_hash: str) -> Dict[str, Any]:
 		"""Alias used by legacy cleanup/seeding flows."""
@@ -252,7 +257,12 @@ class QBittorrentClient(BaseTorrentClient):
 		return self._torrent_action(("torrents/resume", "torrents/start"), torrent_hash)
 
 	def remove(self, torrent_hash: str, delete_files: bool = False) -> bool:
-		data = {"hashes": torrent_hash, "deleteFiles": "true" if delete_files else "false"}
+		resolved_hash = self._resolve_action_hash(torrent_hash)
+		if not resolved_hash:
+			self._set_error(f"Torrent {torrent_hash} not found")
+			return False
+
+		data = {"hashes": resolved_hash, "deleteFiles": "true" if delete_files else "false"}
 		try:
 			self._request("POST", "torrents/delete", data=data)
 			return True
@@ -266,7 +276,12 @@ class QBittorrentClient(BaseTorrentClient):
 		if not torrent_hash or not location:
 			return False
 
-		data = {"hashes": torrent_hash, "location": location}
+		resolved_hash = self._resolve_action_hash(torrent_hash)
+		if not resolved_hash:
+			self.logger.warning("Cannot set location because torrent %s was not found", torrent_hash)
+			return False
+
+		data = {"hashes": resolved_hash, "location": location}
 		try:
 			self._request("POST", "torrents/setLocation", data=data)
 			return True
@@ -386,6 +401,13 @@ class QBittorrentClient(BaseTorrentClient):
 		try:
 			response.raise_for_status()
 		except RequestException as exc:
+			response_body = (response.text or "").strip()
+			if len(response_body) > 300:
+				response_body = response_body[:300] + "..."
+			if response_body:
+				raise QBittorrentRequestError(
+					f"HTTP {method} {endpoint} failed: {exc} (response: {response_body})"
+				) from exc
 			raise QBittorrentRequestError(f"HTTP {method} {endpoint} failed: {exc}") from exc
 
 		return response
@@ -571,6 +593,18 @@ class QBittorrentClient(BaseTorrentClient):
 
 		return payload
 
+	@staticmethod
+	def _as_multipart(payload: Dict[str, Any]) -> Dict[str, Any]:
+		"""Convert a flat dict into a requests-compatible multipart fields dict.
+
+		Passing ``files=`` with ``(None, value)`` tuples forces requests to use
+		``multipart/form-data`` encoding for all fields, which is what the
+		qBittorrent ``torrents/add`` endpoint requires even for URL submissions.
+		Plain ``data=`` sends ``application/x-www-form-urlencoded``, which
+		qBittorrent rejects with HTTP 415.
+		"""
+		return {k: (None, str(v)) for k, v in payload.items()}
+
 	def _submit_torrent(self, torrent_data: Any, payload: Dict[str, Any]) -> Response:
 		endpoint = "torrents/add"
 
@@ -578,19 +612,19 @@ class QBittorrentClient(BaseTorrentClient):
 			trimmed = torrent_data.strip()
 			if trimmed.startswith("magnet:") or trimmed.lower().startswith("http"):
 				payload["urls"] = trimmed
-				return self._request("POST", endpoint, data=payload)
+				return self._request("POST", endpoint, files=self._as_multipart(payload))
 
 			path = Path(trimmed)
 			if path.exists():
 				with path.open("rb") as handle:
-					files = {"torrents": (path.name, handle, "application/x-bittorrent")}
-					return self._request("POST", endpoint, data=payload, files=files)
+					files = {**self._as_multipart(payload), "torrents": (path.name, handle, "application/x-bittorrent")}
+					return self._request("POST", endpoint, files=files)
 
 			raise ValueError("Invalid torrent data string provided")
 
 		if isinstance(torrent_data, (bytes, bytearray)):
-			files = {"torrents": ("upload.torrent", torrent_data, "application/x-bittorrent")}
-			return self._request("POST", endpoint, data=payload, files=files)
+			files = {**self._as_multipart(payload), "torrents": ("upload.torrent", torrent_data, "application/x-bittorrent")}
+			return self._request("POST", endpoint, files=files)
 
 		raise ValueError("Unsupported torrent_data type")
 
@@ -634,10 +668,15 @@ class QBittorrentClient(BaseTorrentClient):
 		return None
 
 	def _torrent_action(self, endpoints: Sequence[str], torrent_hash: str) -> bool:
+		resolved_hash = self._resolve_action_hash(torrent_hash)
+		if not resolved_hash:
+			self._set_error(f"Torrent {torrent_hash} not found")
+			return False
+
 		last_error: Optional[Exception] = None
 		for endpoint in endpoints:
 			try:
-				self._request("POST", endpoint, data={"hashes": torrent_hash})
+				self._request("POST", endpoint, data={"hashes": resolved_hash})
 				return True
 			except QBittorrentError as exc:
 				last_error = exc
@@ -646,6 +685,64 @@ class QBittorrentClient(BaseTorrentClient):
 		if last_error:
 			self._set_error(str(last_error))
 		return False
+
+	def _resolve_action_hash(self, torrent_hash: str) -> Optional[str]:
+		"""Resolve user-provided torrent ID to qBittorrent's primary hash field."""
+		if not torrent_hash:
+			return None
+
+		candidate = str(torrent_hash).strip()
+		if not candidate:
+			return None
+
+		# Fast path: provided identifier already works as qB's primary hash.
+		try:
+			torrents = self._request_json("torrents/info", params={"hashes": candidate}) or []
+			if torrents:
+				primary = (torrents[0].get("hash") or "").strip()
+				if primary:
+					return primary
+		except QBittorrentError:
+			pass
+
+		resolved = self._resolve_torrent_by_identifier(candidate)
+		if not resolved:
+			return None
+
+		primary = (resolved.get("hash") or "").strip()
+		return primary or None
+
+	def _resolve_torrent_by_identifier(self, torrent_hash: str) -> Optional[Dict[str, Any]]:
+		"""Find a torrent by primary hash or alternate v1/v2 info-hash fields."""
+		identifier = str(torrent_hash or "").strip().lower()
+		if not identifier:
+			return None
+
+		# First try direct hash filtering for efficiency.
+		try:
+			torrents = self._request_json("torrents/info", params={"hashes": torrent_hash}) or []
+			if torrents:
+				return torrents[0]
+		except QBittorrentError:
+			pass
+
+		# Fallback: scan all torrents and match by hash/infohash_v1/infohash_v2.
+		try:
+			torrents = self._request_json("torrents/info") or []
+		except QBittorrentError:
+			return None
+
+		for torrent in torrents:
+			candidates = {
+				str(torrent.get("hash") or "").strip().lower(),
+				str(torrent.get("infohash_v1") or "").strip().lower(),
+				str(torrent.get("infohash_v2") or "").strip().lower(),
+			}
+			candidates.discard("")
+			if identifier in candidates:
+				return torrent
+
+		return None
 
 	def _resolve_existing_torrent(
 		self, expected_hash: Optional[str], save_path: Optional[str]
@@ -803,6 +900,8 @@ class QBittorrentClient(BaseTorrentClient):
 
 		record = {
 			"hash": data.get("hash"),
+			"infohash_v1": data.get("infohash_v1"),
+			"infohash_v2": data.get("infohash_v2"),
 			"name": data.get("name"),
 			"state": state,
 			"state_enum": mapped_state,

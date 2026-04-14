@@ -493,6 +493,42 @@ class ConfigService:
             )
             return {'enabled': False}
     
+    def get_aggregator_connection(self, aggregator: str) -> Dict[str, Any]:
+        """Get base_url/api_key connection settings for an aggregator (prowlarr/nzbhydra2)."""
+        section = aggregator.lower()
+        try:
+            config = self.load_config()
+            if not config.has_section(section):
+                return {'base_url': '', 'api_key': '', 'verify_ssl': True, 'timeout': 30}
+            return {
+                'base_url': config.get(section, 'base_url', fallback=''),
+                'api_key': config.get(section, 'api_key', fallback=''),
+                'verify_ssl': config.getboolean(section, 'verify_ssl', fallback=True),
+                'timeout': config.getint(section, 'timeout', fallback=30),
+            }
+        except Exception:
+            self.logger.exception("Error reading aggregator connection", extra={"aggregator": aggregator})
+            return {'base_url': '', 'api_key': '', 'verify_ssl': True, 'timeout': 30}
+
+    def set_aggregator_connection(self, aggregator: str, base_url: str, api_key: str,
+                                   verify_ssl: bool = True, timeout: int = 30) -> bool:
+        """Persist base_url/api_key connection settings for an aggregator."""
+        section = aggregator.lower()
+        try:
+            config = self.load_config()
+            if not config.has_section(section):
+                config.add_section(section)
+            config.set(section, 'base_url', (base_url or '').rstrip('/'))
+            config.set(section, 'api_key', api_key or '')
+            config.set(section, 'verify_ssl', str(verify_ssl).lower())
+            config.set(section, 'timeout', str(int(timeout)))
+            self._write_config(config)
+            self.logger.info("Saved aggregator connection", extra={"aggregator": aggregator})
+            return True
+        except Exception:
+            self.logger.exception("Failed to save aggregator connection", extra={"aggregator": aggregator})
+            return False
+
     def get_librivox_config(self) -> Dict[str, Any]:
         """Get LibriVox indexer configuration."""
         try:
@@ -840,6 +876,8 @@ class ConfigService:
             data['categories'] = [cat.strip() for cat in categories.split(',') if cat.strip()]
         else:
             data['categories'] = []
+        data['indexer_id'] = config.getint(section, 'indexer_id', fallback=0)
+        data['indexer_name'] = items.get('indexer_name', '')
         data['verify_ssl'] = config.getboolean(section, 'verify_ssl', fallback=True)
         data['timeout'] = config.getint(section, 'timeout', fallback=30)
 
@@ -881,6 +919,8 @@ class ConfigService:
             categories_value = self._coerce_value(categories)
         normalized['categories'] = categories_value
 
+        normalized['indexer_id'] = self._coerce_value(config_data.get('indexer_id', 0))
+        normalized['indexer_name'] = self._coerce_value(config_data.get('indexer_name', ''))
         normalized['verify_ssl'] = self._coerce_value(config_data.get('verify_ssl', True))
         normalized['timeout'] = self._coerce_value(config_data.get('timeout', 30))
 

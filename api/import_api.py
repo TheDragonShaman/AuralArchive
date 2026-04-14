@@ -32,6 +32,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Set
 
 from flask import Blueprint, jsonify, request  # type: ignore
+from flask_login import current_user
 
 from services.import_service import LocalFileImportCoordinator
 from services.service_manager import get_config_service
@@ -40,6 +41,12 @@ from utils.logger import get_module_logger
 logger = get_module_logger("API.Import")
 
 import_api_bp = Blueprint('import_api', __name__, url_prefix='/api/import')
+
+
+@import_api_bp.before_request
+def _require_auth():
+    if not current_user.is_authenticated:
+        return jsonify({'error': 'Authentication required'}), 401
 
 DEFAULT_IMPORT_DIRECTORY = '/import'
 DEFAULT_EXTENSIONS = {'.m4b', '.mp3', '.m4a', '.aac', '.flac', '.ogg', '.wav'}

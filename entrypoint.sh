@@ -18,12 +18,21 @@ if [ "$PUID" -eq 0 ]; then
     exec python /app/auralarchive/app.py
 fi
 
-# Create group if it doesn't exist
-if ! getent group auralarchive >/dev/null 2>&1; then
+# Handle group creation/selection
+GROUP_NAME="auralarchive"
+
+# Check if a group with the target GID already exists
+EXISTING_GROUP=$(getent group "${PGID}" | cut -d: -f1)
+
+if [ -n "$EXISTING_GROUP" ]; then
+    echo "Group with GID ${PGID} already exists: ${EXISTING_GROUP}"
+    echo "Using existing group '${EXISTING_GROUP}'..."
+    GROUP_NAME="${EXISTING_GROUP}"
+elif ! getent group auralarchive >/dev/null 2>&1; then
     echo "Creating group 'auralarchive' with GID ${PGID}..."
     groupadd -g "${PGID}" auralarchive
 else
-    # Update existing group GID if needed
+    # auralarchive group exists but with different GID
     EXISTING_GID=$(getent group auralarchive | cut -d: -f3)
     if [ "$EXISTING_GID" != "$PGID" ]; then
         echo "Updating group 'auralarchive' GID from ${EXISTING_GID} to ${PGID}..."
@@ -33,14 +42,17 @@ fi
 
 # Create user if it doesn't exist
 if ! id -u auralarchive >/dev/null 2>&1; then
-    echo "Creating user 'auralarchive' with UID ${PUID}..."
-    useradd -u "${PUID}" -g "${PGID}" -d /app -s /bin/bash auralarchive
+    echo "Creating user 'auralarchive' with UID ${PUID} and group '${GROUP_NAME}'..."
+    useradd -u "${PUID}" -g "${GROUP_NAME}" -d /app -s /bin/bash auralarchive
 else
     # Update existing user UID if needed
     EXISTING_UID=$(id -u auralarchive)
     if [ "$EXISTING_UID" != "$PUID" ]; then
         echo "Updating user 'auralarchive' UID from ${EXISTING_UID} to ${PUID}..."
-        usermod -u "${PUID}" auralarchive
+        usermod -u "${PUID}" -g "${GROUP_NAME}" auralarchive
+    else
+        # Make sure user is in the correct group
+        usermod -g "${GROUP_NAME}" auralarchive 2>/dev/null || true
     fi
 fi
 

@@ -37,6 +37,19 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeBulkActions();
     initializeSizeSlider();
     initializeLazyGrid();
+
+    // Auto-open book detail modal when navigated from dashboard (?book=<id>)
+    const params = new URLSearchParams(window.location.search);
+    const bookParam = params.get('book');
+    if (bookParam) {
+        const bookId = parseInt(bookParam, 10);
+        if (!isNaN(bookId)) {
+            // Wait for lazy grid to finish its first render before opening
+            setTimeout(() => openBookModal(bookId), 300);
+        }
+        // Clean up URL so refreshing doesn't re-open the modal
+        history.replaceState(null, '', window.location.pathname);
+    }
 });
 
 // ==============================================
@@ -385,7 +398,7 @@ function createBookCard(book) {
                     <button class="btn btn-soft btn-primary btn-xs shadow-lg" onclick="event.stopPropagation(); openBookModal(${book.id})" title="Book Details">
                         <i class="fas fa-info"></i>
                     </button>
-                    <button class="btn btn-soft btn-accent btn-xs shadow-lg" onclick="event.stopPropagation(); searchForBook(${book.id})" title="Interactive Download">
+                    <button class="btn btn-soft btn-accent btn-xs shadow-lg" onclick="event.stopPropagation(); searchForBook(${book.id}, this.dataset.title, this.dataset.author)" data-title="${escapeHtml(book.title || '')}" data-author="${escapeHtml(book.author || '')}" title="Interactive Download">
                         <i class="fas fa-download"></i>
                     </button>
                     <button class="btn btn-soft btn-warning btn-xs shadow-lg" onclick="event.stopPropagation(); autoDownloadBook(${book.id}, this)" title="Auto Download">
@@ -624,7 +637,7 @@ function displayBookModal(book) {
             <button class="btn btn-soft btn-primary btn-md" onclick="updateBookMetadata(${book.id})">
                 <i class="fas fa-sync"></i> Update Metadata
             </button>
-            <button class="btn btn-soft btn-accent btn-md" onclick="searchForBook(${book.id})">
+            <button class="btn btn-soft btn-accent btn-md" onclick="searchForBook(${book.id}, this.dataset.title, this.dataset.author)" data-title="${escapeHtml(book.title || '')}" data-author="${escapeHtml(book.author || '')}">
                 <i class="fas fa-search"></i> Interactive Download
             </button>
             <button class="btn btn-soft btn-warning btn-md" onclick="autoDownloadBook(${book.id}, this)">
@@ -857,7 +870,7 @@ async function updateBookMetadata(bookId) {
     }
 }
 
-async function searchForBook(bookId) {
+async function searchForBook(bookId, bookTitle = '', bookAuthor = '') {
     const modal = document.getElementById('searchModal');
     const loading = document.getElementById('searchLoading');
     const results = document.getElementById('searchResults');
@@ -869,6 +882,10 @@ async function searchForBook(bookId) {
     results.classList.add('hidden');
     noResults.classList.add('hidden');
     error.classList.add('hidden');
+
+    // Show known title/author immediately so the header is correct during loading
+    document.getElementById('searchBookTitle').textContent = bookTitle;
+    document.getElementById('searchBookAuthor').textContent = bookAuthor;
     
     // Show modal
     modal.showModal();
@@ -1373,7 +1390,7 @@ window.autoDownloadBook = autoDownloadBook;
 // ==============================================
 // Real-time sync notifications
 // ==============================================
-const socket = typeof window.io === 'function' ? window.io() : null;
+const socket = window._appSocket || null;
 if (socket) {
     socket.on('abs_sync_progress', (data) => {
         // Only show notifications when sync completes

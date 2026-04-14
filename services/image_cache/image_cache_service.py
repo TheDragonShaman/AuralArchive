@@ -111,9 +111,29 @@ class ImageCacheService:
         
         return extension_map.get(content_type, '.jpg')
     
+    def _resolve_static_path(self, url: str) -> Optional[Path]:
+        """Return an on-disk Path if the URL points to a local /static/ file, else None."""
+        if not url.startswith('/static/'):
+            return None
+        app_root = Path(__file__).parent.parent.parent
+        candidate = app_root / url.lstrip('/')
+        return candidate if candidate.is_file() else None
+
     def _download_image(self, url: str, cache_path: Path) -> bool:
         """Download an image from URL to cache path."""
         try:
+            # If the URL points to a file already on disk (e.g. already-cached
+            # /static/cache/local/... path stored in the DB), copy it directly
+            # rather than making an HTTP request back to ourselves.
+            local_source = self._resolve_static_path(url)
+            if local_source:
+                if local_source == cache_path:
+                    return True  # Source and destination are the same file
+                import shutil
+                shutil.copy2(local_source, cache_path)
+                self.logger.debug(f"Image copied from local path: {local_source} -> {cache_path}")
+                return True
+
             # Normalize the URL to handle relative paths
             full_url = self._normalize_url(url)
             self.logger.debug(f"Downloading image: {url} -> {full_url}")

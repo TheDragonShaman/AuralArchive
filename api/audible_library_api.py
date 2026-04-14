@@ -35,6 +35,7 @@ import threading
 from typing import Any, Dict
 
 from flask import Blueprint, jsonify, current_app, request
+from flask_login import current_user
 
 from utils.logger import get_module_logger
 
@@ -48,6 +49,13 @@ from services.audible.audible_metadata_sync_service.audible_metadata_sync_servic
 
 # Create blueprint
 audible_library_api = Blueprint('audible_library_api', __name__, url_prefix='/api/audible/library')
+
+
+@audible_library_api.before_request
+def _require_auth():
+    if not current_user.is_authenticated:
+        return jsonify({'error': 'Authentication required'}), 401
+
 
 logger = get_module_logger("API.Audible.Library")
 

@@ -88,7 +88,9 @@ Connect to multiple indexers and direct download sources for comprehensive audio
 
 AuralArchive supports various popular indexers, allowing you to search across multiple sources simultaneously. Configure your preferred indexers through the settings interface with secure credential storage. The system intelligently queries all enabled sources and aggregates results for seamless browsing.
 
-Current indexer application support is limited to Jackett for now. Direct Indexers are the preferred method. They are not dependent on supporting programs and have superior API communication for more reliable searches. Current download client support is limited to qBittorrent only. Support will be expanded over time for additional programs. 
+Direct Indexers are the preferred method — they communicate directly with the indexer API without requiring a third-party aggregator application. Supported indexers include Newznab and Torznab compatible sources (including NZBHydra2 and Prowlarr), as well as Jackett.
+
+**Download client support:** qBittorrent is the primary supported client. SABnzbd and NZBGet are also supported for NZB-based downloads. **NZB client support (SABnzbd and NZBGet) is experimental** — core functionality works but edge cases may exist. Please report any issues.
 
 ### Automatic Downloads
 

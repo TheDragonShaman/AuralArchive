@@ -1100,7 +1100,7 @@
     }
 
 
-    const socket = typeof window.io === 'function' ? window.io() : null;
+    const socket = window._appSocket || null;
     if (socket) {
         socket.on('download:progress', (event) => {
             if (!event || event.download_id === undefined) {

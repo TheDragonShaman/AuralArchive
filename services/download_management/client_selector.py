@@ -17,6 +17,7 @@ import re
 from typing import Optional, Dict, Any
 
 from utils.logger import get_module_logger
+from utils.path_resolver import get_path_resolver
 
 
 class ClientSelector:
@@ -47,12 +48,36 @@ class ClientSelector:
             self._config_service = get_config_service()
         return self._config_service
 
+    def invalidate_cache(self, client_name: Optional[str] = None):
+        """Invalidate cached client instances/config and close stale connections."""
+        if client_name:
+            targets = [client_name]
+        else:
+            targets = list(set(self._client_cache.keys()) | set(self._client_configs.keys()))
+
+        for target in targets:
+            client = self._client_cache.pop(target, None)
+            self._client_configs.pop(target, None)
+
+            if not client:
+                continue
+
+            disconnect = getattr(client, "disconnect", None)
+            if callable(disconnect):
+                try:
+                    disconnect()
+                except Exception as exc:
+                    self.logger.debug(
+                        "Ignoring client disconnect failure during cache invalidation",
+                        extra={"client": target, "error": str(exc)},
+                    )
+
     def select_client(self, download_type: str) -> Optional[str]:
         """
         Select best client for the provided download type.
 
         Args:
-            download_type: "torrent" or "magnet"
+            download_type: "torrent", "magnet", or "nzb"
 
         Returns:
             The name of the client to use, or None if unsupported
@@ -60,6 +85,9 @@ class ClientSelector:
 
         if download_type in ("torrent", "magnet"):
             return self._select_torrent_client()
+
+        if download_type == "nzb":
+            return self._select_nzb_client()
 
         self.logger.error("Unknown download type", extra={
             "download_type": download_type
@@ -79,6 +107,20 @@ class ClientSelector:
             "client": "qbittorrent"
         })
         return "qbittorrent"
+
+    def _select_nzb_client(self) -> Optional[str]:
+        """Select best available NZB client (SABnzbd preferred, then NZBGet)."""
+
+        if self._is_sabnzbd_enabled():
+            self.logger.debug("Selecting NZB client", extra={"client": "sabnzbd"})
+            return "sabnzbd"
+
+        if self._is_nzbget_enabled():
+            self.logger.debug("Selecting NZB client", extra={"client": "nzbget"})
+            return "nzbget"
+
+        self.logger.debug("No NZB client enabled")
+        return None
 
     def get_client(self, client_name: str):
         """
@@ -105,6 +147,32 @@ class ClientSelector:
                 self._client_configs[client_name] = config
                 return client
 
+            if client_name == "sabnzbd":
+                from services.download_clients.sabnzbd_client import SABnzbdClient
+
+                config = self._load_client_config("sabnzbd")
+                if not config.get("enabled"):
+                    self.logger.debug("SABnzbd is disabled; skipping client init")
+                    return None
+                client = SABnzbdClient(config)
+                client.connect()
+                self._client_cache[client_name] = client
+                self._client_configs[client_name] = config
+                return client
+
+            if client_name == "nzbget":
+                from services.download_clients.nzbget_client import NZBGetClient
+
+                config = self._load_client_config("nzbget")
+                if not config.get("enabled"):
+                    self.logger.debug("NZBGet is disabled; skipping client init")
+                    return None
+                client = NZBGetClient(config)
+                client.connect()
+                self._client_cache[client_name] = client
+                self._client_configs[client_name] = config
+                return client
+
             if client_name in ("deluge", "transmission"):
                 self.logger.warning("Client not yet implemented", extra={
                     "client": client_name
@@ -123,8 +191,11 @@ class ClientSelector:
             })
             return None
 
-    def get_client_config(self, client_name: str) -> Dict[str, Any]:
+    def get_client_config(self, client_name: str, *, refresh: bool = False) -> Dict[str, Any]:
         """Return cached configuration for a download client."""
+
+        if refresh:
+            self._client_configs.pop(client_name, None)
 
         if client_name in self._client_configs:
             return self._client_configs[client_name]
@@ -257,8 +328,117 @@ class ClientSelector:
                 "path_mappings": [],
             }
 
+        if client_name == "sabnzbd":
+            config_parser = config_service.load_config()
+            section_name = "sabnzbd"
+            dm_section = config_service.get_section("download_management") or {}
+            dm_downloads_path = str(dm_section.get("downloads_path") or "").strip()
+            default_local_downloads = dm_downloads_path or get_path_resolver().get_downloads_dir()
+
+            if config_parser.has_section(section_name):
+                section = config_parser[section_name]
+
+                def _get(option: str, fallback: str = "") -> str:
+                    return section.get(option, fallback)
+
+                def _get_bool(option: str, fallback: bool = False) -> bool:
+                    try:
+                        return section.getboolean(option, fallback=fallback)
+                    except ValueError:
+                        return fallback
+
+                def _clean_path(value: Optional[str]) -> str:
+                    if not value:
+                        return ""
+                    return str(value).strip()
+
+                remote_path = _clean_path(
+                    _get("remote_path")
+                    or _get("download_path_remote")
+                    or "/downloads"
+                )
+                local_path = _clean_path(
+                    _get("local_path")
+                    or _get("download_path_local")
+                    or dm_downloads_path
+                )
+
+                return {
+                    "enabled":     _get_bool("enabled", False),
+                    "host":        _get("host", "localhost"),
+                    "port":        int(_get("port", "8080") or 8080),
+                    "api_key":     _get("api_key", ""),
+                    "use_ssl":     _get_bool("use_ssl", False),
+                    "verify_cert": _get_bool("verify_cert", True),
+                    "category":    _get("category", ""),
+                    "url_base":    _get("url_base", "/sabnzbd/api"),
+                    "remote_path": remote_path,
+                    "local_path":  local_path,
+                }
+
+            self.logger.warning("SABnzbd config not found, using defaults")
+            return {
+                "enabled": False,
+                "host": "localhost",
+                "port": 8080,
+                "api_key": "",
+                "use_ssl": False,
+                "verify_cert": True,
+                "category": "",
+                "url_base": "/sabnzbd/api",
+                "remote_path": "/downloads",
+                "local_path": default_local_downloads,
+            }
+
+        if client_name == "nzbget":
+            config_parser = config_service.load_config()
+            section_name = "nzbget"
+
+            if config_parser.has_section(section_name):
+                section = config_parser[section_name]
+
+                def _get(option: str, fallback: str = "") -> str:
+                    return section.get(option, fallback)
+
+                def _get_bool(option: str, fallback: bool = False) -> bool:
+                    try:
+                        return section.getboolean(option, fallback=fallback)
+                    except ValueError:
+                        return fallback
+
+                return {
+                    "enabled":     _get_bool("enabled", False),
+                    "host":        _get("host", "localhost"),
+                    "port":        int(_get("port", "6789") or 6789),
+                    "username":    _get("username", "nzbget"),
+                    "password":    _get("password", "tegbzn6789"),
+                    "use_ssl":     _get_bool("use_ssl", False),
+                    "verify_cert": _get_bool("verify_cert", True),
+                    "category":    _get("category", ""),
+                }
+
+            self.logger.warning("NZBGet config not found, using defaults")
+            return {
+                "enabled": False,
+                "host": "localhost",
+                "port": 6789,
+                "username": "nzbget",
+                "password": "tegbzn6789",
+                "use_ssl": False,
+                "verify_cert": True,
+                "category": "",
+            }
+
         return {}
 
     def _is_qbittorrent_enabled(self) -> bool:
         config = self._load_client_config("qbittorrent")
+        return bool(config.get("enabled"))
+
+    def _is_sabnzbd_enabled(self) -> bool:
+        config = self._load_client_config("sabnzbd")
+        return bool(config.get("enabled"))
+
+    def _is_nzbget_enabled(self) -> bool:
+        config = self._load_client_config("nzbget")
         return bool(config.get("enabled"))

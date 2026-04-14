@@ -16,7 +16,6 @@ ENV/
 database/auralarchive_database.db
 
 # Config and auth files - SENSITIVE
-auth/
 config/config.txt
 config/audible_auth.json
 config/users.json
@@ -77,5 +76,8 @@ review-index.md
 ROADMAP.md
 
 # Docker and environment files
-.dockerignore
 config/users.json
+
+# YAML files - may contain local paths, credentials, or environment-specific config
+*.yml
+*.yaml

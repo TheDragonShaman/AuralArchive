@@ -39,6 +39,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from flask import Blueprint, request, jsonify
+from flask_login import current_user
 
 from utils.logger import get_module_logger
 from utils.search_normalization import normalize_search_terms
@@ -53,6 +54,13 @@ logger = get_module_logger("API.Manual.Download")
 
 # Create blueprint
 manual_search_api_bp = Blueprint('manual_search_api', __name__)
+
+
+@manual_search_api_bp.before_request
+def _require_auth():
+    if not current_user.is_authenticated:
+        return jsonify({'error': 'Authentication required'}), 401
+
 
 # Global service instances (will be initialized in app.py)
 automatic_search_service = None
@@ -671,7 +679,7 @@ def initiate_manual_download():
             'file_format': result.get('format', 'M4B'),
             'file_size': result.get('size_bytes', 0),
             'quality_score': result.get('quality_assessment', {}).get('total_score', 0) if isinstance(result.get('quality_assessment'), dict) else 0,
-            'download_type': 'torrent'
+            'download_type': result.get('download_type') or result.get('result_type') or result.get('protocol') or 'torrent',
         }
         
         # Add to download queue with the search result

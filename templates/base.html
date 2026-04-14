@@ -272,6 +272,62 @@
             transform: translateX(2px);
         }
 
+        /* ── Settings Sub-Navigation (Sonarr style) ── */
+        .settings-sub-link {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            border-radius: 0.5rem;
+            padding: 0.35rem 0.75rem 0.35rem 1.5rem;
+            margin-left: 1rem;
+            color: var(--color-base-content, oklch(92% 0.012 255));
+            opacity: 0.5;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            text-decoration: none;
+            transition: all 0.15s ease;
+        }
+        .settings-sub-link:hover {
+            opacity: 1;
+            background: var(--color-base-100, oklch(28% 0.045 255));
+        }
+        .settings-sub-link.active {
+            color: var(--color-primary, oklch(58% 0.18 276));
+            opacity: 1;
+            font-weight: 600;
+            background: var(--color-base-100, oklch(28% 0.045 255));
+        }
+        .settings-sub-link i {
+            font-size: 10px;
+            width: 1rem;
+            text-align: center;
+        }
+
+        /* ── Settings Panel Visibility ── */
+        .settings-panel {
+            display: none;
+            width: 100%;
+        }
+        .settings-panel.active {
+            display: block;
+            width: 100%;
+        }
+
+        /* ── Settings Save Toolbar ── */
+        .save-toolbar {
+            position: sticky;
+            top: 0;
+            z-index: 40;
+            background: var(--color-base-200, oklch(23% 0.04 255));
+            border-bottom: 1px solid color-mix(in oklch, var(--color-base-content) 10%, transparent);
+            padding: 0.625rem 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            backdrop-filter: blur(12px);
+        }
+
         .layout-drawer-toggle {
             display: none;
         }
@@ -464,13 +520,38 @@
                             </a>
                         </li>
                     </ul>
-                    
-                    <!-- Logout Section -->
-                    <div class="mt-auto pt-4 border-t border-base-content/10">
-                        <a href="/auth/logout" class="sidebar-link flex items-center gap-2 rounded-lg px-3 py-2 text-base-content/70 hover:text-error hover:bg-error/10">
-                            <i class="fas fa-sign-out-alt text-sm"></i>
-                            <span class="text-xs uppercase tracking-wide">Logout</span>
+
+                    {% if 'settings' in request.endpoint %}
+                    <!-- Settings Sub-Navigation (Sonarr style: nested under Settings) -->
+                    <div class="settings-subnav mt-1 flex flex-col gap-0.5" id="settingsSubnav">
+                        <a href="#" class="settings-sub-link active" data-settings-section="general">
+                            <i class="fas fa-sliders-h"></i><span>General</span>
                         </a>
+                        <a href="#" class="settings-sub-link" data-settings-section="audiobookshelf">
+                            <i class="fas fa-headphones"></i><span>AudioBookShelf</span>
+                        </a>
+                        <a href="#" class="settings-sub-link" data-settings-section="audible">
+                            <i class="fas fa-book-reader"></i><span>Audible</span>
+                        </a>
+                        <a href="#" class="settings-sub-link" data-settings-section="download-clients">
+                            <i class="fas fa-cloud-arrow-down"></i><span>Download Clients</span>
+                        </a>
+                        <a href="#" class="settings-sub-link" data-settings-section="indexers">
+                            <i class="fas fa-sitemap"></i><span>Indexers</span>
+                        </a>
+                        <a href="#" class="settings-sub-link" data-settings-section="media">
+                            <i class="fas fa-folder-tree"></i><span>Media Management</span>
+                        </a>
+                    </div>
+                    {% endif %}
+
+                    <!-- Activity Panel -->
+                    <div id="sidebarActivity" class="mt-3 pt-3 border-t border-base-content/10" style="display:none">
+                        <div class="flex items-center justify-between mb-2 px-1">
+                            <span class="text-xs uppercase tracking-wide text-base-content/40">Activity</span>
+                            <span id="sidebarActivityQueue" class="text-xs text-base-content/30" style="display:none"></span>
+                        </div>
+                        <ul id="sidebarActivityList" class="flex flex-col gap-1"></ul>
                     </div>
                 </nav>
 
@@ -486,7 +567,7 @@
                 </div>
                 <div class="flex-1 flex items-center justify-between gap-4">
                     <span class="hidden sm:inline text-sm font-semibold uppercase tracking-[0.35em] text-base-content/60">AuralArchive</span>
-                    <div class="flex items-center gap-2">
+                    <div class="flex items-center gap-3">
                         <form action="{{ url_for('search.search_page') }}" method="get" class="form-control hidden md:block">
                             <div class="join">
                                 <input type="search" name="q" value="{{ request.args.get('q', '') }}" placeholder="Quest for your next tale..." class="input input-bordered input-sm bg-base-100 join-item w-64" aria-label="Search the catalog" />
@@ -495,6 +576,25 @@
                                 </button>
                             </div>
                         </form>
+
+                        <!-- User profile menu -->
+                        <div class="dropdown dropdown-end">
+                            <button tabindex="0" class="btn btn-ghost btn-circle" aria-label="User menu">
+                                <div class="avatar avatar-placeholder">
+                                    <div class="bg-primary text-primary-content rounded-full w-8 text-xs font-bold">
+                                        <span>{{ (current_user.username[0] | upper) if current_user.is_authenticated else '?' }}</span>
+                                    </div>
+                                </div>
+                            </button>
+                            <ul tabindex="0" class="dropdown-content menu menu-sm bg-base-200 border border-base-content/10 rounded-box z-50 mt-2 w-48 p-1 shadow-lg">
+                                <li class="menu-title px-3 py-1.5">
+                                    <span class="text-xs font-semibold text-base-content">{{ current_user.username if current_user.is_authenticated else 'Guest' }}</span>
+                                </li>
+                                <li><a href="#" class="text-xs text-base-content/70"><i class="fas fa-user-circle w-4"></i> Profile</a></li>
+                                <li><hr class="my-1 border-base-content/10"></li>
+                                <li><a href="/auth/logout" class="text-xs text-error/80 hover:text-error hover:bg-error/10"><i class="fas fa-sign-out-alt w-4"></i> Logout</a></li>
+                            </ul>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -510,31 +610,18 @@
 
     <div class="toast toast-top toast-end z-50" id="toastContainer"></div>
 
-    <div class="status-bar-shell" aria-live="polite">
-        <div class="alert alert-neutral shadow-lg status-bar-alert" id="statusBar" role="status">
-            <div class="status-bar-content w-full">
-                <div class="status-bar-track">
-                    <div class="status-bar-left">
-                        <div class="badge badge-sm" id="statusBarLevel">INFO</div>
-                        <div class="status-bar-label">
-                            <i class="fas fa-wave-square"></i>
-                            <span>System Activity</span>
-                        </div>
-                        <span class="status-bar-separator" aria-hidden="true">•</span>
-                        <div class="status-bar-message" id="statusBarMessage">Monitoring logs…</div>
-                    </div>
-                    <div class="status-bar-right" id="statusBarMeta">
-                        <span id="statusBarSource">No events yet</span>
-                        <span class="status-bar-separator" aria-hidden="true">•</span>
-                        <span id="statusBarTimestamp">—</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- Scripts -->
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script>
+        // Shared Socket.IO connection — one instance per page, reused by all scripts.
+        // Polling-only transport prevents WebSocket upgrade attempts on the Werkzeug dev
+        // server (threading async_mode). Socket.IO v4 caches the Manager by URL, so any
+        // subsequent io() call (downloads.js, library.js, settings.js) returns this same
+        // socket rather than opening a second connection.
+        window._appSocket = (typeof window.io === 'function')
+            ? window.io({ transports: ['polling'], upgrade: false })
+            : null;
+    </script>
     <script>
         // Theme Management
         function setTheme(theme, options = {}) {

@@ -21,11 +21,19 @@ Endpoints:
 """
 
 from flask import Blueprint, request, jsonify
+from flask_login import current_user
 from services.audible.audible_service_manager import get_audible_manager
 from utils.logger import get_module_logger
 
 # Create blueprint
 download_progress_api = Blueprint('download_progress_api', __name__)
+
+
+@download_progress_api.before_request
+def _require_auth():
+    if not current_user.is_authenticated:
+        return jsonify({'error': 'Authentication required'}), 401
+
 
 # Initialize logger
 logger = get_module_logger("API.Download.Progress")

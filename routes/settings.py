@@ -120,6 +120,44 @@ def test_client_connection(client_key: str, client_config: dict) -> dict:
                     'type': client_key
                 }
         
+        elif client_key == 'sabnzbd':
+            from services.download_clients.sabnzbd_client import SABnzbdClient
+            result = SABnzbdClient(client_config).test_connection()
+            if result["success"]:
+                version = result.get("version", "unknown")
+                return {
+                    'success': True,
+                    'connected': True,
+                    'message': f"SABnzbd connection successful (v{version})",
+                    'type': client_key
+                }
+            else:
+                return {
+                    'success': False,
+                    'connected': False,
+                    'message': result.get("error") or "SABnzbd connection failed",
+                    'type': client_key
+                }
+
+        elif client_key == 'nzbget':
+            from services.download_clients.nzbget_client import NZBGetClient
+            result = NZBGetClient(client_config).test_connection()
+            if result["success"]:
+                version = result.get("version", "unknown")
+                return {
+                    'success': True,
+                    'connected': True,
+                    'message': f"NZBGet connection successful (v{version})",
+                    'type': client_key
+                }
+            else:
+                return {
+                    'success': False,
+                    'connected': False,
+                    'message': result.get("error") or "NZBGet connection failed",
+                    'type': client_key
+                }
+
         else:
             return {
                 'success': False,
@@ -127,12 +165,12 @@ def test_client_connection(client_key: str, client_config: dict) -> dict:
                 'message': f"Unsupported client type: {client_key}",
                 'type': client_key
             }
-            
+
     except requests.exceptions.ConnectionError as e:
         return {
             'success': False,
             'connected': False,
-            'message': f"Cannot connect to qBittorrent server: {str(e)}",
+            'message': f"Cannot connect to {client_key} server: {str(e)}",
             'type': client_key
         }
     except requests.exceptions.Timeout:
@@ -204,6 +242,28 @@ def _build_client_config_from_payload(client_key: str, payload: dict) -> dict:
             'transmission_port': int(payload.get('port', 9091) or 9091),
             'transmission_username': payload.get('username') or payload.get('transmission_username') or '',
             'transmission_password': payload.get('password') or payload.get('transmission_password') or ''
+        })
+    elif client_key == 'sabnzbd':
+        normalized.update({
+            'host': payload.get('host') or '127.0.0.1',
+            'port': int(payload.get('port', 8080) or 8080),
+            'api_key': payload.get('api_key') or '',
+            'url_base': payload.get('url_base') or '/api',
+            'use_ssl': bool(payload.get('use_ssl', False)),
+            'verify_cert': bool(payload.get('verify_cert', True)),
+            'category': payload.get('category') or '',
+            'remote_path': payload.get('remote_path') or '',
+            'local_path': payload.get('local_path') or '',
+        })
+    elif client_key == 'nzbget':
+        normalized.update({
+            'host': payload.get('host') or '127.0.0.1',
+            'port': int(payload.get('port', 6789) or 6789),
+            'username': payload.get('username') or '',
+            'password': payload.get('password') or '',
+            'use_ssl': bool(payload.get('use_ssl', False)),
+            'verify_cert': bool(payload.get('verify_cert', True)),
+            'category': payload.get('category') or '',
         })
 
     return normalized
@@ -1132,7 +1192,42 @@ def get_clients():
                 'username': rtorrent_config.get('rtorrent_username', ''),
                 'auto_download': config_service.get_config_bool('rtorrent', 'auto_download', False)
             }
-        
+
+        # Check SABnzbd
+        sabnzbd_config = config_data.get('sabnzbd', {})
+        if sabnzbd_config.get('host') and sabnzbd_config.get('api_key'):
+            clients['sabnzbd'] = {
+                'name': 'SABnzbd',
+                'type': 'sabnzbd',
+                'configured': True,
+                'host': sabnzbd_config.get('host', ''),
+                'port': sabnzbd_config.get('port', '8080'),
+                'api_key': sabnzbd_config.get('api_key', ''),
+                'url_base': sabnzbd_config.get('url_base', '/sabnzbd/api'),
+                'use_ssl': sabnzbd_config.get('use_ssl', False),
+                'verify_cert': sabnzbd_config.get('verify_cert', True),
+                'category': sabnzbd_config.get('category', ''),
+                'remote_path': sabnzbd_config.get('remote_path', ''),
+                'local_path': sabnzbd_config.get('local_path', ''),
+                'auto_download': config_service.get_config_bool('sabnzbd', 'auto_download', False)
+            }
+
+        # Check NZBGet
+        nzbget_config = config_data.get('nzbget', {})
+        if nzbget_config.get('host') and nzbget_config.get('username'):
+            clients['nzbget'] = {
+                'name': 'NZBGet',
+                'type': 'nzbget',
+                'configured': True,
+                'host': nzbget_config.get('host', ''),
+                'port': nzbget_config.get('port', '6789'),
+                'username': nzbget_config.get('username', ''),
+                'use_ssl': nzbget_config.get('use_ssl', False),
+                'verify_cert': nzbget_config.get('verify_cert', True),
+                'category': nzbget_config.get('category', ''),
+                'auto_download': config_service.get_config_bool('nzbget', 'auto_download', False)
+            }
+
         return jsonify({
             'success': True,
             'clients': clients
@@ -1250,7 +1345,7 @@ def update_client(client_key):
         data = request.get_json() or {}
 
         # Valid client types
-        valid_clients = ['qbittorrent', 'deluge', 'transmission']
+        valid_clients = ['qbittorrent', 'deluge', 'transmission', 'sabnzbd', 'nzbget']
         if client_key not in valid_clients:
             return jsonify({
                 'success': False,
@@ -1302,6 +1397,13 @@ def update_client(client_key):
                     'success': False,
                     'error': 'Failed to update client configuration'
                 }), 500
+
+        try:
+            dm_service = get_download_management_service()
+            if hasattr(dm_service, 'reload_configuration'):
+                dm_service.reload_configuration()
+        except Exception as reload_exc:  # pragma: no cover - defensive logging only
+            logger.warning(f"Failed to reload download management service after client update: {reload_exc}")
 
         logger.info(f"Updated {client_key} client configuration")
         

@@ -41,6 +41,34 @@ class EventEmitter:
         self._status_lock = Lock()
         self._status_events = {}
         self._download_lookup: Optional[Callable[[int], Optional[dict]]] = None
+        self._progress_buckets = {
+            'downloading': {},
+            'converting': {},
+        }
+        self._state_order = {
+            'queued': 10,
+            'searching': 20,
+            'found': 30,
+            'running': 35,
+            'downloading': 40,
+            'audible_downloading': 40,
+            'paused': 45,
+            'complete': 50,
+            'converting': 60,
+            'converted': 70,
+            'processing': 75,
+            'importing': 80,
+            'imported': 90,
+            'seeding': 100,
+            'seeding_complete': 110,
+            'completed': 120,
+            'search_failed': 130,
+            'download_failed': 130,
+            'conversion_failed': 130,
+            'import_failed': 130,
+            'failed': 130,
+            'cancelled': 130,
+        }
 
     # ------------------------------------------------------------------
     # Wiring helpers
@@ -77,6 +105,32 @@ class EventEmitter:
             or details.get('book_asin')
             or f"Download #{download_id}"
         )
+
+    def _resolve_title(self, download_id: int, override: Optional[str] = None) -> str:
+        title = (override or '').strip() if isinstance(override, str) else ''
+        return title or self._title_for_download(download_id)
+
+    @staticmethod
+    def _progress_bucket(progress: float) -> int:
+        value = max(0.0, min(100.0, float(progress)))
+        if value >= 100.0:
+            return 10
+        return int(value // 10)
+
+    def _claim_progress_bucket(self, kind: str, download_id: int, progress: float) -> Optional[int]:
+        buckets = self._progress_buckets.get(kind)
+        if buckets is None:
+            return None
+        bucket = self._progress_bucket(progress)
+        previous = buckets.get(download_id, -1)
+        if bucket > previous:
+            buckets[download_id] = bucket
+            return bucket
+        return None
+
+    def _reset_progress_tracking(self, download_id: int):
+        self._progress_buckets['downloading'].pop(download_id, None)
+        self._progress_buckets['converting'].pop(download_id, None)
 
     def _ensure_status_event(self, download_id: int, *, state: str, message: str) -> Optional[int]:
         service = self._get_status_service()
@@ -123,6 +177,35 @@ class EventEmitter:
         payload = {k: v for k, v in updates.items() if v is not None}
         if metadata is not None:
             payload['metadata'] = metadata
+
+        # Guard against out-of-order async updates (e.g. delayed progress callbacks)
+        # that would regress lifecycle state after we've already advanced.
+        new_state = str(payload.get('state') or '').lower()
+        try:
+            current = service.get_event(event_id) if event_id else None
+        except Exception:
+            current = None
+        current_state = str((current or {}).get('state') or '').lower()
+
+        if current_state and new_state and current_state != new_state:
+            # Allow explicit failure/cancellation and pause/resume transitions.
+            if new_state not in {'failed', 'cancelled'}:
+                pause_resume = (
+                    (current_state == 'downloading' and new_state == 'paused')
+                    or (current_state == 'paused' and new_state == 'downloading')
+                )
+                if not pause_resume:
+                    cur_rank = self._state_order.get(current_state, 0)
+                    new_rank = self._state_order.get(new_state, 0)
+                    if new_rank and cur_rank and new_rank < cur_rank:
+                        self.logger.debug(
+                            "Ignoring regressive status update for download %s: %s -> %s",
+                            download_id,
+                            current_state,
+                            new_state,
+                        )
+                        return
+
         service.update_event(event_id, **payload)
 
     def _complete_status_event(self, download_id: int, *, success: bool, message: Optional[str] = None, error: Optional[str] = None):
@@ -139,23 +222,19 @@ class EventEmitter:
             service.fail_event(event_id, message=message, error=error)
         else:
             service.cancel_event(event_id, message=message)
+        self._reset_progress_tracking(download_id)
         with self._status_lock:
             self._status_events.pop(download_id, None)
     
     def _emit(self, event: str, data: dict):
-        """
-        Emit SocketIO event.
-        
-        Args:
-            event: Event name
-            data: Event payload
-        """
+        """Emit a SocketIO event from any thread (wraps in app context)."""
         try:
-            from app import socketio
-            socketio.emit(event, data)
-            self.logger.debug(f"Emitted event: {event}")
-        except Exception as e:
-            self.logger.error(f"Error emitting event {event}: {e}")
+            from app import app, socketio
+            with app.app_context():
+                socketio.emit(event, data)
+            self.logger.debug("Emitted socket event: %s", event)
+        except Exception as exc:
+            self.logger.error("Error emitting socket event %s: %s", event, exc)
     
     def emit_queue_added(self, download_id: int, book_asin: str):
         """Emit queue item added event."""
@@ -175,13 +254,12 @@ class EventEmitter:
         self._emit('download:started', {
             'download_id': download_id
         })
-        details = self._get_download_details(download_id)
-        client = details.get('download_client') or 'client'
         title = self._title_for_download(download_id)
+        self._progress_buckets['downloading'][download_id] = -1
         self._update_status_event(
             download_id,
             state='downloading',
-            message=f'Started downloading {title} via {client}',
+            message=f'Downloading {title}',
             progress=0.0,
             metadata={'status': 'DOWNLOADING'}
         )
@@ -196,29 +274,57 @@ class EventEmitter:
             payload['message'] = message
         self._emit('download:progress', payload)
         title = self._title_for_download(download_id)
+        milestone = self._claim_progress_bucket('downloading', download_id, float(progress))
+        milestone_message = None
+        if milestone is not None:
+            milestone_message = f'Downloading {title} - {milestone * 10}%'
         self._update_status_event(
             download_id,
             state='downloading',
-            message=message or f'Downloading {title}…',
+            message=milestone_message,
             progress=float(progress),
             metadata={'status': 'DOWNLOADING'}
         )
     
-    def emit_download_completed(self, download_id: int):
-        """Emit download completed event."""
-        self._emit('download:completed', {
-            'download_id': download_id
-        })
+    def emit_complete(self, download_id: int, *_args, **_kwargs):
+        """File downloaded (COMPLETE state) - pipeline continues to conversion/import.
+
+        Updates the activity panel entry but does NOT close it; subsequent state
+        transitions (converting, importing...) will update the same entry.
+        """
+        self._emit('download:state_changed', {'download_id': download_id, 'new_status': 'COMPLETE'})
         title = self._title_for_download(download_id)
-        self._complete_status_event(download_id, success=True, message=f'Download complete: {title}')
+        self._update_status_event(
+            download_id,
+            state='complete',
+            message=f'Download complete for {title}',
+            metadata={'status': 'COMPLETE'},
+        )
 
     def emit_completed(self, download_id: int, *_args, **_kwargs):
-        """Legacy alias for emit_download_completed."""
-        self.emit_download_completed(download_id)
+        """Legacy alias - same as emit_complete."""
+        self.emit_complete(download_id)
 
-    def emit_complete(self, download_id: int, *_args, **_kwargs):
-        """Legacy alias used by older pipeline code."""
-        self.emit_download_completed(download_id)
+    def emit_download_completed(self, download_id: int):
+        """Full lifecycle complete (IMPORTED / end of seeding). Closes the status event."""
+        self._emit('download:completed', {'download_id': download_id})
+        title = self._title_for_download(download_id)
+        self._complete_status_event(download_id, success=True, message=f'Imported: {title}')
+
+    def emit_conversion_progress(self, download_id: int, progress: float, message: Optional[str] = None):
+        """Update the main download status event with conversion progress."""
+        title = self._title_for_download(download_id)
+        milestone = self._claim_progress_bucket('converting', download_id, float(progress))
+        milestone_message = None
+        if milestone is not None:
+            milestone_message = f'Converting {title} - {milestone * 10}%'
+        self._update_status_event(
+            download_id,
+            state='converting',
+            message=milestone_message,
+            progress=float(progress),
+            metadata={'status': 'CONVERTING'},
+        )
     
     def emit_download_failed(self, download_id: int, error: str):
         """Emit download failed event."""
@@ -235,34 +341,136 @@ class EventEmitter:
             'download_id': download_id
         })
         title = self._title_for_download(download_id)
-        self._complete_status_event(download_id, success=False, message=f'Download cancelled: {title}')
+        self._complete_status_event(download_id, success=False, message=f'Processing cancelled for {title}')
     
     def emit_download_paused(self, download_id: int):
         """Emit download paused event."""
         self._emit('download:paused', {
             'download_id': download_id
         })
-        self._update_status_event(download_id, state='paused', message='Download paused', metadata={'status': 'PAUSED'})
+        title = self._title_for_download(download_id)
+        self._update_status_event(download_id, state='paused', message=f'Download paused for {title}', metadata={'status': 'PAUSED'})
     
     def emit_download_resumed(self, download_id: int):
         """Emit download resumed event."""
         self._emit('download:resumed', {
             'download_id': download_id
         })
-        self._update_status_event(download_id, state='downloading', message='Download resumed', metadata={'status': 'DOWNLOADING'})
+        title = self._title_for_download(download_id)
+        self._update_status_event(download_id, state='downloading', message=f'Download resumed for {title}', metadata={'status': 'DOWNLOADING'})
     
-    def emit_state_changed(self, download_id: int, old_status: str, new_status: str):
-        """Emit state transition event."""
+    def emit_state_changed(self, download_id: int, new_status: str, message: Optional[str] = None):
+        """Emit state transition event.
+
+        Args:
+            download_id: The download whose state changed.
+            new_status:  The new state name (e.g. 'IMPORTING', 'SEEDING', 'FOUND').
+            message:     Optional human-readable description of the transition.
+        """
         self._emit('download:state_changed', {
             'download_id': download_id,
-            'old_status': old_status,
-            'new_status': new_status
+            'new_status': new_status,
         })
         self._update_status_event(
             download_id,
             state=new_status.lower(),
-            message=f'Status changed to {new_status}',
+            message=message or f'Status changed to {new_status}',
             metadata={'status': new_status}
+        )
+
+    def emit_search_started(self, download_id: int, title: Optional[str] = None):
+        resolved = self._resolve_title(download_id, title)
+        self.emit_state_changed(download_id, 'SEARCHING', f'Searching for {resolved}')
+
+    def emit_search_found(self, download_id: int, source: Optional[str] = None, title: Optional[str] = None):
+        resolved = self._resolve_title(download_id, title)
+        src = (source or '').strip()
+        if src:
+            self.emit_state_changed(download_id, 'FOUND', f'{resolved} found on {src}')
+        else:
+            self.emit_state_changed(download_id, 'FOUND', f'{resolved} found')
+
+    def emit_conversion_started(self, download_id: int, title: Optional[str] = None):
+        resolved = self._resolve_title(download_id, title)
+        self._progress_buckets['converting'][download_id] = -1
+        self.emit_state_changed(download_id, 'CONVERTING', f'Converting {resolved}')
+
+    def emit_conversion_completed(self, download_id: int, title: Optional[str] = None):
+        resolved = self._resolve_title(download_id, title)
+        self.emit_state_changed(download_id, 'CONVERTED', f'Conversion complete for {resolved}')
+
+    def emit_import_started(self, download_id: int, title: Optional[str] = None):
+        resolved = self._resolve_title(download_id, title)
+        self.emit_state_changed(download_id, 'IMPORTING', f'Importing {resolved} to library')
+
+    def emit_import_completed(self, download_id: int, title: Optional[str] = None):
+        resolved = self._resolve_title(download_id, title)
+        self.emit_state_changed(download_id, 'IMPORTED', f'{resolved} imported to library')
+
+    def emit_seeding_started(self, download_id: int, title: Optional[str] = None):
+        resolved = self._resolve_title(download_id, title)
+        self.emit_state_changed(download_id, 'SEEDING', f'Seeding {resolved}')
+
+    def emit_seeding_completed(self, download_id: int, title: Optional[str] = None):
+        resolved = self._resolve_title(download_id, title)
+        self.emit_state_changed(download_id, 'SEEDING_COMPLETE', f'Seeding complete for {resolved}')
+
+    def emit_search_failed(self, download_id: int, reason: Optional[str] = None, title: Optional[str] = None):
+        resolved = self._resolve_title(download_id, title)
+        detail = (reason or '').strip()
+        if detail:
+            message = f'No valid source found for {resolved}: {detail}'
+        else:
+            message = f'No valid source found for {resolved}'
+        self._emit('download:state_changed', {'download_id': download_id, 'new_status': 'SEARCH_FAILED'})
+        self._update_status_event(
+            download_id,
+            state='search_failed',
+            message=message,
+            metadata={'status': 'SEARCH_FAILED'}
+        )
+
+    def emit_stage_failed(self, download_id: int, failure_status: str, error_message: str, retrying: bool = False):
+        title = self._title_for_download(download_id)
+        failure_key = (failure_status or '').upper()
+        mapping = {
+            'DOWNLOAD_FAILED': ('download_failed', 'Download failed'),
+            'AUDIBLE_DOWNLOAD_FAILED': ('download_failed', 'Download failed'),
+            'CONVERSION_FAILED': ('conversion_failed', 'Conversion failed'),
+            'IMPORT_FAILED': ('import_failed', 'Import failed'),
+        }
+        state, prefix = mapping.get(failure_key, ('failed', 'Operation failed'))
+        suffix = ' (will retry)' if retrying else ''
+        message = f'{prefix} for {title}: {error_message}{suffix}'
+        self._emit('download:state_changed', {'download_id': download_id, 'new_status': failure_key or 'FAILED'})
+        self._update_status_event(
+            download_id,
+            state=state,
+            message=message,
+            metadata={'status': failure_key or 'FAILED'}
+        )
+
+    def emit_retry_scheduled(self, download_id: int, retry_state: str, delay_seconds: int):
+        title = self._title_for_download(download_id)
+        state_name = (retry_state or '').upper()
+        if delay_seconds > 0:
+            message = f'Retry scheduled for {title} in {delay_seconds}s ({state_name})'
+        else:
+            message = f'Retrying {title} now ({state_name})'
+        self._emit('download:retry_scheduled', {
+            'download_id': download_id,
+            'retry_state': state_name,
+            'delay_seconds': delay_seconds,
+        })
+        self._update_status_event(
+            download_id,
+            state='warning',
+            message=message,
+            metadata={
+                'status': 'RETRY_SCHEDULED',
+                'retry_state': state_name,
+                'retry_delay_seconds': delay_seconds,
+            }
         )
     
     def emit_queue_updated(self):

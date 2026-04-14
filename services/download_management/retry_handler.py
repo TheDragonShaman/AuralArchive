@@ -12,7 +12,7 @@ Location:
 
 """
 
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
 
 from utils.logger import get_module_logger
@@ -43,7 +43,12 @@ class RetryHandler:
         self.logger = logger or get_module_logger("Service.DownloadManagement.RetryHandler")
         self._queue_manager = None
         self._state_machine = None
+        self._event_emitter = None
         self.retry_backoff_seconds = 10
+
+    def attach_event_emitter(self, event_emitter: Optional[Any]):
+        """Attach shared EventEmitter for failure/retry status updates."""
+        self._event_emitter = event_emitter
     
     def _get_queue_manager(self):
         """Lazy load QueueManager."""
@@ -133,6 +138,8 @@ class RetryHandler:
                 download_id
             )
             return False
+
+        title_hint = download.get('book_title') or download.get('title') or download.get('book_asin')
         
         # Check if we should retry
         if self.should_retry(download_id, failure_status):
@@ -157,6 +164,14 @@ class RetryHandler:
                 updates['next_retry_at'] = None
 
             queue_manager.update_download(download_id, updates)
+
+            if self._event_emitter:
+                if failure_status == 'SEARCH_FAILED':
+                    self._event_emitter.emit_search_failed(download_id, title=title_hint)
+                else:
+                    self._event_emitter.emit_stage_failed(download_id, failure_status, error_message, retrying=True)
+                delay_seconds = self.retry_backoff_seconds if failure_status == 'DOWNLOAD_FAILED' else 0
+                self._event_emitter.emit_retry_scheduled(download_id, retry_state, delay_seconds)
             
             self.logger.debug(
                 "Retrying download %s: %s -> %s",
@@ -173,6 +188,12 @@ class RetryHandler:
                 'next_retry_at': None,
                 'last_error': error_message
             })
+
+            if self._event_emitter:
+                if failure_status == 'SEARCH_FAILED':
+                    self._event_emitter.emit_search_failed(download_id, title=title_hint)
+                else:
+                    self._event_emitter.emit_stage_failed(download_id, failure_status, error_message, retrying=False)
             
             self.logger.error(
                 "Download %s permanently failed: %s",

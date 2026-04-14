@@ -496,11 +496,28 @@
                                             placeholder="Enter password" 
                                             required
                                             minlength="6"
+                                            maxlength="20"
                                             autocomplete="new-password"
                                             id="password"
                                         />
                                     </div>
-                                    <span class="label-text-alt">At least 6 characters</span>
+                                    <div id="password-requirements" style="margin-top: 0.5rem;">
+                                        <div style="font-size: 0.75rem; color: oklch(from var(--color-base-content) l c h / 0.6); margin-bottom: 0.25rem;">Password Requirements:</div>
+                                        <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+                                            <div id="req-length" class="requirement" style="font-size: 0.75rem; display: flex; align-items: center; gap: 0.5rem;">
+                                                <span class="req-icon" style="width: 1rem; height: 1rem; display: inline-flex; align-items: center; justify-content: center;">○</span>
+                                                <span>At least 6 characters</span>
+                                            </div>
+                                            <div id="req-maxlength" class="requirement" style="font-size: 0.75rem; display: flex; align-items: center; gap: 0.5rem;">
+                                                <span class="req-icon" style="width: 1rem; height: 1rem; display: inline-flex; align-items: center; justify-content: center;">○</span>
+                                                <span>Maximum 20 characters</span>
+                                            </div>
+                                            <div id="req-match" class="requirement" style="font-size: 0.75rem; display: flex; align-items: center; gap: 0.5rem;">
+                                                <span class="req-icon" style="width: 1rem; height: 1rem; display: inline-flex; align-items: center; justify-content: center;">○</span>
+                                                <span>Passwords match</span>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div style="margin-bottom: 1.5rem;">
@@ -517,6 +534,7 @@
                                             placeholder="Confirm password" 
                                             required
                                             minlength="6"
+                                            maxlength="20"
                                             autocomplete="new-password"
                                             id="confirm_password"
                                         />
@@ -589,8 +607,42 @@
         const acceptTerms = document.getElementById('accept_terms');
         const submitBtn = document.getElementById('submitBtn');
 
-        function validatePassword() {
-            if (password.value !== confirmPassword.value) {
+        // Requirement elements
+        const reqLength = document.getElementById('req-length');
+        const reqMaxLength = document.getElementById('req-maxlength');
+        const reqMatch = document.getElementById('req-match');
+
+        function updateRequirement(element, isMet) {
+            const icon = element.querySelector('.req-icon');
+            if (isMet) {
+                icon.textContent = '✓';
+                icon.style.color = 'var(--color-success)';
+                element.style.color = 'var(--color-success)';
+            } else {
+                icon.textContent = '○';
+                icon.style.color = 'oklch(from var(--color-base-content) l c h / 0.4)';
+                element.style.color = 'oklch(from var(--color-base-content) l c h / 0.6)';
+            }
+        }
+
+        function validatePasswordRequirements() {
+            const passwordValue = password.value;
+            const confirmValue = confirmPassword.value;
+
+            // Check length requirement (minimum 6)
+            const hasMinLength = passwordValue.length >= 6;
+            updateRequirement(reqLength, hasMinLength);
+
+            // Check max length requirement (maximum 20) - only mark as satisfied if password has content
+            const withinMaxLength = passwordValue.length > 0 && passwordValue.length <= 20;
+            updateRequirement(reqMaxLength, withinMaxLength);
+
+            // Check if passwords match (only if both fields have values)
+            const passwordsMatch = passwordValue.length > 0 && confirmValue.length > 0 && passwordValue === confirmValue;
+            updateRequirement(reqMatch, passwordsMatch);
+
+            // Update form validation
+            if (passwordValue !== confirmValue && confirmValue.length > 0) {
                 confirmPassword.setCustomValidity("Passwords don't match");
             } else {
                 confirmPassword.setCustomValidity('');
@@ -601,8 +653,9 @@
             submitBtn.disabled = !acceptTerms.checked;
         }
 
-        password.addEventListener('change', validatePassword);
-        confirmPassword.addEventListener('keyup', validatePassword);
+        // Add event listeners for real-time validation
+        password.addEventListener('input', validatePasswordRequirements);
+        confirmPassword.addEventListener('input', validatePasswordRequirements);
         acceptTerms.addEventListener('change', updateSubmitButton);
 
         // Ensure form submission validates terms acceptance
@@ -613,6 +666,9 @@
                 return false;
             }
         });
+
+        // Initialize requirements display on page load
+        validatePasswordRequirements();
     </script>
 </body>
 </html>

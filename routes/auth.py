@@ -11,6 +11,7 @@ Location:
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
 from flask_login import login_user, logout_user, login_required, current_user
+from urllib.parse import urlparse
 from auth.auth import has_users, create_user, verify_user, get_user
 from utils.logger import get_module_logger
 
@@ -46,6 +47,10 @@ def setup():
         if not password or len(password) < 6:
             logger.warning(f"Setup validation failed: password too short")
             return render_template('setup.html', error='Password must be at least 6 characters')
+        
+        if len(password) > 20:
+            logger.warning(f"Setup validation failed: password too long")
+            return render_template('setup.html', error='Password must be 20 characters or less')
         
         if password != confirm_password:
             logger.warning(f"Setup validation failed: passwords don't match")
@@ -93,11 +98,12 @@ def login():
             user = get_user(username)
             login_user(user, remember=remember)
             
-            # Get next page from query string
+            # Get next page from query string — reject external redirects (open redirect fix)
             next_page = request.args.get('next')
-            if next_page and next_page.startswith('/'):
+            parsed = urlparse(next_page) if next_page else None
+            if parsed and parsed.scheme == '' and parsed.netloc == '':
                 return redirect(next_page)
-            
+
             return redirect(url_for('main.index'))
         else:
             logger.warning(f"Failed login attempt for user: {username}")

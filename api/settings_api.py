@@ -35,6 +35,7 @@ Endpoints (selected):
 """
 
 from flask import Blueprint, jsonify, request, send_file, current_app
+from flask_login import current_user
 from collections import deque
 from services.service_manager import (
     get_config_service,
@@ -56,6 +57,14 @@ import sqlite3
 from utils.logger import get_module_logger
 
 settings_api_bp = Blueprint('settings_api', __name__, url_prefix='/settings/api')
+
+
+@settings_api_bp.before_request
+def _require_auth():
+    if not current_user.is_authenticated:
+        return jsonify({'error': 'Authentication required'}), 401
+
+
 logger = get_module_logger("API.Settings")
 
 # Global variables for log streaming
@@ -860,7 +869,7 @@ def get_download_clients():
             'config': {}
         })
 
-@settings_api_bp.route('/indexers')
+@settings_api_bp.route('/indexer-settings')
 def get_indexers():
     """Get indexers configuration."""
     try:

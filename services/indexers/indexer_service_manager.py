@@ -20,6 +20,8 @@ from datetime import datetime
 
 from .base_indexer import BaseIndexer, IndexerProtocol
 from .jackett_indexer import JackettIndexer
+from .prowlarr_indexer import ProwlarrIndexer
+from .nzbhydra2_indexer import NZBHydra2Indexer
 from .direct_indexer import DirectIndexer
 from services.config.management import ConfigService
 from utils.logger import get_module_logger
@@ -61,6 +63,7 @@ class IndexerServiceManager:
         self.config_service = config_service or ConfigService()
         self.indexers = {}  # name -> indexer instance
         self.indexer_configs = {}  # name -> config dict
+        self._reload_lock = threading.Lock()  # serialize concurrent reload calls
         
         # Load indexers from config
         self._load_indexers()
@@ -108,13 +111,10 @@ class IndexerServiceManager:
                 
                 if indexer_type == 'jackett':
                     indexer = JackettIndexer(config)
-                elif indexer_type == 'prowlarr':
-                    # Prowlarr uses same Torznab API as Jackett
-                    indexer = JackettIndexer(config)
+                elif indexer_type in ('prowlarr', 'prowlarr_torznab', 'prowlarr_newznab'):
+                    indexer = ProwlarrIndexer(config)
                 elif indexer_type == 'nzbhydra2':
-                    # Future: NZBHydra2Indexer
-                    self.logger.warning("NZBHydra2 indexer not yet implemented, skipping", extra={"indexer": name})
-                    continue
+                    indexer = NZBHydra2Indexer(config)
                 elif indexer_type == 'direct':
                     indexer = DirectIndexer(config)
                 else:
@@ -135,7 +135,7 @@ class IndexerServiceManager:
                 )
                 
             except Exception as e:
-                self.logger.error("Failed to load indexer", extra={"indexer": name, "error": str(e)})
+                self.logger.exception("Failed to load indexer '%s': %s", name, e)
                 continue
     
     def _load_from_config_py(self):
@@ -340,17 +340,36 @@ class IndexerServiceManager:
         """
         Reload indexers from configuration.
         Useful for applying config changes without restarting.
+        Atomic: builds new collections before swapping so in-flight searches
+        always see a consistent snapshot.
         """
-        self.logger.info("Reloading indexers from configuration...")
-        
-        # Clear existing
-        self.indexers.clear()
-        self.indexer_configs.clear()
-        
-        # Reload
-        self._load_indexers()
-        
-        self.logger.info("Reloaded %d indexer(s)", len(self.indexers))
+        with self._reload_lock:
+            self.logger.info("Reloading indexers from configuration...")
+
+            # Build into temporary dicts so searches on other threads keep
+            # reading the old snapshot until we're ready to swap.
+            new_indexers: Dict[str, Any] = {}
+            new_configs: Dict[str, Any] = {}
+
+            previous_indexers = dict(self.indexers)
+            previous_configs = dict(self.indexer_configs)
+
+            # Point internal dicts at the new (empty) collections, then load.
+            self.indexers = new_indexers
+            self.indexer_configs = new_configs
+
+            try:
+                self._load_indexers()
+            except Exception as exc:
+                # Restore previous state so existing indexers remain usable.
+                self.logger.error(
+                    "reload_indexers failed, restoring previous indexers: %s", exc
+                )
+                self.indexers = previous_indexers
+                self.indexer_configs = previous_configs
+                raise
+
+            self.logger.info("Reloaded %d indexer(s)", len(self.indexers))
     
     def get_service_status(self) -> Dict[str, Any]:
         """

@@ -28,7 +28,9 @@ import uuid
 from pathlib import Path
 
 import audible
+import time
 from flask import Blueprint, jsonify, request
+from flask_login import current_user
 
 from utils.logger import get_module_logger
 from utils.paths import resolve_audible_auth_file
@@ -36,9 +38,25 @@ from utils.paths import resolve_audible_auth_file
 audible_auth_api = Blueprint('audible_auth_api', __name__)
 logger = get_module_logger("API.Audible.Auth")
 
-# Store pending authentication sessions (in-memory only)
-# Session expires when OTP is submitted or authentication completes
+
+@audible_auth_api.before_request
+def _require_auth():
+    if not current_user.is_authenticated:
+        return jsonify({'error': 'Authentication required'}), 401
+
+
+# Store pending authentication sessions (in-memory only).
+# Entries expire after _SESSION_TTL_SECONDS (10 minutes) and are pruned lazily.
 _pending_auth_sessions = {}
+_SESSION_TTL_SECONDS = 600  # 10 minutes
+
+
+def _prune_expired_auth_sessions():
+    """Remove sessions older than _SESSION_TTL_SECONDS."""
+    cutoff = time.time() - _SESSION_TTL_SECONDS
+    expired = [k for k, v in list(_pending_auth_sessions.items()) if v.get('created_at', 0) < cutoff]
+    for k in expired:
+        del _pending_auth_sessions[k]
 
 
 @audible_auth_api.route('/api/audible/auth/start', methods=['POST'])
@@ -164,7 +182,9 @@ def start_authentication():
             # Check if OTP is required
             if "OTP_REQUIRED" in error_msg or otp_requested:
                 # Store session for OTP submission
+                _prune_expired_auth_sessions()
                 _pending_auth_sessions[session_id] = {
+                    'created_at': time.time(),
                     'username': username,
                     'password': password,
                     'country_code': country_code,
@@ -234,6 +254,9 @@ def submit_otp():
         
         # Get pending session
         session = _pending_auth_sessions.get(session_id)
+        if session and (time.time() - session.get('created_at', 0)) > _SESSION_TTL_SECONDS:
+            del _pending_auth_sessions[session_id]
+            session = None
         if not session:
             logger.warning(f"Invalid or expired session: {session_id}")
             return jsonify({

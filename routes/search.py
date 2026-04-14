@@ -9,8 +9,8 @@ Location:
     /routes/search.py
 
 """
-from flask import Blueprint, render_template, request, jsonify, flash
-from flask_login import login_required
+from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for
+from flask_login import login_required, current_user
 from services.service_manager import (
     get_audible_service,
     get_database_service,
@@ -23,6 +23,15 @@ from utils.logger import get_module_logger
 
 search_bp = Blueprint('search', __name__)
 logger = get_module_logger("Routes.Search")
+
+
+@search_bp.before_request
+def _require_auth():
+    if not current_user.is_authenticated:
+        if request.is_json or '/api/' in request.path:
+            return jsonify({'error': 'Authentication required'}), 401
+        return redirect(url_for('auth.login'))
+
 
 # ============================================================================
 # UTILITY FUNCTIONS - ENHANCED

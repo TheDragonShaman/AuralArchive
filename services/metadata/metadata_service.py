@@ -15,6 +15,11 @@ Location:
 import threading
 from typing import Tuple, Dict, List, Optional, Callable
 
+try:
+    from services.service_manager import get_status_service as _get_status_service
+except Exception:
+    _get_status_service = None  # type: ignore
+
 from .metadata_lookup_strategies import MetadataSearchStrategies
 from .matching import MetadataMatching
 from .database_updates import MetadataDatabaseUpdates
@@ -166,6 +171,23 @@ class MetadataUpdateService:
         Raises:
             CancellationException: If the operation is cancelled
         """
+        _status_id = None
+        try:
+            from services.service_manager import get_status_service as _gss
+            _ss = _gss()
+            if _ss:
+                _status_evt = _ss.start_event(
+                    category='metadata',
+                    title=f'Book #{book_id}',
+                    message='Fetching metadata…',
+                    source='Metadata',
+                    entity_id=book_id,
+                    state='running',
+                )
+                _status_id = _status_evt['id']
+        except Exception:
+            pass
+
         try:
             # Check for cancellation before starting
             if cancellation_context:
@@ -182,7 +204,25 @@ class MetadataUpdateService:
             book_data = self.database_service.get_book_by_id(book_id)
             
             if not book_data:
+                if _status_id is not None:
+                    try:
+                        from services.service_manager import get_status_service as _gssX
+                        _ssX = _gssX()
+                        if _ssX:
+                            _ssX.fail_event(_status_id, message=f'Book #{book_id} not found')
+                    except Exception:
+                        pass
                 return False, f"Book with ID {book_id} not found in database"
+
+            # Update the status title now that we have the real book name
+            if _status_id is not None:
+                try:
+                    from services.service_manager import get_status_service as _gssY
+                    _ssY = _gssY()
+                    if _ssY:
+                        _ssY.update_event(_status_id, title=book_data.get('Title') or f'Book #{book_id}')
+                except Exception:
+                    pass
             
             # Check for cancellation after database retrieval
             if cancellation_context:
@@ -248,17 +288,42 @@ class MetadataUpdateService:
             
             if update_success:
                 self.logger.info("Successfully updated metadata for book", extra={"book_id": book_id})
+                if _status_id is not None:
+                    try:
+                        from services.service_manager import get_status_service as _gss2
+                        _ss2 = _gss2()
+                        if _ss2:
+                            _title = book_data.get('Title') or f'Book #{book_id}'
+                            _ss2.complete_event(_status_id, message=f'Metadata updated')
+                            _ss2.update_event(_status_id, title=_title)
+                    except Exception:
+                        pass
                 return True, "Metadata updated successfully"
             else:
                 self.logger.error(
                     "Failed to update book in database",
                     extra={"book_id": book_id, "error": update_message},
                 )
+                if _status_id is not None:
+                    try:
+                        from services.service_manager import get_status_service as _gss3
+                        _ss3 = _gss3()
+                        if _ss3:
+                            _ss3.fail_event(_status_id, message='Metadata update failed', error=update_message)
+                    except Exception:
+                        pass
                 return False, f"Database update failed: {update_message}"
                 
         except CancellationException:
-            # Re-raise cancellation exceptions
             self.logger.info("Metadata update was cancelled", extra={"book_id": book_id})
+            if _status_id is not None:
+                try:
+                    from services.service_manager import get_status_service as _gss4
+                    _ss4 = _gss4()
+                    if _ss4:
+                        _ss4.cancel_event(_status_id, message='Cancelled')
+                except Exception:
+                    pass
             raise
         except Exception as e:
             self.logger.error(
@@ -266,6 +331,14 @@ class MetadataUpdateService:
                 extra={"book_id": book_id, "error": str(e)},
                 exc_info=True,
             )
+            if _status_id is not None:
+                try:
+                    from services.service_manager import get_status_service as _gss5
+                    _ss5 = _gss5()
+                    if _ss5:
+                        _ss5.fail_event(_status_id, message='Metadata update error', error=str(e))
+                except Exception:
+                    pass
             return False, str(e)
     
     def update_multiple_books(self, book_ids: List[int]) -> Dict[str, any]:

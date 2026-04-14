@@ -12,6 +12,7 @@ Location:
 
 from typing import Any, Iterable, List
 
+import requests as _requests
 from flask import Blueprint, jsonify, request  # type: ignore[import]
 
 from config.config import Config
@@ -39,6 +40,8 @@ def _infer_indexer_type(indexer_key: str, feed_url: str = '', protocol: str = ''
         return 'direct'
     if 'direct' in lower_key:
         return 'direct'
+    if 'nzbhydra' in lower_key:
+        return 'nzbhydra2'
     if 'prowlarr' in lower_key:
         return 'prowlarr'
     return 'jackett'
@@ -46,14 +49,21 @@ def _infer_indexer_type(indexer_key: str, feed_url: str = '', protocol: str = ''
 
 def _resolve_protocol(indexer_type: str, requested_protocol: str = '') -> str:
     """Determine protocol based on indexer type when not explicitly supplied."""
+    itype = (indexer_type or '').lower()
     if requested_protocol:
         requested = requested_protocol.lower()
         if requested == 'direct':
             return 'direct'
-        # Force torznab for all other cases; alternative protocols are disabled
+        if requested == 'newznab':
+            return 'newznab'
         return 'torznab'
-    if (indexer_type or '').lower() == 'direct':
+    if itype == 'direct':
         return 'direct'
+    if itype == 'nzbhydra2':
+        return 'newznab'
+    if itype == 'prowlarr':
+        # Prowlarr defaults to torznab; caller can override via requested_protocol
+        return 'torznab'
     return 'torznab'
 
 
@@ -115,7 +125,14 @@ def get_indexers():
             session_id = indexer.get('session_id', '')
             protocol = _resolve_protocol(indexer_type, indexer.get('protocol', ''))
             is_direct = indexer_type == 'direct'
-            configured = bool(base_url and session_id) if is_direct else bool(indexer.get('feed_url') and api_key)
+            is_nzbhydra2 = indexer_type == 'nzbhydra2'
+            is_prowlarr = indexer_type == 'prowlarr'
+            if is_direct:
+                configured = bool(base_url and session_id)
+            elif is_nzbhydra2 or is_prowlarr:
+                configured = bool(base_url and api_key)
+            else:
+                configured = bool(indexer.get('feed_url') and api_key)
             search_type = (indexer.get('search_type') or 'all').lower()
             if search_type == 'default':
                 search_type = 'all'
@@ -142,7 +159,9 @@ def get_indexers():
                 }),
                 'configured': configured,
                 'has_api_key': bool(api_key),
-                'has_session_id': bool(session_id)
+                'has_session_id': bool(session_id),
+                'indexer_id': int(indexer.get('indexer_id', 0)),
+                'indexer_name': indexer.get('indexer_name', ''),
             }
         
         return jsonify({
@@ -181,13 +200,15 @@ def update_indexer(indexer_key):
         indexer_type = (data.get('type') or existing.get('type') or _infer_indexer_type(indexer_key, feed_url or base_url)).lower()
         protocol = _resolve_protocol(indexer_type, data.get('protocol') or existing.get('protocol', ''))
         is_direct = indexer_type == 'direct'
+        is_nzbhydra2 = indexer_type == 'nzbhydra2'
+        is_prowlarr = indexer_type == 'prowlarr'
 
-        if is_direct and not base_url:
+        if (is_direct or is_nzbhydra2 or is_prowlarr) and not base_url:
             return jsonify({
                 'success': False,
                 'error': 'Base URL is required'
             }), 400
-        if not is_direct and not feed_url:
+        if not is_direct and not is_nzbhydra2 and not is_prowlarr and not feed_url:
             return jsonify({
                 'success': False,
                 'error': 'Feed URL is required'
@@ -228,6 +249,10 @@ def update_indexer(indexer_key):
                 'error': 'API key is required'
             }), 400
 
+        # Prowlarr uses base_url; clear feed_url to avoid stale data
+        if is_prowlarr:
+            feed_url = ''
+
         categories = _normalize_categories(data.get('categories'), existing.get('categories', []))
         rate_limit = data.get('rate_limit') or existing.get('rate_limit') or {
             'requests_per_second': 1,
@@ -245,6 +270,14 @@ def update_indexer(indexer_key):
         except (TypeError, ValueError):
             timeout = 30
 
+        indexer_id_val = data.get('indexer_id', existing.get('indexer_id', 0))
+        try:
+            indexer_id = int(indexer_id_val or 0)
+        except (TypeError, ValueError):
+            indexer_id = 0
+
+        indexer_name = str(data.get('indexer_name') or existing.get('indexer_name') or '').strip()
+
         # Update indexer configuration
         updated_indexer = {
             'name': name,
@@ -256,6 +289,8 @@ def update_indexer(indexer_key):
             'type': indexer_type,
             'protocol': protocol,
             'search_type': search_type,
+            'indexer_id': indexer_id,
+            'indexer_name': indexer_name,
             'priority': priority,
             'categories': categories,
             'rate_limit': rate_limit,
@@ -446,6 +481,574 @@ def test_indexer(indexer_key):
             'success': False,
             'error': str(e)
         }), 500
+
+
+@indexers_bp.route('/api/indexers/prowlarr-preview', methods=['POST'])
+def preview_prowlarr_indexers():
+    """Fetch the list of indexers from Prowlarr without saving anything.
+
+    Returns each indexer with an ``already_synced`` flag so the frontend can
+    pre-tick entries that have not been imported yet.
+    """
+    try:
+        data = request.get_json() or {}
+        prowlarr_key = (data.get('prowlarr_key') or '').strip()
+
+        indexers = _load_indexers_config()
+
+        prowlarr_cfg = None
+        prowlarr_cfg_key = None
+
+        if prowlarr_key and prowlarr_key in indexers:
+            cfg = indexers[prowlarr_key]
+            if cfg.get('type', '').lower() == 'prowlarr' and cfg.get('base_url') and cfg.get('api_key'):
+                prowlarr_cfg = cfg
+                prowlarr_cfg_key = prowlarr_key
+
+        # Prefer the dedicated aggregator connection section over a legacy indexer entry
+        agg_conn = config_service.get_aggregator_connection('prowlarr')
+        if agg_conn.get('base_url') and agg_conn.get('api_key'):
+            prowlarr_cfg = {
+                'base_url': agg_conn['base_url'],
+                'api_key': agg_conn['api_key'],
+                'verify_ssl': agg_conn.get('verify_ssl', True),
+                'timeout': agg_conn.get('timeout', 15),
+            }
+            prowlarr_cfg_key = '__aggregator__'
+
+        if prowlarr_cfg is None:
+            for key, cfg in indexers.items():
+                if (
+                    cfg.get('type', '').lower() == 'prowlarr'
+                    and cfg.get('base_url')
+                    and cfg.get('api_key')
+                ):
+                    prowlarr_cfg = cfg
+                    prowlarr_cfg_key = key
+                    break
+
+        if prowlarr_cfg is None:
+            return jsonify({
+                'success': False,
+                'error': 'No Prowlarr connection configured. Add the Base URL and API key in the Aggregator Connections section.'
+            }), 400
+
+        base_url = prowlarr_cfg['base_url'].rstrip('/')
+        api_key = prowlarr_cfg['api_key']
+        verify_ssl = bool(prowlarr_cfg.get('verify_ssl', True))
+        timeout = int(prowlarr_cfg.get('timeout', 15))
+
+        try:
+            resp = _requests.get(
+                f"{base_url}/api/v1/indexer",
+                headers={'X-Api-Key': api_key},
+                timeout=timeout,
+                verify=verify_ssl,
+            )
+        except _requests.exceptions.ConnectionError as exc:
+            return jsonify({'success': False, 'error': f'Could not connect to Prowlarr: {exc}'}), 400
+        except _requests.exceptions.Timeout:
+            return jsonify({'success': False, 'error': 'Prowlarr request timed out'}), 400
+
+        if resp.status_code == 401:
+            return jsonify({'success': False, 'error': 'Prowlarr API key rejected (401)'}), 400
+        if resp.status_code != 200:
+            return jsonify({'success': False, 'error': f'Prowlarr returned HTTP {resp.status_code}'}), 400
+
+        remote_indexers = resp.json()
+        if not isinstance(remote_indexers, list):
+            return jsonify({'success': False, 'error': 'Unexpected response format from Prowlarr'}), 400
+
+        result = []
+        for ri in sorted(remote_indexers, key=lambda x: x.get('name', '')):
+            rid = ri.get('id')
+            rname = (ri.get('name') or '').strip()
+            if not rid or not rname:
+                continue
+            protocol_raw = (ri.get('protocol') or 'torrent').lower()
+            protocol = 'newznab' if protocol_raw == 'usenet' else 'torznab'
+            sync_key = f"prowlarr_sync_{rid}"
+            result.append({
+                'id': rid,
+                'name': rname,
+                'protocol': protocol,
+                'enabled': bool(ri.get('enable', True)),
+                'already_synced': sync_key in indexers,
+            })
+
+        return jsonify({'success': True, 'indexers': result, 'prowlarr_key': prowlarr_cfg_key})
+
+    except Exception as exc:
+        logger.exception("Error during Prowlarr preview")
+        return jsonify({'success': False, 'error': str(exc)}), 500
+
+
+@indexers_bp.route('/api/indexers/prowlarr-sync', methods=['POST'])
+def sync_prowlarr_indexers():
+    """Sync indexers from a configured Prowlarr instance.
+
+    Calls GET /api/v1/indexer on Prowlarr and creates/updates one AuralArchive
+    indexer config entry per Prowlarr indexer, each with the correct indexer_id
+    so that search requests reach the right endpoint.
+    """
+    try:
+        data = request.get_json() or {}
+        prowlarr_key = (data.get('prowlarr_key') or '').strip()
+        # Optional list of Prowlarr indexer IDs to restrict the sync to.
+        # When absent or empty, all indexers are synced.
+        selected_ids_raw = data.get('selected_ids')
+        selected_ids = set(int(i) for i in selected_ids_raw if str(i).isdigit()) if selected_ids_raw else None
+
+        indexers = _load_indexers_config()
+
+        # Locate the Prowlarr master config to use for the sync.
+        # Prefer the dedicated aggregator connection section.
+        prowlarr_cfg = None
+        prowlarr_cfg_key = None
+
+        agg_conn = config_service.get_aggregator_connection('prowlarr')
+        if agg_conn.get('base_url') and agg_conn.get('api_key'):
+            prowlarr_cfg = {
+                'base_url': agg_conn['base_url'],
+                'api_key': agg_conn['api_key'],
+                'verify_ssl': agg_conn.get('verify_ssl', True),
+                'timeout': agg_conn.get('timeout', 15),
+                'priority': 999,
+                'categories': ['3030'],
+                'rate_limit': {'requests_per_second': 1, 'max_concurrent': 1},
+            }
+            prowlarr_cfg_key = '__aggregator__'
+
+        # Fall back to a legacy prowlarr indexer entry
+        if prowlarr_cfg is None:
+            if prowlarr_key and prowlarr_key in indexers:
+                cfg = indexers[prowlarr_key]
+                if cfg.get('type', '').lower() == 'prowlarr' and cfg.get('base_url') and cfg.get('api_key'):
+                    prowlarr_cfg = cfg
+                    prowlarr_cfg_key = prowlarr_key
+        if prowlarr_cfg is None:
+            for key, cfg in indexers.items():
+                if (
+                    cfg.get('type', '').lower() == 'prowlarr'
+                    and cfg.get('base_url')
+                    and cfg.get('api_key')
+                ):
+                    prowlarr_cfg = cfg
+                    prowlarr_cfg_key = key
+                    break
+
+        if prowlarr_cfg is None:
+            return jsonify({
+                'success': False,
+                'error': 'No Prowlarr connection configured. Add the Base URL and API key in the Aggregator Connections section.'
+            }), 400
+
+        base_url = prowlarr_cfg['base_url'].rstrip('/')
+        api_key = prowlarr_cfg['api_key']
+        verify_ssl = bool(prowlarr_cfg.get('verify_ssl', True))
+        timeout = int(prowlarr_cfg.get('timeout', 15))
+        parent_priority = int(prowlarr_cfg.get('priority', 999))
+        parent_categories = prowlarr_cfg.get('categories') or ['3030']
+        parent_rate_limit = prowlarr_cfg.get('rate_limit') or {'requests_per_second': 1, 'max_concurrent': 1}
+
+        try:
+            resp = _requests.get(
+                f"{base_url}/api/v1/indexer",
+                headers={'X-Api-Key': api_key},
+                timeout=timeout,
+                verify=verify_ssl,
+            )
+        except _requests.exceptions.ConnectionError as exc:
+            return jsonify({'success': False, 'error': f'Could not connect to Prowlarr: {exc}'}), 400
+        except _requests.exceptions.Timeout:
+            return jsonify({'success': False, 'error': 'Prowlarr request timed out'}), 400
+
+        if resp.status_code == 401:
+            return jsonify({'success': False, 'error': 'Prowlarr API key rejected (401)'}), 400
+        if resp.status_code != 200:
+            return jsonify({'success': False, 'error': f'Prowlarr returned HTTP {resp.status_code}'}), 400
+
+        remote_indexers = resp.json()
+        if not isinstance(remote_indexers, list):
+            return jsonify({'success': False, 'error': 'Unexpected response format from Prowlarr'}), 400
+
+        created, updated_list, errors = [], [], []
+
+        for ri in remote_indexers:
+            rid = ri.get('id')
+            rname = (ri.get('name') or '').strip()
+            if not rid or not rname:
+                continue
+
+            # Skip indexers the user didn't select (when a selection was made)
+            if selected_ids is not None and rid not in selected_ids:
+                continue
+
+            # Map Prowlarr DownloadProtocol to our protocol string
+            protocol_raw = (ri.get('protocol') or 'torrent').lower()
+            protocol = 'newznab' if protocol_raw == 'usenet' else 'torznab'
+
+            # Pick audio/book categories (3000-3999) from capabilities when available
+            categories = list(parent_categories)
+            caps = ri.get('capabilities') or {}
+            cap_cats = caps.get('categories') or []
+            if cap_cats:
+                audio_cats = [
+                    str(c['id'])
+                    for c in cap_cats
+                    if isinstance(c, dict) and 3000 <= int(c.get('id', 0)) <= 3999
+                ]
+                if audio_cats:
+                    categories = audio_cats
+
+            indexer_key = f"prowlarr_sync_{rid}"
+            existing = indexers.get(indexer_key, {})
+            is_new = indexer_key not in indexers
+
+            config_data = {
+                'name': f"Prowlarr - {rname}",
+                'enabled': bool(ri.get('enable', True)),
+                'feed_url': '',
+                'base_url': base_url,
+                'api_key': api_key,
+                'session_id': '',
+                'type': 'prowlarr',
+                'protocol': protocol,
+                'search_type': existing.get('search_type', 'all'),
+                'priority': int(existing.get('priority', parent_priority)),
+                'categories': categories,
+                'verify_ssl': verify_ssl,
+                'timeout': int(prowlarr_cfg.get('timeout', 30)),
+                'rate_limit': parent_rate_limit,
+                'indexer_id': rid,
+            }
+
+            if _save_indexer_config(indexer_key, config_data):
+                if is_new:
+                    created.append({'key': indexer_key, 'name': config_data['name']})
+                else:
+                    updated_list.append({'key': indexer_key, 'name': config_data['name']})
+            else:
+                errors.append({'key': indexer_key, 'name': rname, 'error': 'Save failed'})
+
+        # Reload indexer service
+        try:
+            indexer_service = get_indexer_manager_service()
+            if indexer_service and hasattr(indexer_service, 'reload_indexers'):
+                indexer_service.reload_indexers()
+        except Exception as reload_err:
+            logger.warning("Could not reload indexer service after Prowlarr sync: %s", reload_err)
+
+        total = len(created) + len(updated_list)
+        logger.info(
+            "Prowlarr sync complete: %d created, %d updated, %d errors",
+            len(created), len(updated_list), len(errors),
+        )
+        return jsonify({
+            'success': True,
+            'message': f'Synced {total} indexer(s) from Prowlarr ({len(created)} new, {len(updated_list)} updated)',
+            'created': created,
+            'updated': updated_list,
+            'errors': errors,
+            'total': total,
+            'prowlarr_key': prowlarr_cfg_key,
+        })
+
+    except Exception as exc:
+        logger.exception("Error during Prowlarr sync")
+        return jsonify({'success': False, 'error': str(exc)}), 500
+
+
+import re as _re
+
+
+def _safe_key(name: str) -> str:
+    """Turn an arbitrary indexer name into a safe config key segment."""
+    return _re.sub(r'[^a-z0-9]+', '_', name.lower().strip()).strip('_') or 'indexer'
+
+
+@indexers_bp.route('/api/indexers/nzbhydra2-preview', methods=['POST'])
+def preview_nzbhydra2_indexers():
+    """Fetch the list of indexers from NZBHydra2 without saving anything."""
+    try:
+        indexers = _load_indexers_config()
+
+        agg_conn = config_service.get_aggregator_connection('nzbhydra2')
+        if not agg_conn.get('base_url') or not agg_conn.get('api_key'):
+            return jsonify({
+                'success': False,
+                'error': 'No NZBHydra2 connection configured. Add the Base URL and API key in the Aggregator Connections section.'
+            }), 400
+
+        base_url = agg_conn['base_url'].rstrip('/')
+        api_key = agg_conn['api_key']
+        verify_ssl = bool(agg_conn.get('verify_ssl', True))
+        timeout = int(agg_conn.get('timeout', 15))
+
+        try:
+            # NZBHydra2 GET /api/stats/indexers fails with 400/500 (Spring bug
+            # #882: Spring tries to deserialize a missing request body).
+            # Workaround: POST with apikey as query param (for auth) and also
+            # in the JSON body (so the body is non-empty for Spring).
+            resp = _requests.post(
+                f"{base_url}/api/stats/indexers",
+                params={'apikey': api_key},
+                json={'apikey': api_key},
+                timeout=timeout,
+                verify=verify_ssl,
+            )
+        except _requests.exceptions.ConnectionError as exc:
+            return jsonify({'success': False, 'error': f'Could not connect to NZBHydra2: {exc}'}), 400
+        except _requests.exceptions.Timeout:
+            return jsonify({'success': False, 'error': 'NZBHydra2 request timed out'}), 400
+
+        if resp.status_code == 401:
+            return jsonify({'success': False, 'error': 'NZBHydra2 API key rejected (401)'}), 400
+        if resp.status_code != 200:
+            return jsonify({'success': False, 'error': f'NZBHydra2 returned HTTP {resp.status_code}'}), 400
+
+        remote_indexers = resp.json()
+        if not isinstance(remote_indexers, list):
+            return jsonify({'success': False, 'error': 'Unexpected response format from NZBHydra2'}), 400
+
+        result = []
+        for ri in sorted(remote_indexers, key=lambda x: x.get('indexer', '')):
+            rname = (ri.get('indexer') or '').strip()
+            if not rname:
+                continue
+            state = (ri.get('state') or '').upper()
+            sync_key = f"nzbhydra2_sync_{_safe_key(rname)}"
+            result.append({
+                'id': rname,          # NZBHydra2 uses names, not integer IDs
+                'name': rname,
+                'protocol': 'newznab',
+                'enabled': state != 'DISABLED_USER',
+                'already_synced': sync_key in indexers,
+            })
+
+        return jsonify({'success': True, 'indexers': result})
+
+    except Exception as exc:
+        logger.exception("Error during NZBHydra2 preview")
+        return jsonify({'success': False, 'error': str(exc)}), 500
+
+
+@indexers_bp.route('/api/indexers/nzbhydra2-sync', methods=['POST'])
+def sync_nzbhydra2_indexers():
+    """Sync indexers from NZBHydra2.
+
+    Creates one per-indexer config entry keyed ``nzbhydra2_sync_{safe_name}``.
+    Each entry targets the shared ``{base_url}/api`` endpoint and restricts
+    searches to its specific indexer via the ``indexers`` query parameter.
+    """
+    try:
+        data = request.get_json() or {}
+        selected_ids_raw = data.get('selected_ids')
+        # For NZBHydra2 the "id" is the indexer name string
+        selected_names = set(str(i) for i in selected_ids_raw) if selected_ids_raw else None
+
+        indexers = _load_indexers_config()
+
+        agg_conn = config_service.get_aggregator_connection('nzbhydra2')
+        if not agg_conn.get('base_url') or not agg_conn.get('api_key'):
+            return jsonify({
+                'success': False,
+                'error': 'No NZBHydra2 connection configured.'
+            }), 400
+
+        base_url = agg_conn['base_url'].rstrip('/')
+        api_key = agg_conn['api_key']
+        verify_ssl = bool(agg_conn.get('verify_ssl', True))
+        timeout = int(agg_conn.get('timeout', 15))
+
+        try:
+            # NZBHydra2 GET /api/stats/indexers fails with 400/500 (Spring bug
+            # #882: Spring tries to deserialize a missing request body).
+            # Workaround: POST with apikey as query param (for auth) and also
+            # in the JSON body (so the body is non-empty for Spring).
+            resp = _requests.post(
+                f"{base_url}/api/stats/indexers",
+                params={'apikey': api_key},
+                json={'apikey': api_key},
+                timeout=timeout,
+                verify=verify_ssl,
+            )
+        except _requests.exceptions.ConnectionError as exc:
+            return jsonify({'success': False, 'error': f'Could not connect to NZBHydra2: {exc}'}), 400
+        except _requests.exceptions.Timeout:
+            return jsonify({'success': False, 'error': 'NZBHydra2 request timed out'}), 400
+
+        if resp.status_code == 401:
+            return jsonify({'success': False, 'error': 'NZBHydra2 API key rejected (401)'}), 400
+        if resp.status_code != 200:
+            return jsonify({'success': False, 'error': f'NZBHydra2 returned HTTP {resp.status_code}'}), 400
+
+        remote_indexers = resp.json()
+        if not isinstance(remote_indexers, list):
+            return jsonify({'success': False, 'error': 'Unexpected response format from NZBHydra2'}), 400
+
+        created, updated_list, errors = [], [], []
+
+        for ri in remote_indexers:
+            rname = (ri.get('indexer') or '').strip()
+            if not rname:
+                continue
+            if selected_names is not None and rname not in selected_names:
+                continue
+
+            state = (ri.get('state') or '').upper()
+            indexer_key = f"nzbhydra2_sync_{_safe_key(rname)}"
+            existing = indexers.get(indexer_key, {})
+            is_new = indexer_key not in indexers
+
+            config_data = {
+                'name': f"NZBHydra2 - {rname}",
+                'enabled': state != 'DISABLED_USER',
+                'feed_url': '',
+                'base_url': base_url,
+                'api_key': api_key,
+                'session_id': '',
+                'type': 'nzbhydra2',
+                'protocol': 'newznab',
+                'search_type': existing.get('search_type', 'all'),
+                'priority': int(existing.get('priority', 999)),
+                'categories': existing.get('categories') or ['3030'],
+                'verify_ssl': verify_ssl,
+                'timeout': int(agg_conn.get('timeout', 30)),
+                'rate_limit': existing.get('rate_limit') or {'requests_per_second': 1, 'max_concurrent': 1},
+                'indexer_id': 0,
+                'indexer_name': rname,
+            }
+
+            if _save_indexer_config(indexer_key, config_data):
+                if is_new:
+                    created.append({'key': indexer_key, 'name': config_data['name']})
+                else:
+                    updated_list.append({'key': indexer_key, 'name': config_data['name']})
+            else:
+                errors.append({'key': indexer_key, 'name': rname, 'error': 'Save failed'})
+
+        try:
+            indexer_service = get_indexer_manager_service()
+            if indexer_service and hasattr(indexer_service, 'reload_indexers'):
+                indexer_service.reload_indexers()
+        except Exception as reload_err:
+            logger.warning("Could not reload indexer service after NZBHydra2 sync: %s", reload_err)
+
+        total = len(created) + len(updated_list)
+        logger.info(
+            "NZBHydra2 sync complete: %d created, %d updated, %d errors",
+            len(created), len(updated_list), len(errors),
+        )
+        return jsonify({
+            'success': True,
+            'message': f'Synced {total} indexer(s) from NZBHydra2 ({len(created)} new, {len(updated_list)} updated)',
+            'created': created,
+            'updated': updated_list,
+            'errors': errors,
+            'total': total,
+        })
+
+    except Exception as exc:
+        logger.exception("Error during NZBHydra2 sync")
+        return jsonify({'success': False, 'error': str(exc)}), 500
+
+
+# ── Aggregator connection routes ─────────────────────────────────────────
+
+SUPPORTED_AGGREGATORS = {'prowlarr', 'nzbhydra2'}
+
+
+@indexers_bp.route('/api/aggregators', methods=['GET'])
+def get_aggregators():
+    """Return saved connection settings for all aggregators."""
+    result = {}
+    for agg in SUPPORTED_AGGREGATORS:
+        conn = config_service.get_aggregator_connection(agg)
+        result[agg] = {
+            'base_url': conn.get('base_url', ''),
+            'has_api_key': bool(conn.get('api_key', '')),
+            'verify_ssl': conn.get('verify_ssl', True),
+            'timeout': conn.get('timeout', 30),
+        }
+    return jsonify({'success': True, 'aggregators': result})
+
+
+@indexers_bp.route('/api/aggregators/<aggregator>', methods=['POST'])
+def save_aggregator(aggregator):
+    """Save connection settings (base_url, api_key) for an aggregator."""
+    if aggregator not in SUPPORTED_AGGREGATORS:
+        return jsonify({'success': False, 'error': f'Unknown aggregator: {aggregator}'}), 400
+
+    data = request.get_json() or {}
+    base_url = (data.get('base_url') or '').strip()
+    api_key_raw = (data.get('api_key') or '').strip()
+    verify_ssl = bool(data.get('verify_ssl', True))
+    timeout = int(data.get('timeout', 30))
+
+    if not base_url:
+        return jsonify({'success': False, 'error': 'base_url is required'}), 400
+
+    # If the user submitted a sentinel / masked value, keep the stored key
+    if api_key_raw in API_KEY_SENTINELS:
+        existing = config_service.get_aggregator_connection(aggregator)
+        api_key_raw = existing.get('api_key', '')
+
+    ok = config_service.set_aggregator_connection(aggregator, base_url, api_key_raw, verify_ssl, timeout)
+    if ok:
+        return jsonify({'success': True, 'message': f'{aggregator.capitalize()} connection saved'})
+    return jsonify({'success': False, 'error': 'Failed to save connection'}), 500
+
+
+@indexers_bp.route('/api/aggregators/<aggregator>/test', methods=['POST'])
+def test_aggregator(aggregator):
+    """Test connectivity to an aggregator using its stored (or submitted) credentials."""
+    if aggregator not in SUPPORTED_AGGREGATORS:
+        return jsonify({'success': False, 'error': f'Unknown aggregator: {aggregator}'}), 400
+
+    data = request.get_json() or {}
+    base_url = (data.get('base_url') or '').strip()
+    api_key_raw = (data.get('api_key') or '').strip()
+
+    # Fall back to stored values when form fields are empty / masked
+    stored = config_service.get_aggregator_connection(aggregator)
+    if not base_url:
+        base_url = stored.get('base_url', '')
+    if not base_url:
+        return jsonify({'success': False, 'error': 'No base URL configured'}), 400
+    if api_key_raw in API_KEY_SENTINELS or not api_key_raw:
+        api_key_raw = stored.get('api_key', '')
+
+    verify_ssl = bool(data.get('verify_ssl', stored.get('verify_ssl', True)))
+    timeout = int(data.get('timeout', stored.get('timeout', 15)))
+    base_url = base_url.rstrip('/')
+
+    try:
+        if aggregator == 'prowlarr':
+            resp = _requests.get(
+                f"{base_url}/api/v1/system/status",
+                headers={'X-Api-Key': api_key_raw},
+                timeout=timeout,
+                verify=verify_ssl,
+            )
+        else:  # nzbhydra2
+            resp = _requests.get(
+                f"{base_url}/api",
+                params={'apikey': api_key_raw, 't': 'caps'},
+                timeout=timeout,
+                verify=verify_ssl,
+            )
+    except _requests.exceptions.ConnectionError as exc:
+        return jsonify({'success': False, 'error': f'Could not connect: {exc}'}), 400
+    except _requests.exceptions.Timeout:
+        return jsonify({'success': False, 'error': 'Connection timed out'}), 400
+
+    if resp.status_code == 401:
+        return jsonify({'success': False, 'error': 'API key rejected (401)'}), 400
+    if resp.status_code >= 400:
+        return jsonify({'success': False, 'error': f'HTTP {resp.status_code}'}), 400
+
+    return jsonify({'success': True, 'message': f'Connected to {aggregator.capitalize()} successfully'})
 
 
 @indexers_bp.route('/api/indexers/test-all', methods=['POST'])

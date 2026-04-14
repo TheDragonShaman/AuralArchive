@@ -35,6 +35,7 @@ Endpoints:
 """
 
 from flask import Blueprint, request, jsonify
+from flask_login import current_user
 from typing import Dict, Any
 
 from services.service_manager import get_download_management_service
@@ -44,6 +45,12 @@ logger = get_module_logger("API.Download.Management")
 
 # Create blueprint
 download_management_bp = Blueprint('download_management', __name__)
+
+
+@download_management_bp.before_request
+def _require_auth():
+    if not current_user.is_authenticated:
+        return jsonify({'error': 'Authentication required'}), 401
 
 
 # ============================================================================

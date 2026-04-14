@@ -34,11 +34,13 @@ import asyncio
 import threading
 import os
 import shutil
+import re
+from html import unescape
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
 from datetime import datetime
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import urlparse, urlunparse, urljoin
 
 import requests
 from loguru import logger as loguru_logger
@@ -50,6 +52,7 @@ from services.audible.ownership_validator import (
     fetch_audible_library_entry,
     merge_audible_records,
 )
+from .path_mapping import remap_remote_to_local
 
 _LOGGER = get_module_logger("Service.DownloadManagement.Service")
 
@@ -113,7 +116,10 @@ class DownloadManagementService:
                     self.retry_handler = RetryHandler()
                     self.cleanup_manager = CleanupManager()
                     self.event_emitter = EventEmitter()
+                    self.download_monitor.set_client_selector(self.client_selector)
                     self.event_emitter.attach_lookup(self.queue_manager.get_download)
+                    self.download_monitor.set_event_emitter(self.event_emitter)
+                    self.retry_handler.attach_event_emitter(self.event_emitter)
 
                     # Track active Audible downloads for cooperative cancellation
                     self._audible_context_lock = threading.Lock()
@@ -289,7 +295,7 @@ class DownloadManagementService:
             # Align torrent save path with qBittorrent configuration when provided
             qbittorrent_cfg = {}
             try:
-                qbittorrent_cfg = self.client_selector.get_client_config('qbittorrent') or {}
+                qbittorrent_cfg = self.client_selector.get_client_config('qbittorrent', refresh=True) or {}
             except Exception as cfg_error:
                 self.logger.warning(f"Unable to load qBittorrent configuration: {cfg_error}")
 
@@ -555,6 +561,7 @@ class DownloadManagementService:
         with self._lock:
             try:
                 self.logger.debug("Reloading download management configuration...")
+                self.client_selector.invalidate_cache()
                 self._load_configuration()
                 self._configure_audible_concurrency()
 
@@ -774,7 +781,7 @@ class DownloadManagementService:
             try:
                 status_data = client.get_status(client_id)
             except Exception as exc:  # pragma: no cover - network errors
-                self.logger.debug("Skipping seeding overlay for %s: %s", item.get('id'), exc)
+                _LOGGER.debug("Skipping seeding overlay for %s: %s", item.get('id'), exc)
                 continue
 
             if status_data is None:
@@ -872,11 +879,26 @@ class DownloadManagementService:
             
             # Pause in client
             client = self.client_selector.get_client(download['download_client'])
-            if client:
-                client.pause(download['download_client_id'])
+            if not client:
+                return {'success': False, 'message': f"Download client {download.get('download_client')} not available"}
+
+            client_id = download.get('download_client_id')
+            if not client_id:
+                return {'success': False, 'message': 'Download has no client ID yet; try again shortly'}
+
+            if not client.pause(client_id):
+                client_error = getattr(client, 'get_last_error', lambda: None)() or 'Client rejected pause request'
+                self.logger.warning(
+                    "Pause request failed for download %s (client_id=%s): %s",
+                    download_id,
+                    client_id,
+                    client_error,
+                )
+                return {'success': False, 'message': f'Failed to pause download: {client_error}'}
             
             # Update state
-            self.state_machine.transition(download_id, 'PAUSED')
+            if not self.state_machine.transition(download_id, 'PAUSED'):
+                return {'success': False, 'message': 'Download paused in client but state transition failed'}
             
             # Emit event
             self.event_emitter.emit_download_paused(download_id)
@@ -912,11 +934,26 @@ class DownloadManagementService:
             
             # Resume in client
             client = self.client_selector.get_client(download['download_client'])
-            if client:
-                client.resume(download['download_client_id'])
+            if not client:
+                return {'success': False, 'message': f"Download client {download.get('download_client')} not available"}
+
+            client_id = download.get('download_client_id')
+            if not client_id:
+                return {'success': False, 'message': 'Download has no client ID yet; try again shortly'}
+
+            if not client.resume(client_id):
+                client_error = getattr(client, 'get_last_error', lambda: None)() or 'Client rejected resume request'
+                self.logger.warning(
+                    "Resume request failed for download %s (client_id=%s): %s",
+                    download_id,
+                    client_id,
+                    client_error,
+                )
+                return {'success': False, 'message': f'Failed to resume download: {client_error}'}
             
             # Update state
-            self.state_machine.transition(download_id, 'DOWNLOADING')
+            if not self.state_machine.transition(download_id, 'DOWNLOADING'):
+                return {'success': False, 'message': 'Download resumed in client but state transition failed'}
             
             # Emit event
             self.event_emitter.emit_download_resumed(download_id)
@@ -1186,7 +1223,8 @@ class DownloadManagementService:
                 # If we have search_result_id, skip to FOUND
                 if item.get('search_result_id'):
                     self.logger.info("Download %s using pre-selected search result; scheduling download", item['id'])
-                    self.state_machine.transition(item['id'], 'FOUND')
+                    if self.state_machine.transition(item['id'], 'FOUND'):
+                        self.event_emitter.emit_search_found(item['id'], source=item.get('indexer'))
                 else:
                     if active_searches >= self.max_active_searches:
                         self.logger.debug(
@@ -1231,7 +1269,16 @@ class DownloadManagementService:
 
                 if item.get('next_retry_at'):
                     self.queue_manager.update_download(item['id'], {'next_retry_at': None})
-                
+
+                # Transition to DOWNLOADING immediately so the next pipeline tick
+                # cannot pick up this same FOUND item and submit it a second time.
+                if not self.state_machine.transition(item['id'], 'DOWNLOADING'):
+                    self.logger.debug(
+                        "Download %s could not transition FOUND→DOWNLOADING (already moved); skipping",
+                        item['id']
+                    )
+                    continue
+
                 # Start the actual download
                 self._start_download(item['id'], source_info)
                     
@@ -1333,11 +1380,9 @@ class DownloadManagementService:
                         )
 
                         if self.state_machine.transition(item['id'], 'SEEDING_COMPLETE'):
-                            self.event_emitter.emit_state_changed(
-                                item['id'],
-                                'SEEDING_COMPLETE',
-                                'Seeding finished and cleaned up'
-                            )
+                            self.event_emitter.emit_seeding_completed(item['id'])
+                            # Close the lifecycle status event now that seeding is done
+                            self.event_emitter.emit_download_completed(item['id'])
                             self.logger.info(f"Download {item['id']} marked as SEEDING_COMPLETE")
                             try:
                                 self.queue_manager.delete_download(item['id'])
@@ -1370,11 +1415,7 @@ class DownloadManagementService:
                 if not download.get('indexer'):
                     self.queue_manager.update_download(download_id, {'indexer': 'Audible', 'last_error': None})
                 if self.state_machine.transition(download_id, 'FOUND'):
-                    self.event_emitter.emit_state_changed(
-                        download_id,
-                        'FOUND',
-                        'Audible download scheduled for direct retrieval'
-                    )
+                    self.event_emitter.emit_search_found(download_id, source='Audible')
                 return
 
             book_asin = download.get('book_asin')
@@ -1407,6 +1448,8 @@ class DownloadManagementService:
                     error_message=error_msg
                 )
                 return
+
+            self.event_emitter.emit_search_started(download_id, title)
             
             # Perform search using SearchEngineService
             search_service = self._get_search_service()
@@ -1496,7 +1539,12 @@ class DownloadManagementService:
             )
             
             # Update download with source info
-            new_type = (best_result.get('download_type') or '').strip().lower()
+            # Prefer explicit download_type; fall back to result_type (set by NZB indexers)
+            new_type = (
+                best_result.get('download_type')
+                or best_result.get('result_type')
+                or ''
+            ).strip().lower()
             if current_type == 'audible' and new_type != 'audible':
                 new_type = 'audible'
             elif not new_type:
@@ -1513,7 +1561,11 @@ class DownloadManagementService:
             
             # Transition to FOUND state and start download
             if self.state_machine.transition(download_id, 'FOUND'):
-                self.event_emitter.emit_state_changed(download_id, 'FOUND', 'Search completed')
+                self.event_emitter.emit_search_found(
+                    download_id,
+                    source=best_result.get('indexer'),
+                    title=title
+                )
                 # Download kickoff handled by the FOUND queue processor to avoid double starts
             
         except Exception as e:
@@ -1618,10 +1670,21 @@ class DownloadManagementService:
                 
         except Exception as e:
             self.logger.exception("Error starting download %s", download_id)
-            self.retry_handler.handle_failure(
+            # Only retry if the download has not already been sent to a client.
+            # NZB: _start_nzb_download guards itself; this outer handler catches
+            # unexpected errors before we reach the client call.
+            refreshed = self.queue_manager.get_download(download_id)
+            already_sent = refreshed and refreshed.get('download_client_id')
+            if not already_sent:
+                self.retry_handler.handle_failure(
                     download_id=download_id,
                     failure_status='DOWNLOAD_FAILED',
                     error_message=str(e)
+                )
+            else:
+                self.logger.warning(
+                    "Download %s already has a client job (%s); skipping retry after exception",
+                    download_id, refreshed.get('download_client_id'),
                 )
     
     def _run_audible_download(self, download_id: int, download: Dict[str, Any], cancel_event: Optional[threading.Event] = None):
@@ -1877,9 +1940,14 @@ class DownloadManagementService:
     ):
         """Download from torrent/NZB indexers using download clients."""
         try:
-            # Select appropriate download client
+            # Route NZB downloads to the dedicated NZB client path
+            if download_type == 'nzb':
+                self._start_nzb_download(download_id, download, download_url)
+                return
+
+            # Select appropriate torrent download client
             client_name = 'qbittorrent'
-            client = self.client_selector.get_client(client_name)  # Currently only qBittorrent supported
+            client = self.client_selector.get_client(client_name)
             if not client:
                 error_msg = f"No {download_type} client available"
                 self.logger.error(error_msg)
@@ -1912,34 +1980,113 @@ class DownloadManagementService:
 
             save_path_for_client = remote_save_path or download_dir
             
-            torrent_payload: Any = download_url
-            if download_url and isinstance(download_url, str):
-                trimmed_url = download_url.strip()
-                if trimmed_url.lower().startswith("magnet:"):
+            # Strict torrent-file mode: only pass verified .torrent bytes (or a
+            # local .torrent file path) to qBittorrent. No magnet handoff and no
+            # remote URL handoff to qBittorrent.
+            if not download_url or not isinstance(download_url, str):
+                error_msg = "Torrent source missing download URL"
+                self.logger.error(error_msg)
+                self.retry_handler.handle_failure(
+                    download_id=download_id,
+                    failure_status='DOWNLOAD_FAILED',
+                    error_message=error_msg,
+                )
+                return
+
+            trimmed_url = download_url.strip()
+            torrent_payload: Any
+            lower_url = trimmed_url.lower()
+
+            if lower_url.startswith("magnet:"):
+                if self._is_direct_provider_download(download, trimmed_url):
                     torrent_payload = trimmed_url
-                elif trimmed_url.lower().startswith(("http://", "https://")):
-                    try:
-                        fetched_payload, fetched_type = self._fetch_remote_torrent(trimmed_url, download)
-                    except PermissionError as exc:
-                        error_msg = str(exc) or "Direct provider rejected download session"
-                        self.logger.error(error_msg)
-                        self.retry_handler.handle_failure(
-                            download_id=download_id,
-                            failure_status='DOWNLOAD_FAILED',
-                            error_message=error_msg
+                    self.logger.warning(
+                        "Using direct-provider magnet fallback for download %s",
+                        download_id,
+                    )
+                else:
+                    error_msg = (
+                        "Magnet sources are disabled in strict torrent-file mode; "
+                        "provider must return a .torrent file"
+                    )
+                    self.logger.error(error_msg)
+                    self.retry_handler.handle_failure(
+                        download_id=download_id,
+                        failure_status='DOWNLOAD_FAILED',
+                        error_message=error_msg,
+                    )
+                    return
+
+            elif lower_url.startswith(("http://", "https://")):
+                try:
+                    fetched_payload, fetched_type = self._fetch_remote_torrent(trimmed_url, download)
+                except PermissionError as exc:
+                    error_msg = str(exc) or "Direct provider rejected download session"
+                    self.logger.error(error_msg)
+                    self.retry_handler.handle_failure(
+                        download_id=download_id,
+                        failure_status='DOWNLOAD_FAILED',
+                        error_message=error_msg,
+                    )
+                    return
+
+                if fetched_type == "bytes" and fetched_payload:
+                    torrent_payload = fetched_payload
+                    self.logger.debug("Using server-fetched torrent payload for download %s", download_id)
+                elif fetched_type == "magnet" and fetched_payload and self._is_direct_provider_download(download, trimmed_url):
+                    torrent_payload = fetched_payload
+                    self.logger.warning(
+                        "Using direct-provider magnet fallback for download %s after HTML resolution",
+                        download_id,
+                    )
+                else:
+                    if fetched_type == "magnet":
+                        error_msg = (
+                            "Provider resolved to magnet instead of .torrent file in strict mode"
                         )
-                        return
-                    if fetched_type == "bytes" and fetched_payload:
-                        torrent_payload = fetched_payload
-                        self.logger.debug("Using server-fetched torrent payload for download %s", download_id)
-                    elif fetched_type == "magnet" and fetched_payload:
-                        torrent_payload = fetched_payload
-                        self.logger.debug("Resolved download %s to magnet URI via Jackett redirect", download_id)
                     else:
-                        self.logger.warning(
-                            "Failed to fetch torrent payload from %s; falling back to handing URL to client",
-                            download_url,
+                        error_msg = (
+                            f"Failed to fetch a valid .torrent payload from {download_url}"
                         )
+                    self.logger.error(error_msg)
+                    self.retry_handler.handle_failure(
+                        download_id=download_id,
+                        failure_status='DOWNLOAD_FAILED',
+                        error_message=error_msg,
+                    )
+                    return
+            else:
+                parsed_candidate = urlparse(trimmed_url)
+                has_uri_scheme = bool(parsed_candidate.scheme and parsed_candidate.scheme != 'file')
+
+                # Non-file URI schemes are never local filesystem paths.
+                if has_uri_scheme:
+                    is_local_torrent = False
+                else:
+                    try:
+                        local_path = Path(trimmed_url)
+                        is_local_torrent = (
+                            local_path.exists()
+                            and local_path.is_file()
+                            and local_path.suffix.lower() == ".torrent"
+                        )
+                    except OSError:
+                        is_local_torrent = False
+
+                if is_local_torrent:
+                    torrent_payload = trimmed_url
+                else:
+                    error_msg = (
+                        "Strict torrent-file mode requires an HTTP(S) URL that resolves to a .torrent "
+                        "or a local .torrent file path"
+                    )
+                    self.logger.error(error_msg)
+                    self.retry_handler.handle_failure(
+                        download_id=download_id,
+                        failure_status='DOWNLOAD_FAILED',
+                        error_message=error_msg,
+                    )
+                    return
 
             # Use qBittorrent's add_torrent method
             add_result = client.add_torrent(
@@ -1950,6 +2097,8 @@ class DownloadManagementService:
                 auto_tmm=False,
                 expected_hash=info_hash,
             )
+
+            # Strict mode intentionally does not retry via URL handoff.
             
             if not add_result.get('success'):
                 error_msg = add_result.get('error', 'Failed to add download to client')
@@ -1963,6 +2112,21 @@ class DownloadManagementService:
             
             # qBittorrent may return torrent hash, or we need to find it after submission
             torrent_hash = add_result.get('hash')
+
+            # Validate returned hash before persisting it. Some providers expose
+            # an info-hash that may not match qBittorrent's primary hash field.
+            if torrent_hash:
+                try:
+                    client.get_status(torrent_hash)
+                except Exception as hash_lookup_error:
+                    self.logger.warning(
+                        "qBittorrent could not resolve returned torrent hash '%s' for download %s: %s. "
+                        "Attempting discovery fallback.",
+                        torrent_hash,
+                        download_id,
+                        hash_lookup_error,
+                    )
+                    torrent_hash = None
 
             if torrent_hash:
                 actual_dir = self._detect_actual_save_path(client, torrent_hash)
@@ -2001,61 +2165,22 @@ class DownloadManagementService:
                 time.sleep(1)  # Give qBittorrent time to add the torrent
 
                 book_title = (download.get('book_title') or download.get('title') or '').lower()
-                normalized_temp = os.path.abspath(download_dir)
-                matched_hash = None
 
                 try:
-                    torrents_url = client.api_url + 'torrents/info'
-                    base_params = {'sort': 'added_on', 'reverse': 'true'}
-
-                    torrents = []
-                    response = client.session.get(
-                        torrents_url,
-                        params={**base_params, 'category': category} if category else base_params,
-                        timeout=10
+                    torrents = client.get_all_torrents()
+                    torrent_hash = self._select_torrent_hash_candidate(
+                        torrents=torrents,
+                        download_dir=download_dir,
+                        remote_download_dir=remote_save_path,
+                        title_hint=book_title,
                     )
 
-                    if response.status_code == 200:
-                        torrents = response.json() or []
-
-                    # Fall back to unfiltered request if category lookup returned nothing
-                    if not torrents:
-                        response = client.session.get(
-                            torrents_url,
-                            params=base_params,
-                            timeout=10
+                    if torrent_hash:
+                        self.logger.info(
+                            "Resolved torrent hash for download %s using deterministic candidate matching: %s",
+                            download_id,
+                            torrent_hash,
                         )
-
-                        if response.status_code == 200:
-                            torrents = response.json() or []
-
-                    for torrent in torrents:
-                        candidate_hash = torrent.get('hash')
-                        if not candidate_hash:
-                            continue
-
-                        name = (torrent.get('name') or '').lower()
-                        save_path = torrent.get('save_path') or ''
-
-                        if save_path:
-                            normalized_save = os.path.abspath(save_path.rstrip('/\\'))
-                            if normalized_save == normalized_temp:
-                                torrent_hash = candidate_hash
-                                self.logger.info(f"Found torrent hash via save_path match: {torrent_hash}")
-                                break
-
-                        if book_title and name and book_title in name:
-                            matched_hash = candidate_hash
-
-                    if not torrent_hash and matched_hash:
-                        torrent_hash = matched_hash
-                        self.logger.info(f"Found torrent hash via name match: {torrent_hash}")
-
-                    if not torrent_hash and torrents:
-                        sorted_torrents = sorted(torrents, key=lambda t: t.get('added_on', 0), reverse=True)
-                        if sorted_torrents:
-                            torrent_hash = sorted_torrents[0].get('hash')
-                            self.logger.info(f"Using most recent torrent hash fallback: {torrent_hash}")
 
                 except Exception as find_error:
                     self.logger.warning(f"Could not determine torrent hash: {find_error}")
@@ -2097,6 +2222,108 @@ class DownloadManagementService:
                     download_id=download_id,
                     failure_status='DOWNLOAD_FAILED',
                     error_message=str(e)
+                )
+
+    def _start_nzb_download(
+        self,
+        download_id: int,
+        download: Dict[str, Any],
+        download_url: str,
+    ):
+        """Send an NZB URL to SABnzbd or NZBGet."""
+        # Once this is True the NZB is queued in the client; exceptions after
+        # this point must NOT retry via FOUND or we get a second submission.
+        nzb_queued_in_client = False
+        try:
+            client_name = self.client_selector.select_client('nzb')
+            if not client_name:
+                error_msg = (
+                    "No NZB client available — enable SABnzbd or NZBGet "
+                    "in Settings → Download Clients"
+                )
+                self.logger.error(error_msg)
+                self.retry_handler.handle_failure(
+                    download_id=download_id,
+                    failure_status='DOWNLOAD_FAILED',
+                    error_message=error_msg,
+                )
+                return
+
+            client = self.client_selector.get_client(client_name)
+            if not client:
+                error_msg = f"Could not initialise NZB client: {client_name}"
+                self.logger.error(error_msg)
+                self.retry_handler.handle_failure(
+                    download_id=download_id,
+                    failure_status='DOWNLOAD_FAILED',
+                    error_message=error_msg,
+                )
+                return
+
+            config_service = self._get_config_service()
+            category = config_service.get_config_value(client_name, 'category', fallback='') or None
+            book_title = (download.get('book_title') or download.get('title') or '').strip()
+
+            add_result = client.add_nzb(
+                download_url,
+                category=category,
+                nzb_name=book_title or None,
+            )
+
+            if not add_result.get('success'):
+                error_msg = add_result.get('error') or 'NZB client rejected the download'
+                self.logger.error(
+                    "NZB add failed for download %s via %s: %s",
+                    download_id, client_name, error_msg,
+                )
+                self.retry_handler.handle_failure(
+                    download_id=download_id,
+                    failure_status='DOWNLOAD_FAILED',
+                    error_message=error_msg,
+                )
+                return
+
+            # NZB is now accepted by the client — mark so the except block
+            # does NOT retry (which would cause a duplicate submission).
+            nzb_queued_in_client = True
+
+            job_id = add_result.get('id')
+            self.queue_manager.update_download(download_id, {
+                'download_client': client_name,
+                'download_client_id': str(job_id) if job_id else None,
+                'last_error': None,
+                'started_at': datetime.now().isoformat(),
+            })
+
+            # The queue processor already transitioned FOUND→DOWNLOADING before
+            # calling _start_download, so the item may already be in DOWNLOADING
+            # state.  Only attempt the transition (and fire the event) when the
+            # current status is not already DOWNLOADING, matching the guard that
+            # exists in _start_torrent_download.
+            latest_record = self.queue_manager.get_download(download_id)
+            latest_status = (latest_record.get('status') if latest_record else None) or ''
+            if latest_status.upper() != 'DOWNLOADING':
+                if self.state_machine.transition(download_id, 'DOWNLOADING'):
+                    self.event_emitter.emit_download_started(download_id)
+            self.logger.info(
+                "NZB download %s sent to %s (job_id=%s)",
+                download_id, client_name, job_id,
+            )
+
+        except Exception:
+            self.logger.exception("Error starting NZB download %s", download_id)
+            if nzb_queued_in_client:
+                # Don't retry — the NZB is already in the client; the monitor
+                # will pick it up on the next poll via download_client_id.
+                self.logger.warning(
+                    "NZB download %s already queued in client; skipping retry to avoid duplicate submission",
+                    download_id,
+                )
+            else:
+                self.retry_handler.handle_failure(
+                    download_id=download_id,
+                    failure_status='DOWNLOAD_FAILED',
+                    error_message='Unexpected error starting NZB download',
                 )
 
     def _normalize_download_url(self, download_url: Optional[str], allow_localhost: bool = False) -> str:
@@ -2287,9 +2514,55 @@ class DownloadManagementService:
                 if text_body.lower().startswith("magnet:"):
                     return text_body, "magnet"
 
+                if content_type_lower.startswith("text/") and self._looks_like_login_gate(response, text_body):
+                    raise PermissionError(
+                        "Direct provider authentication appears invalid or expired; "
+                        "refresh the provider session_id in Settings -> Indexers"
+                    )
+
+                # Some direct providers return an HTML landing page even for download
+                # links; recover magnet/info-hash from markup when possible.
+                if content_type_lower.startswith("text/"):
+                    html_magnet = self._extract_magnet_from_text(response.text)
+                    if html_magnet:
+                        return html_magnet, "magnet"
+
+                    html_hash = self._extract_info_hash_from_text(response.text)
+                    if html_hash:
+                        return f"magnet:?xt=urn:btih:{html_hash}", "magnet"
+
+                    html_torrent_url = self._extract_torrent_url_from_html(response.text, response.url)
+                    if html_torrent_url:
+                        self.logger.debug("Following embedded .torrent URL from HTML payload: %s", html_torrent_url)
+                        follow_kwargs = {
+                            "timeout": 30,
+                            "verify": self.jackett_verify_ssl,
+                            "headers": headers,
+                        }
+                        if cookies:
+                            follow_kwargs["cookies"] = cookies
+                        response = requests.get(html_torrent_url, **follow_kwargs)
+                        response.raise_for_status()
+                        content_type_header = response.headers.get("Content-Type", "")
+                        content_type_lower = content_type_header.lower()
+
                 content = response.content
                 if not content:
                     self.logger.warning("Torrent download returned empty payload from %s", download_url)
+                    return None, ""
+
+                prefix_text = content[:1024].decode("utf-8", errors="ignore").strip()
+                if prefix_text.lower().startswith("magnet:"):
+                    magnet_uri = prefix_text.splitlines()[0].strip()
+                    if magnet_uri:
+                        return magnet_uri, "magnet"
+
+                if not self._looks_like_torrent_payload(content):
+                    self.logger.warning(
+                        "Fetched payload from %s does not look like a valid .torrent file (content-type='%s')",
+                        download_url,
+                        content_type_header,
+                    )
                     return None, ""
 
                 if 'bittorrent' not in content_type_lower and not download_url.lower().endswith('.torrent'):
@@ -2306,7 +2579,123 @@ class DownloadManagementService:
                 return None, ""
 
         return None, ""
-    
+
+    @staticmethod
+    def _looks_like_torrent_payload(content: bytes) -> bool:
+        """Best-effort check that payload bytes resemble a bencoded .torrent file."""
+        if not content:
+            return False
+
+        sample = content[:4096].lstrip()
+        if not sample:
+            return False
+
+        lower_sample = sample.lower()
+        html_or_text_markers = (
+            b"<!doctype html",
+            b"<html",
+            b"<?xml",
+            b"<body",
+            b"<head",
+        )
+        if any(lower_sample.startswith(marker) for marker in html_or_text_markers):
+            return False
+
+        # Torrent files are bencoded dictionaries and typically include at least
+        # the "info" key plus announce metadata.
+        if sample[:1] != b"d":
+            return False
+
+        return b"4:info" in content and (b"8:announce" in content or b"13:announce-list" in content)
+
+    @staticmethod
+    def _extract_magnet_from_text(text: str) -> Optional[str]:
+        """Extract the first magnet URI from text/HTML payloads."""
+        if not text:
+            return None
+        decoded = unescape(text)
+        match = re.search(r"magnet:\?xt=urn:btih:[A-Za-z0-9]+[^\s\"'<>]*", decoded, flags=re.IGNORECASE)
+        if not match:
+            return None
+        return match.group(0).strip()
+
+    @staticmethod
+    def _extract_info_hash_from_text(text: str) -> Optional[str]:
+        """Extract a likely 40-char hex info-hash from provider HTML."""
+        if not text:
+            return None
+        decoded = unescape(text)
+        # Prefer values labeled as info hash when available.
+        labeled = re.search(
+            r"info\s*hash[^0-9a-fA-F]{0,40}([0-9a-fA-F]{40})",
+            decoded,
+            flags=re.IGNORECASE,
+        )
+        if labeled:
+            return labeled.group(1).lower()
+
+        generic = re.search(r"\b([0-9a-fA-F]{40})\b", decoded)
+        if generic:
+            return generic.group(1).lower()
+        return None
+
+    @staticmethod
+    def _extract_torrent_url_from_html(text: str, base_url: str) -> Optional[str]:
+        """Find an embedded .torrent URL in HTML and resolve to absolute URL."""
+        if not text:
+            return None
+        decoded = unescape(text)
+        match = re.search(r"href=[\"']([^\"']+\.torrent[^\"']*)[\"']", decoded, flags=re.IGNORECASE)
+        if not match:
+            return None
+        href = match.group(1).strip()
+        if not href:
+            return None
+        return urljoin(base_url, href)
+
+    def _is_direct_provider_download(self, download: Dict[str, Any], download_url: str) -> bool:
+        """Best-effort detection for direct-provider sourced torrents."""
+        indexer_name = str(download.get('indexer') or '').strip().lower()
+        if indexer_name:
+            for meta in self.direct_provider_sessions.values():
+                candidate = str(meta.get('indexer') or '').strip().lower()
+                if candidate and candidate == indexer_name:
+                    return True
+
+        try:
+            host = (urlparse(download_url).hostname or '').lower()
+        except Exception:
+            host = ''
+        if host:
+            if host in self.direct_provider_sessions:
+                return True
+            if host.startswith('www.') and host[4:] in self.direct_provider_sessions:
+                return True
+        return False
+
+    @staticmethod
+    def _looks_like_login_gate(response: requests.Response, text_body: str) -> bool:
+        """Detect common provider login/redirect pages returned instead of torrent payload."""
+        response_url = (getattr(response, "url", "") or "").lower()
+        body_lower = (text_body or "").lower()
+
+        indicators = (
+            "/member/login",
+            "member/login",
+            "signin",
+            "log in",
+            "login",
+        )
+
+        if any(indicator in response_url for indicator in indicators):
+            return True
+
+        # Handles meta-refresh style redirects like ABB: <meta http-equiv='Refresh' ... member/login>
+        if "http-equiv='refresh'" in body_lower and "member/login" in body_lower:
+            return True
+
+        return False
+
     def _start_conversion(self, download_id: int):
         """Start FFmpeg conversion for completed download."""
         try:
@@ -2336,7 +2725,7 @@ class DownloadManagementService:
                 self.logger.error(f"Failed to transition download {download_id} to CONVERTING state")
                 return
             
-            self.event_emitter.emit_state_changed(download_id, 'CONVERTING', 'Starting conversion')
+            self.event_emitter.emit_conversion_started(download_id)
             
             # Get book metadata for conversion
             db_service = self._get_database_service()
@@ -2390,15 +2779,16 @@ class DownloadManagementService:
             
             # Perform conversion using ConversionService
             conversion_service = self._get_conversion_service()
-            
-            # Progress callback for conversion updates
+
+            # Progress callback — routes through the main download activity event
             def progress_callback(message: str, progress: int):
                 self.progress_tracker.emit_progress(
                     download_id=download_id,
                     progress_percentage=progress,
                     message=message
                 )
-            
+                self.event_emitter.emit_conversion_progress(download_id, float(progress), message)
+
             conversion_result = conversion_service.convert_audiobook(
                 input_file=actual_file,
                 output_file=output_file,
@@ -2406,7 +2796,7 @@ class DownloadManagementService:
                 metadata=book_data,
                 voucher_file=voucher_file_path
             )
-            
+
             if not conversion_result.get('success'):
                 error_msg = conversion_result.get('error', 'Conversion failed')
                 self.logger.error(f"Conversion failed for {download_id}: {error_msg}")
@@ -2428,7 +2818,7 @@ class DownloadManagementService:
             
             # Transition to CONVERTED state
             if self.state_machine.transition(download_id, 'CONVERTED'):
-                self.event_emitter.emit_state_changed(download_id, 'CONVERTED', 'Conversion completed')
+                self.event_emitter.emit_conversion_completed(download_id)
                 self.logger.success(
                     "Conversion completed successfully",
                     extra={"download_id": download_id, "converted_file": converted_file_path},
@@ -2463,6 +2853,17 @@ class DownloadManagementService:
             if not converted_file_path or not os.path.exists(converted_file_path):
                 resolved_path = None
                 if download_type != 'audible' and temp_file_path:
+                    # Apply SABnzbd remote→local path mapping if the raw path
+                    # was stored as a container/remote path and can't be found.
+                    if not os.path.exists(temp_file_path):
+                        remapped = self._remap_sabnzbd_path(temp_file_path)
+                        if remapped != temp_file_path:
+                            self.logger.info(
+                                "Import for download %s: remapping temp path %s → %s",
+                                download_id, temp_file_path, remapped,
+                            )
+                            temp_file_path = remapped
+                            self.queue_manager.update_download(download_id, {'temp_file_path': temp_file_path})
                     resolved_path = self._find_downloaded_file(temp_file_path)
                 elif temp_file_path and os.path.isfile(temp_file_path):
                     resolved_path = temp_file_path
@@ -2493,7 +2894,7 @@ class DownloadManagementService:
             current_status = download.get('status')
             transitioned = self.state_machine.transition(download_id, 'IMPORTING')
             if transitioned:
-                self.event_emitter.emit_state_changed(download_id, 'IMPORTING', 'Starting library import')
+                self.event_emitter.emit_import_started(download_id)
                 download['status'] = 'IMPORTING'
             elif current_status == 'IMPORTING':
                 self.logger.debug(f"Download {download_id} already in IMPORTING state; continuing import workflow")
@@ -2560,7 +2961,7 @@ class DownloadManagementService:
             if self.state_machine.transition(download_id, 'IMPORTED'):
                 imported_transitioned = True
                 download['status'] = 'IMPORTED'
-                self.event_emitter.emit_download_completed(download_id)
+                self.event_emitter.emit_import_completed(download_id)
                 loguru_logger.bind(logger_name="Service.DownloadManagement.Service").success(
                     f"Download {download_id} completed successfully"
                 )
@@ -2582,7 +2983,7 @@ class DownloadManagementService:
                 )
 
                 if self.state_machine.transition(download_id, 'SEEDING'):
-                    self.event_emitter.emit_state_changed(download_id, 'SEEDING', 'Seeding torrent')
+                    self.event_emitter.emit_seeding_started(download_id)
                     self.logger.info(f"Download {download_id} entered seeding state")
                 else:
                     self.logger.warning(
@@ -2590,6 +2991,8 @@ class DownloadManagementService:
                         download_id
                     )
             else:
+                # No seeding — lifecycle is complete
+                self.event_emitter.emit_download_completed(download_id)
                 self.cleanup_manager.cleanup_after_import(
                     download_id=download_id,
                     download_data=download,
@@ -2706,6 +3109,21 @@ class DownloadManagementService:
 
         return None
 
+    def _remap_sabnzbd_path(self, path: str) -> str:
+        """Translate a SABnzbd-reported path to local filesystem path."""
+        if not path:
+            return path
+        try:
+            sab_config = self.client_selector.get_client_config('sabnzbd', refresh=True) or {}
+            remote_base = sab_config.get('remote_path') or '/downloads'
+            local_base = sab_config.get('local_path') or self.downloads_path
+            remapped = remap_remote_to_local(path, remote_base, local_base)
+            return remapped or path
+        except Exception as exc:
+            self.logger.debug("SABnzbd path remap skipped", extra={"path": path, "error": str(exc)})
+
+        return path
+
     def _map_remote_to_local(self, remote_path: Optional[str]) -> Optional[str]:
         """Translate a remote client path back to the local filesystem when possible."""
 
@@ -2786,6 +3204,102 @@ class DownloadManagementService:
             return f"{base}{formatted_suffix}"
 
         return f"{base}{sep}{formatted_suffix}"
+
+    @staticmethod
+    def _normalize_path_for_compare(path: Optional[str]) -> str:
+        """Normalize a path-like string for cross-environment comparisons."""
+        if not path:
+            return ''
+        normalized = str(path).replace('\\', '/').strip()
+        while len(normalized) > 1 and normalized.endswith('/'):
+            normalized = normalized[:-1]
+        return normalized
+
+    def _build_save_path_candidates(
+        self,
+        download_dir: Optional[str],
+        remote_download_dir: Optional[str],
+    ) -> Dict[str, str]:
+        """Build deterministic path candidates used to map queue items to qB torrents."""
+        candidates = {
+            'local': self._normalize_path_for_compare(download_dir),
+            'remote': self._normalize_path_for_compare(remote_download_dir),
+            'basename': '',
+        }
+
+        local_candidate = candidates['local']
+        if local_candidate:
+            candidates['basename'] = os.path.basename(local_candidate)
+
+        if not candidates['remote'] and local_candidate:
+            mapped_remote = self._map_local_to_remote(download_dir)
+            candidates['remote'] = self._normalize_path_for_compare(mapped_remote)
+
+        return candidates
+
+    def _select_torrent_hash_candidate(
+        self,
+        torrents: List[Dict[str, Any]],
+        download_dir: Optional[str],
+        remote_download_dir: Optional[str],
+        title_hint: str,
+    ) -> Optional[str]:
+        """Resolve torrent hash consistently using save-path first, title second."""
+        if not torrents:
+            return None
+
+        candidates = self._build_save_path_candidates(download_dir, remote_download_dir)
+        local_candidate = candidates['local']
+        remote_candidate = candidates['remote']
+        basename_candidate = candidates['basename']
+
+        # First pass: exact save_path match against local or remote candidate.
+        for torrent in torrents:
+            candidate_hash = torrent.get('hash')
+            if not candidate_hash:
+                continue
+
+            save_path = self._normalize_path_for_compare(torrent.get('save_path'))
+            if not save_path:
+                continue
+
+            if local_candidate and save_path == local_candidate:
+                return candidate_hash
+            if remote_candidate and save_path == remote_candidate:
+                return candidate_hash
+
+        # Second pass: basename suffix match for mapped host/container roots.
+        if basename_candidate:
+            basename_matches: List[str] = []
+            suffix = f"/{basename_candidate}"
+            for torrent in torrents:
+                candidate_hash = torrent.get('hash')
+                if not candidate_hash:
+                    continue
+
+                save_path = self._normalize_path_for_compare(torrent.get('save_path'))
+                if save_path and save_path.endswith(suffix):
+                    basename_matches.append(candidate_hash)
+
+            if len(basename_matches) == 1:
+                return basename_matches[0]
+
+        # Final pass: conservative title match, only when unique.
+        if title_hint:
+            title_matches: List[str] = []
+            for torrent in torrents:
+                candidate_hash = torrent.get('hash')
+                if not candidate_hash:
+                    continue
+
+                name = str(torrent.get('name') or '').lower()
+                if name and title_hint in name:
+                    title_matches.append(candidate_hash)
+
+            if len(title_matches) == 1:
+                return title_matches[0]
+
+        return None
 
     def _detect_actual_save_path(self, client, torrent_hash: str) -> Optional[str]:
         """Ask the torrent client where it stored the download and map to local path."""

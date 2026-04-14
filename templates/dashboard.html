@@ -47,7 +47,8 @@
                         {% for book in recent_books %}
                             {% set art = book['Cover Image'] or url_for('static', filename='images/auralarchive_logo.png') %}
                             {% set last_activity = book['Updated At'] or book['Created At'] %}
-                            <article class="card bg-base-200 border border-base-content/10">
+                            <a href="{{ url_for('library.library_page') }}?book={{ book['ID'] }}" class="block group">
+                            <article class="card bg-base-200 border border-base-content/10 transition-colors group-hover:border-primary/40 group-hover:bg-base-300">
                                 <div class="card-body p-4 flex flex-col lg:flex-row gap-4">
                                     <img src="{{ art }}" alt="{{ book['Title'] }}" class="w-[150px] h-[150px] object-cover rounded-xl border border-base-content/10" loading="lazy">
                                     <div class="flex-1 flex flex-col">
@@ -67,6 +68,7 @@
                                     </div>
                                 </div>
                             </article>
+                            </a>
                         {% endfor %}
                     </div>
                 {% else %}
