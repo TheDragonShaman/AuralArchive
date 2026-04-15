@@ -104,7 +104,7 @@ def create_app(config_class=Config):
     # Disabling upgrades server-side forces all clients to use HTTP long-polling,
     # which works correctly through the WSGI interface. When running with eventlet
     # or gevent the flag is left True so real WebSocket is available.
-    _allow_upgrades = _async_mode != 'threading'
+    _allow_upgrades = _async_mode in ('gevent', 'eventlet')
     socketio = SocketIO(
         app,
         async_mode=_async_mode,
@@ -419,6 +419,67 @@ def register_error_handlers(app):
         )
         return jsonify({'error': 'An unexpected error occurred'}), 500
 
+def start_background_services():
+    """Initialize background services after Flask app is fully loaded.
+
+    Called by the __main__ entry point (dev) and by wsgi.py (gunicorn).
+    """
+    try:
+        import gevent
+        gevent.sleep(3)  # gevent-friendly sleep; yields to other greenlets
+
+        from services.service_manager import get_audible_wishlist_service
+
+        logger.debug("Initializing wishlist auto-sync service...")
+        wishlist_service = get_audible_wishlist_service()
+
+        # The service will auto-start if configured properly
+        status = wishlist_service.get_status()
+        if status.get('auto_sync_running', False):
+            logger.info(
+                "Wishlist auto-sync already running",
+                extra={"interval_minutes": 15},
+            )
+        elif status.get('service_configured', False):
+            # If service is configured but not auto-started, start it on startup
+            success = wishlist_service.start_auto_sync("startup")
+            if success:
+                logger.success("Wishlist auto-sync started successfully")
+            else:
+                logger.warning("Failed to start wishlist auto-sync on startup")
+        else:
+            logger.warning("Audible not configured - wishlist auto-sync disabled")
+
+        # Initialize download management service and start monitoring
+        logger.debug("Initializing download management service...")
+        try:
+            from services.service_manager import get_download_management_service
+            dm_service = get_download_management_service()
+
+            # Start the monitoring thread
+            dm_service.start_monitoring()
+            logger.success(
+                "Download management service monitoring started successfully",
+                extra={"monitoring": True},
+            )
+
+        except Exception as exc:
+            logger.error(
+                "Error starting download management service",
+                extra={"error": str(exc)},
+            )
+
+        logger.success(
+            "All background services started successfully",
+        )
+
+    except Exception as exc:
+        logger.error(
+            "Error initializing background services",
+            extra={"error": str(exc)},
+        )
+
+
 # Create app instance
 app, socketio = create_app()
 
@@ -441,27 +502,13 @@ def handle_ping():
 
 if __name__ == '__main__':
     import sys
+    import shutil
 
-    def _should_start_background_services() -> bool:
-        """Start background services only in the active serving process.
-
-        Werkzeug's debug reloader launches a parent watcher process plus a child
-        request-serving process. Background workers must run only in the child,
-        otherwise in-memory status events split across processes and sidebar
-        activity can appear stuck on older states.
-        """
-
-        run_main = os.environ.get('WERKZEUG_RUN_MAIN')
-        if run_main is None:
-            return True
-        return run_main.lower() == 'true'
-    
     # CLI argument handling
     if len(sys.argv) > 1 and sys.argv[1] == '--show-paths':
-        # Show detected paths for troubleshooting
         from utils.path_resolver import get_path_resolver
         pr = get_path_resolver()
-        
+
         print("=" * 60)
         print("AuralArchive Path Configuration")
         print("=" * 60)
@@ -476,104 +523,28 @@ if __name__ == '__main__':
         print(f"Auth:        {pr.get_auth_dir()}")
         print("=" * 60)
         sys.exit(0)
-    
-    logger.info("AuralArchive starting", extra={"mode": "development"})
-    
-    # Initialize wishlist service in background after startup
-    def initialize_services():
-        """Initialize background services after Flask app is fully loaded."""
-        try:
-            import time
-            time.sleep(3)  # Wait for Flask to fully initialize
-            
-            from services.service_manager import get_audible_wishlist_service
-            
-            logger.debug("Initializing wishlist auto-sync service...")
-            wishlist_service = get_audible_wishlist_service()
-            
-            # The service will auto-start if configured properly
-            status = wishlist_service.get_status()
-            if status.get('auto_sync_running', False):
-                logger.info(
-                    "Wishlist auto-sync already running",
-                    extra={"interval_minutes": 15},
-                )
-            elif status.get('service_configured', False):
-                # If service is configured but not auto-started, start it on startup
-                success = wishlist_service.start_auto_sync("startup")
-                if success:
-                    logger.success("Wishlist auto-sync started successfully")
-                else:
-                    logger.warning("Failed to start wishlist auto-sync on startup")
-            else:
-                logger.warning("Audible not configured - wishlist auto-sync disabled")
-            
-            # Initialize download management service and start monitoring
-            logger.debug("Initializing download management service...")
-            try:
-                from services.service_manager import get_download_management_service
-                dm_service = get_download_management_service()
-                
-                # Start the monitoring thread
-                dm_service.start_monitoring()
-                logger.success(
-                    "Download management service monitoring started successfully",
-                    extra={"monitoring": True},
-                )
-                
-            except Exception as exc:
-                logger.error(
-                    "Error starting download management service",
-                    extra={"error": str(exc)},
-                )
-            
-            
-            # Start async audiobook management services
-            logger.debug("Starting async audiobook management services...")
-            try:
-                import asyncio
-                from services.service_manager import service_manager
-                
-                # Create event loop for background async services
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                
-                # Start all async services
-                loop.run_until_complete(service_manager.start_all_services())
-                
-                logger.success(
-                    "All async audiobook management services started successfully",
-                    extra={"services": "all_async"},
-                )
-                
-            except Exception as exc:
-                logger.error(
-                    "Error starting async services",
-                    extra={"error": str(exc)},
-                )
-                
-        except Exception as exc:
-            logger.error(
-                "Error initializing background services",
-                extra={"error": str(exc)},
-            )
-    
-    # Start background services in separate thread.
-    # In debug/reloader mode, only the child process should bootstrap workers.
-    if _should_start_background_services():
-        import threading
 
-        services_thread = threading.Thread(target=initialize_services, daemon=True)
-        services_thread.start()
-    else:
-        logger.info("Skipping background service bootstrap in reloader parent process")
-    
-    # Run with SocketIO support
+    # Prefer the gunicorn that lives next to the active Python interpreter
+    # so this works regardless of whether the venv is activated in the shell.
+    gunicorn_bin = os.path.join(os.path.dirname(sys.executable), 'gunicorn')
+    if not os.path.isfile(gunicorn_bin):
+        gunicorn_bin = shutil.which('gunicorn') or 'gunicorn'
+
     listen_port = _get_listen_port()
-    socketio.run(
-        app,
-        debug=True,
-        host='0.0.0.0',
-        port=listen_port,
-        allow_unsafe_werkzeug=True,  # Needed when running with Werkzeug in containers
+    logger.info(
+        "Starting AuralArchive via gunicorn (gevent)",
+        extra={"host": "0.0.0.0", "port": listen_port},
     )
+
+    # Replace this process with gunicorn so the eventlet worker handles everything.
+    # --reload enables source-watching for dev convenience.
+    os.execv(gunicorn_bin, [
+        gunicorn_bin,
+        '--worker-class', 'geventwebsocket.gunicorn.workers.GeventWebSocketWorker',
+        '-w', '1',
+        '--bind', f'0.0.0.0:{listen_port}',
+        '--reload',
+        '--timeout', '120',
+        '--log-level', 'info',
+        'wsgi:application',
+    ])

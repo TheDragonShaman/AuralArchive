@@ -33,12 +33,12 @@ RUN mkdir -p /app/auralarchive/logs /app/auralarchive/database /app/auralarchive
     /app/auralarchive/static/cache
 
 # Copy and setup entrypoint script
-COPY docker/entrypoint.sh /entrypoint.sh
+COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-EXPOSE 5000
+EXPOSE 8765
 
 # Use entrypoint script to handle PUID/PGID
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["python", "app.py"]
+CMD ["gunicorn", "--worker-class", "geventwebsocket.gunicorn.workers.GeventWebSocketWorker", "-w", "1", "--bind", "0.0.0.0:8765", "--timeout", "120", "wsgi:application"]
 

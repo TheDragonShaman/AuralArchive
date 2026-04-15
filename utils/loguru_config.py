@@ -47,6 +47,11 @@ class InterceptHandler(logging.Handler):
         if record.name in {"httpx", "httpcore"} and record.levelno == logging.INFO:
             level = "DEBUG"
 
+        # Treat high-volume gevent access logs as debug noise so normal INFO
+        # logs stay readable while still preserving request visibility at DEBUG.
+        if record.name == "geventwebsocket.handler" and record.levelno == logging.INFO:
+            level = "DEBUG"
+
         frame = logging.currentframe()
         depth = 2
         while frame and frame.f_code.co_name == "emit":
@@ -102,7 +107,9 @@ def setup_loguru(log_level: Union[str, int] = "INFO", log_file: str = "auralarch
         sys.stdout,
         level=level,
         format=CONSOLE_FORMAT,
-        enqueue=True,
+        # Queue-based logging can deadlock in monkey-patched (gevent/eventlet)
+        # Gunicorn workers on newer Python runtimes.
+        enqueue=False,
         backtrace=False,
         diagnose=False,
         colorize=True,
@@ -116,7 +123,7 @@ def setup_loguru(log_level: Union[str, int] = "INFO", log_file: str = "auralarch
         rotation="10 MB",
         retention=5,
         encoding="utf-8",
-        enqueue=True,
+        enqueue=False,
         backtrace=False,
         diagnose=False,
     )

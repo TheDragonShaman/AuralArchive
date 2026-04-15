@@ -1279,6 +1279,11 @@ class DownloadManagementService:
                     )
                     continue
 
+                # Publish the lifecycle state change immediately so the sidebar
+                # activity panel does not appear stuck in QUEUED/FOUND while the
+                # client submission and hash discovery complete.
+                self.event_emitter.emit_download_started(item['id'])
+
                 # Start the actual download
                 self._start_download(item['id'], source_info)
                     
@@ -2432,8 +2437,13 @@ class DownloadManagementService:
     def _fetch_remote_torrent(self, download_url: str, download: Optional[Dict[str, Any]] = None) -> Tuple[Optional[Any], str]:
         """Retrieve the torrent payload, handling redirects to magnet URIs when necessary."""
 
+        # Indexer sessions can be changed from Settings while the app is live.
+        # Refresh before every fetch so direct-provider downloads do not require
+        # a full app restart to pick up new/rotated session IDs.
+        self._load_direct_provider_sessions()
         session_meta = self._resolve_direct_session(download_url)
-        max_attempts = 2 if session_meta else 1
+        # Allow one retry after refreshing session metadata on auth failures.
+        max_attempts = 2
         attempt = 0
 
         def _build_headers(meta: Optional[Dict[str, str]]) -> Tuple[Dict[str, str], Optional[Dict[str, str]]]:
@@ -2473,19 +2483,30 @@ class DownloadManagementService:
 
                 response = requests.get(download_url, **request_kwargs)
 
-                if response.status_code in {401, 403} and current_meta:
+                if response.status_code in {401, 403}:
+                    current_session = (current_meta or {}).get('session_id', '').strip()
                     self.logger.warning(
-                        "Direct provider rejected session while fetching %s (attempt %s)",
+                        "Direct provider auth rejected torrent fetch for %s (attempt %s, has_session=%s)",
                         download_url,
                         attempt + 1,
+                        bool(current_session),
                     )
+
                     if attempt + 1 < max_attempts:
                         self._load_direct_provider_sessions()
                         refreshed_meta = self._resolve_direct_session(download_url)
-                        if refreshed_meta and refreshed_meta.get('session_id') != current_meta.get('session_id'):
+                        refreshed_session = (refreshed_meta or {}).get('session_id', '').strip()
+                        if refreshed_session and refreshed_session != current_session:
                             current_meta = refreshed_meta
                             attempt += 1
                             continue
+
+                    if not current_session:
+                        raise PermissionError(
+                            "Direct provider session is missing for torrent download; "
+                            "set a valid session_id in Settings -> Indexers"
+                        )
+
                     raise PermissionError(
                         f"Direct provider authentication failed for {download_url}"
                     )

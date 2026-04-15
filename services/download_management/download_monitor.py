@@ -56,8 +56,13 @@ class DownloadMonitor:
         # Consecutive-miss counter for NZB jobs that vanish from the client.
         # Keyed by download_id; cleared on any successful status poll.
         self._nzb_missing_counts: Dict[int, int] = {}
+        # Consecutive-miss counter for seeding torrents that temporarily vanish
+        # from status queries. We should not assume seeding is complete just
+        # because a poll cannot find the torrent.
+        self._seeding_missing_counts: Dict[int, int] = {}
         # How many consecutive misses before we give up and requeue.
         self.NZB_MISSING_THRESHOLD = 3
+        self.SEEDING_MISSING_WARN_THRESHOLD = 3
     
     def _get_queue_manager(self):
         """Lazy load QueueManager."""
@@ -113,6 +118,10 @@ class DownloadMonitor:
         """Remember last known download data for seeding monitors."""
         if download:
             self._last_known_downloads[download_id] = dict(download)
+
+    def _clear_seeding_missing_count(self, download_id: int):
+        """Clear transient seeding-miss tracking for a download."""
+        self._seeding_missing_counts.pop(download_id, None)
 
     @staticmethod
     def _format_ratio_limit(value: Optional[float]) -> str:
@@ -533,13 +542,51 @@ class DownloadMonitor:
             try:
                 status = client.get_status(client_id)
             except ValueError:
-                self.logger.info(
-                    "Torrent %s not found while monitoring download %s; assuming seeding finished",
-                    client_id,
-                    download_id
-                )
-                self._complete_seeding_transition(download_id, download)
-                return
+                replacement_hash = self._discover_torrent_hash(client, download)
+                if replacement_hash and replacement_hash != client_id:
+                    previous_hash = client_id
+                    queue_manager.update_download(download_id, {
+                        'download_client_id': replacement_hash,
+                        'last_error': None,
+                    })
+                    download['download_client_id'] = replacement_hash
+                    client_id = replacement_hash
+                    self.logger.info(
+                        "Recovered seeding hash for download %s: %s -> %s",
+                        download_id,
+                        previous_hash,
+                        replacement_hash,
+                    )
+                    status = client.get_status(client_id)
+                else:
+                    misses = self._seeding_missing_counts.get(download_id, 0) + 1
+                    self._seeding_missing_counts[download_id] = misses
+
+                    # Keep the item in SEEDING and surface a warning after a
+                    # few consecutive misses; do not auto-finalize.
+                    if misses >= self.SEEDING_MISSING_WARN_THRESHOLD:
+                        warning_message = (
+                            f"Unable to locate seeding torrent in client after {misses} checks; "
+                            "retaining SEEDING state until client confirms completion"
+                        )
+                        queue_manager.update_download(download_id, {'last_error': warning_message})
+                        self.logger.warning(
+                            "Torrent %s still missing for seeding download %s (%d consecutive misses)",
+                            client_id,
+                            download_id,
+                            misses,
+                        )
+                    else:
+                        self.logger.info(
+                            "Torrent %s not found while monitoring seeding download %s (miss %d); waiting",
+                            client_id,
+                            download_id,
+                            misses,
+                        )
+                    return
+
+            # Successful poll — clear missing counter.
+            self._clear_seeding_missing_count(download_id)
             
             if not status:
                 self.logger.warning(f"No status from client for download {download_id}")
@@ -635,6 +682,7 @@ class DownloadMonitor:
                 )
             finally:
                 self._last_known_downloads.pop(download_id, None)
+                self._clear_seeding_missing_count(download_id)
     
     def _handle_seeding_complete(self, download_id: int, download: Dict[str, Any]):
         """

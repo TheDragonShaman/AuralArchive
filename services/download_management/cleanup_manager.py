@@ -373,7 +373,7 @@ class CleanupManager:
                 self.logger.warning("Download missing client info", extra={
                     "download_id": download_id
                 })
-                return True  # No client info, consider complete
+                return False  # Missing client info is not proof seeding is complete
             
             # Get client instance
             client_selector = self._get_client_selector()
@@ -384,10 +384,18 @@ class CleanupManager:
                     "client_name": client_name,
                     "download_id": download_id
                 })
-                return True  # Client not available, consider complete
+                return False  # Do not assume complete when client is unavailable
             
             # Get torrent info from client
-            torrent_info = client.get_torrent_info(client_id)
+            try:
+                torrent_info = client.get_torrent_info(client_id)
+            except ValueError:
+                self.logger.warning("Torrent not found in client during seeding check", extra={
+                    "client_name": client_name,
+                    "client_id": client_id,
+                    "download_id": download_id
+                })
+                return False
             
             if not torrent_info:
                 self.logger.warning("Torrent not found in client", extra={
@@ -395,7 +403,7 @@ class CleanupManager:
                     "client_id": client_id,
                     "download_id": download_id
                 })
-                return True  # Not found, consider complete
+                return False  # Not found is ambiguous; keep SEEDING
             
             # Check if torrent is still active
             state = torrent_info.get('state', '').lower()
@@ -405,7 +413,7 @@ class CleanupManager:
                     "state": state,
                     "download_id": download_id
                 })
-                return True
+                return False
             
             # Check seed ratio
             ratio = torrent_info.get('ratio', 0.0)
@@ -446,7 +454,7 @@ class CleanupManager:
                 "download_id": download_id,
                 "error": str(e)
             })
-            return True  # On error, consider complete to avoid getting stuck
+            return False  # On error, keep SEEDING and retry on next monitor tick
     
     def finalize_seeding(self, download_id: int, download_data: dict,
                         delete_files: bool = True):

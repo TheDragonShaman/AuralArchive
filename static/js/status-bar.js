@@ -15,11 +15,17 @@
     const POLL_IDLE     = 10000;  // ms — poll interval when nothing active
     const MAX_SHOWN     = 3;      // max visible at once — extras wait in queue
     const TERMINAL_TTL  = 8 * 1000; // terminal events drop out after 8 s
+    const MIN_STATE_DWELL = 1200; // ms — keep each non-terminal state briefly visible
 
     const STATE_TTL = {
         seeding:          8 * 1000, // show seeding briefly then yield
         seeding_complete: 8 * 1000,
     };
+
+    const IMMEDIATE_STATES = new Set([
+        'failed', 'cancelled', 'completed',
+        'download_failed', 'conversion_failed', 'import_failed', 'search_failed'
+    ]);
 
     const ACTIVE_STATES = new Set([
         'queued', 'found',
@@ -72,6 +78,8 @@
     const eventCache    = new Map();
     const expiryTimers  = new Map(); // eventId → timer handle for auto drop-out
     const terminalEntry = new Map(); // eventId → timestamp when first seen as terminal
+    const transitionTimers = new Map(); // eventId → timer handle for state dwell refresh
+    const displayState = new Map(); // eventId → { state, since, event }
 
     // suppressed uses composite "id:created_at" keys so a server restart (which
     // resets the integer counter) never silently hides brand-new events.
@@ -99,6 +107,62 @@
     function parseTs(value) {
         var t = Date.parse(value || '');
         return Number.isFinite(t) ? t : 0;
+    }
+
+    function scheduleTransitionRefresh(eventId, delayMs) {
+        if (transitionTimers.has(eventId)) return;
+        var handle = setTimeout(function() {
+            transitionTimers.delete(eventId);
+            rebuild();
+            render();
+        }, Math.max(20, delayMs));
+        transitionTimers.set(eventId, handle);
+    }
+
+    function applyStateDwell(rawEvent) {
+        if (!rawEvent || typeof rawEvent.id === 'undefined') return rawEvent;
+
+        var eventId = rawEvent.id;
+        var state = String(rawEvent.state || '').toLowerCase();
+        var now = Date.now();
+        var entry = displayState.get(eventId);
+
+        if (!entry) {
+            displayState.set(eventId, { state: state, since: now, event: rawEvent });
+            return rawEvent;
+        }
+
+        if (state === entry.state) {
+            entry.event = rawEvent;
+            return rawEvent;
+        }
+
+        // If an item re-enters an active lifecycle state (e.g. retry), show it
+        // immediately rather than holding on a stale terminal state.
+        if (ACTIVE_STATES.has(state) && !ACTIVE_STATES.has(entry.state)) {
+            entry.state = state;
+            entry.since = now;
+            entry.event = rawEvent;
+            return rawEvent;
+        }
+
+        if (IMMEDIATE_STATES.has(state)) {
+            entry.state = state;
+            entry.since = now;
+            entry.event = rawEvent;
+            return rawEvent;
+        }
+
+        var elapsed = now - entry.since;
+        if (elapsed >= MIN_STATE_DWELL) {
+            entry.state = state;
+            entry.since = now;
+            entry.event = rawEvent;
+            return rawEvent;
+        }
+
+        scheduleTransitionRefresh(eventId, MIN_STATE_DWELL - elapsed);
+        return entry.event;
     }
 
     function isStaleUpdate(existing, incoming) {
@@ -193,7 +257,10 @@
         var visible = [];
 
         eventCache.forEach(function(e) {
-            var state = (e.state || '').toLowerCase();
+            var displayEvent = applyStateDwell(e);
+            if (!displayEvent) return;
+
+            var state = (displayEvent.state || '').toLowerCase();
             // If this event is back to active, un-suppress it
             if (ACTIVE_STATES.has(state)) {
                 if (suppressed.has(suppKey(e))) { suppressed.delete(suppKey(e)); saveSuppressed(); }
@@ -203,12 +270,12 @@
                     clearTimeout(expiryTimers.get(e.id));
                     expiryTimers.delete(e.id);
                 }
-                visible.push(e);
+                visible.push(displayEvent);
             } else {
                 // Never show a suppressed event again unless it goes active
                 if (suppressed.has(suppKey(e))) return;
                 // Include all non-suppressed terminal events
-                visible.push(e);
+                visible.push(displayEvent);
             }
         });
 
@@ -261,6 +328,14 @@
                 clearTimeout(handle);
                 expiryTimers.delete(id);
                 terminalEntry.delete(id);
+            }
+        });
+
+        transitionTimers.forEach(function(handle, id) {
+            if (!eventCache.has(id)) {
+                clearTimeout(handle);
+                transitionTimers.delete(id);
+                displayState.delete(id);
             }
         });
     }
