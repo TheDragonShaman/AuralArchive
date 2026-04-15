@@ -536,8 +536,6 @@ if __name__ == '__main__':
         extra={"host": "0.0.0.0", "port": listen_port},
     )
 
-    # Replace this process with gunicorn so the eventlet worker handles everything.
-    # --reload enables source-watching for dev convenience.
     os.execv(gunicorn_bin, [
         gunicorn_bin,
         '--worker-class', 'geventwebsocket.gunicorn.workers.GeventWebSocketWorker',
