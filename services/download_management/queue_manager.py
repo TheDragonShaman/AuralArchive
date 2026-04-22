@@ -288,24 +288,37 @@ class QueueManager:
         try:
             if status_filter:
                 normalized_status = str(status_filter).strip().upper()
-                if normalized_status == 'IMPORTED':
+                _HISTORY_STATUSES = {'IMPORTED', 'SEEDING', 'SEEDING_COMPLETE'}
+                if normalized_status in _HISTORY_STATUSES:
                     query = """
-                        SELECT * FROM download_queue 
-                        WHERE status=?
-                        ORDER BY COALESCE(completed_at, updated_at, queued_at) DESC
+                        SELECT dq.*,
+                               COALESCE(b.cover_image, al.cover_image_url) AS cover_image
+                        FROM download_queue dq
+                        LEFT JOIN books b ON dq.book_asin = b.asin
+                        LEFT JOIN audible_library al ON dq.book_asin = al.asin
+                        WHERE dq.status=?
+                        ORDER BY COALESCE(dq.completed_at, dq.updated_at, dq.queued_at) DESC
                     """
                 else:
                     query = """
-                        SELECT * FROM download_queue 
-                        WHERE status=?
-                        ORDER BY queued_at ASC
+                        SELECT dq.*,
+                               COALESCE(b.cover_image, al.cover_image_url) AS cover_image
+                        FROM download_queue dq
+                        LEFT JOIN books b ON dq.book_asin = b.asin
+                        LEFT JOIN audible_library al ON dq.book_asin = al.asin
+                        WHERE dq.status=?
+                        ORDER BY dq.queued_at ASC
                     """
                 cursor.execute(query, (status_filter,))
             else:
                 query = """
-                    SELECT * FROM download_queue 
-                    WHERE status NOT IN ('IMPORTED', 'FAILED', 'CANCELLED')
-                    ORDER BY queued_at ASC
+                    SELECT dq.*,
+                           COALESCE(b.cover_image, al.cover_image_url) AS cover_image
+                    FROM download_queue dq
+                    LEFT JOIN books b ON dq.book_asin = b.asin
+                    LEFT JOIN audible_library al ON dq.book_asin = al.asin
+                    WHERE dq.status NOT IN ('IMPORTED', 'FAILED', 'CANCELLED')
+                    ORDER BY dq.queued_at ASC
                 """
                 cursor.execute(query)
             

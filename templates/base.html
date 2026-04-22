@@ -614,12 +614,12 @@
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
         // Shared Socket.IO connection — one instance per page, reused by all scripts.
-        // Polling-only transport prevents WebSocket upgrade attempts on the Werkzeug dev
-        // server (threading async_mode). Socket.IO v4 caches the Manager by URL, so any
-        // subsequent io() call (downloads.js, library.js, settings.js) returns this same
-        // socket rather than opening a second connection.
+        // Socket.IO will start with polling then upgrade to a real WebSocket (101).
+        // Socket.IO v4 caches the Manager by URL, so any subsequent io() call
+        // (downloads.js, library.js, settings.js) returns this same socket rather
+        // than opening a second connection.
         window._appSocket = (typeof window.io === 'function')
-            ? window.io({ transports: ['polling'], upgrade: false })
+            ? window.io()
             : null;
     </script>
     <script>

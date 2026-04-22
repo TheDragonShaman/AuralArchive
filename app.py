@@ -13,6 +13,9 @@ Location:
 
 """
 
+from gevent import monkey
+monkey.patch_all()
+
 import logging
 import os
 from flask import Flask, jsonify, request, redirect, url_for  # type: ignore
@@ -96,19 +99,11 @@ def create_app(config_class=Config):
     logging.getLogger('engineio.server').addFilter(_SuppressInvalidSession())
     
     # Initialize SocketIO with CORS support
-    _async_mode = app.config.get('SOCKETIO_ASYNC_MODE', 'threading')
-    # In threading async_mode (Werkzeug dev server) engine.io tries to take over
-    # the raw socket on a WebSocket upgrade request without calling WSGI's
-    # start_response, which causes Werkzeug to raise:
-    #   AssertionError: write() before start_response
-    # Disabling upgrades server-side forces all clients to use HTTP long-polling,
-    # which works correctly through the WSGI interface. When running with eventlet
-    # or gevent the flag is left True so real WebSocket is available.
-    _allow_upgrades = _async_mode in ('gevent', 'eventlet')
+    _async_mode = app.config.get('SOCKETIO_ASYNC_MODE', 'gevent')
     socketio = SocketIO(
         app,
         async_mode=_async_mode,
-        allow_upgrades=_allow_upgrades,
+        allow_upgrades=True,
         cors_allowed_origins=app.config.get('CORS_ALLOWED_ORIGINS'),
         logger=app.config.get('SOCKETIO_LOGGER', False),
         engineio_logger=app.config.get('ENGINEIO_LOGGER', False)
@@ -494,7 +489,7 @@ def handle_connect():
 
 @socketio.on('disconnect') 
 def handle_disconnect():
-    logger.info("SocketIO client disconnected", extra={"sid": request.sid})
+    logger.debug("SocketIO client disconnected", extra={"sid": request.sid})
 
 @socketio.on('ping')
 def handle_ping():
@@ -502,7 +497,6 @@ def handle_ping():
 
 if __name__ == '__main__':
     import sys
-    import shutil
 
     # CLI argument handling
     if len(sys.argv) > 1 and sys.argv[1] == '--show-paths':
@@ -524,25 +518,26 @@ if __name__ == '__main__':
         print("=" * 60)
         sys.exit(0)
 
-    # Prefer the gunicorn that lives next to the active Python interpreter
-    # so this works regardless of whether the venv is activated in the shell.
-    gunicorn_bin = os.path.join(os.path.dirname(sys.executable), 'gunicorn')
-    if not os.path.isfile(gunicorn_bin):
-        gunicorn_bin = shutil.which('gunicorn') or 'gunicorn'
+    from gevent import spawn as gevent_spawn
+    gevent_spawn(start_background_services)
 
     listen_port = _get_listen_port()
     logger.info(
-        "Starting AuralArchive via gunicorn (gevent)",
+        "Starting AuralArchive via socketio.run (gevent)",
         extra={"host": "0.0.0.0", "port": listen_port},
     )
 
-    os.execv(gunicorn_bin, [
-        gunicorn_bin,
-        '--worker-class', 'geventwebsocket.gunicorn.workers.GeventWebSocketWorker',
-        '-w', '1',
-        '--bind', f'0.0.0.0:{listen_port}',
-        '--reload',
-        '--timeout', '120',
-        '--log-level', 'info',
-        'wsgi:application',
-    ])
+    # The Werkzeug reloader works by forking the process, which is
+    # incompatible with gevent — gevent's fork hook asserts only one
+    # active greenlet at fork time, but background services are already
+    # running. Reloader is disabled; restart the process manually on changes.
+    try:
+        socketio.run(
+            app,
+            host='0.0.0.0',
+            port=listen_port,
+            use_reloader=False,
+            log_output=True,
+        )
+    except KeyboardInterrupt:
+        logger.info("AuralArchive stopped")

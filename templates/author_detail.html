@@ -31,9 +31,9 @@
         <span>{{ error }}</span>
     </div>
     {% else %}
-    <div class="grid gap-6 lg:grid-cols-[780px_minmax(0,1fr)] xl:grid-cols-[840px_minmax(0,1fr)]">
+    <div class="grid gap-6 lg:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)]">
         <!-- Sidebar -->
-        <div class="card bg-base-200 border border-base-300">
+        <div class="card bg-base-200 border border-base-content/10">
             <div class="card-body gap-4">
                 <div class="avatar self-center">
                     <div class="w-64 h-64 rounded-full overflow-hidden bg-base-300">
@@ -51,7 +51,7 @@
                     <p class="text-sm text-base-content/60 mt-1">{{ author_data.book_count }} books tracked</p>
                 </div>
                 {% if author_data.author_bio %}
-                <div class="text-sm text-base-content/70 leading-relaxed border-t border-base-300 pt-3">
+                <div class="text-sm text-base-content/70 leading-relaxed border-t border-base-content/10 pt-3">
                     {{ author_data.author_bio }}
                 </div>
                 {% endif %}
@@ -88,7 +88,7 @@
         <!-- Main Content -->
         <div class="space-y-6">
             <div class="grid gap-4 md:grid-cols-2">
-                <div class="card bg-base-200 border border-base-300">
+                <div class="card bg-base-200 border border-base-content/10">
                     <div class="card-body gap-3">
                         <h2 class="card-title text-base">Highlights</h2>
                         <div class="text-sm space-y-2">
@@ -110,7 +110,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="card bg-base-200 border border-base-300">
+                <div class="card bg-base-200 border border-base-content/10">
                     <div class="card-body gap-3">
                         <h2 class="card-title text-base">Catalogue Coverage</h2>
                         <div class="text-sm space-y-2">
@@ -137,13 +137,13 @@
                 </div>
             </div>
 
-            <div class="card bg-base-200 border border-base-300">
+            <div class="card bg-base-200 border border-base-content/10">
                 <div class="card-body">
                     <h2 class="card-title text-base mb-2">Series Overview</h2>
                     {% if catalogue.series_catalog %}
                     <div class="space-y-3">
                         {% for series_name, books in catalogue.series_catalog.items() %}
-                        <details class="border border-base-300 rounded-lg" {% if loop.first %}open{% endif %}>
+                        <details class="border border-base-content/10 rounded-lg" {% if loop.first %}open{% endif %}>
                             <summary class="px-4 py-3 flex items-center justify-between gap-3 cursor-pointer">
                                 <span class="font-semibold">{{ series_name }}</span>
                                 <div class="flex items-center gap-3">
@@ -204,7 +204,7 @@
                 </div>
             </div>
 
-            <div class="card bg-base-200 border border-base-300">
+            <div class="card bg-base-200 border border-base-content/10">
                 <div class="card-body">
                     <div class="flex items-center justify-between mb-2 gap-3">
                         <h2 class="card-title text-base m-0">Standalone Titles</h2>
@@ -222,8 +222,8 @@
                                     <th>Release</th>
                                     <th>Catalogue #</th>
                                     <th>ASIN</th>
-                                    <th>Import</th>
                                     <th>Status</th>
+                                    <th></th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -234,6 +234,11 @@
                                     <td>{{ book.release_date or '-' }}</td>
                                     <td>{{ book.catalogue_index or '-' }}</td>
                                     <td>{{ book.asin or '-' }}</td>
+                                    <td>
+                                        <span class="badge {{ 'badge-success badge-soft' if book.in_library else 'badge-warning badge-soft' }}">
+                                            {{ book.status if book.status else ('Owned' if book.in_library else 'Missing') }}
+                                        </span>
+                                    </td>
                                     <td class="text-center">
                                         {% if book.asin %}
                                         <button type="button" class="btn btn-xs btn-soft btn-primary js-import-book" data-author="{{ author_data.name }}" data-asin="{{ book.asin }}">
@@ -242,11 +247,6 @@
                                         {% else %}
                                         <span class="text-xs text-base-content/50">N/A</span>
                                         {% endif %}
-                                    </td>
-                                    <td>
-                                        <span class="badge {{ 'badge-success badge-soft' if book.in_library else 'badge-warning badge-soft' }}">
-                                            {{ book.status if book.status else ('Owned' if book.in_library else 'Missing') }}
-                                        </span>
                                     </td>
                                 </tr>
                                 {% endfor %}

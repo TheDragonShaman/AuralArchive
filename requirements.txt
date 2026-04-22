@@ -8,11 +8,9 @@ watchdog==3.0.0
 requests==2.31.0
 python-socketio==5.8.0
 gevent>=24.2.1
-gevent-websocket>=0.10.1
 psutil==5.8.0
 beautifulsoup4==4.12.2
 lxml>=5.0.0
-gunicorn==21.2.0
 audible==0.10.0
 cryptography>=41.0.0
 loguru==0.7.2

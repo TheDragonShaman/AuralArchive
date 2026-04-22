@@ -1375,9 +1375,9 @@
 }
 
 .view-toggle-btn.is-active {
-    background: rgba(56, 189, 248, 0.2);
-    color: rgba(125, 211, 252, 0.95);
-    border-color: rgba(56, 189, 248, 0.4);
+    background: oklch(from var(--color-primary) l c h / 0.15);
+    color: var(--color-primary);
+    border-color: oklch(from var(--color-primary) l c h / 0.35);
 }
 
 .stats-pill {

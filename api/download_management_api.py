@@ -175,6 +175,45 @@ def get_queue():
         }), 500
 
 
+@download_management_bp.route('/history', methods=['GET'])
+def get_history():
+    """
+    Get recent history items (IMPORTED, SEEDING, SEEDING_COMPLETE) sorted by
+    most recent completion time, with cover images resolved.
+
+    Query Parameters:
+    - limit: Maximum number of results (default: 10)
+    """
+    try:
+        limit = int(request.args.get('limit', 10))
+        dm_service = get_download_management_service()
+
+        history_statuses = ['IMPORTED', 'SEEDING', 'SEEDING_COMPLETE']
+        collected = []
+        for status in history_statuses:
+            try:
+                collected.extend(dm_service.get_queue(status_filter=status))
+            except Exception as exc:
+                logger.warning("Failed to fetch history for status %s: %s", status, exc)
+
+        collected.sort(
+            key=lambda item: (
+                item.get('completed_at') or item.get('updated_at') or item.get('queued_at') or ''
+            ),
+            reverse=True,
+        )
+
+        return jsonify({
+            'success': True,
+            'downloads': collected[:limit],
+            'total': len(collected),
+        })
+
+    except Exception as e:
+        logger.error(f"Error getting download history: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @download_management_bp.route('/queue/<int:download_id>', methods=['GET'])
 def get_download(download_id: int):
     """

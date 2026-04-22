@@ -1,0 +1,247 @@
+{% extends 'base.html' %}
+
+{% block title %}Series Details - AuralArchive{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* ── Series detail: full-height locked-hero layout ── */
+    /* Strip main's vertical padding so the layout can own its own height */
+    .layout-main > main:has(#seriesDetailPage) {
+        padding-top: 0;
+        padding-bottom: 0;
+    }
+    .layout-main > main:has(#seriesDetailPage) > .page-shell {
+        gap: 0;
+    }
+    /* sdContent fills exactly the space below the sticky navbar (4rem) */
+    #sdContent {
+        display: flex;
+        flex-direction: column;
+        height: calc(100dvh - 4rem);
+        overflow: hidden;
+    }
+    /* Hero + progress strip are locked — they never scroll */
+    #sdHeroAnchor {
+        flex-shrink: 0;
+    }
+    /* Only the book list scrolls */
+    #sdBookArea {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(128,128,128,0.2) transparent;
+    }
+    #sdBookArea::-webkit-scrollbar { width: 5px; }
+    #sdBookArea::-webkit-scrollbar-thumb { background: rgba(128,128,128,0.2); border-radius: 3px; }
+
+    #sdHeroBg {
+        position: absolute;
+        inset: 0;
+        background-size: cover;
+        background-position: center 20%;
+        filter: blur(28px) brightness(0.35) saturate(1.4);
+        transform: scale(1.08);
+    }
+    .sd-synopsis-collapsed {
+        display: -webkit-box;
+        -webkit-line-clamp: 8;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+    /* Book modal tabs (shared with library) */
+    .book-tab-panel         { display: none; }
+    .book-tab-panel.book-tab-active { display: flex; flex-direction: column; }
+
+    /* ── Book detail modal v2 ── */
+    .hero-blur {
+        position: absolute; inset: 0;
+        background-size: cover; background-position: center 25%;
+        filter: blur(36px) brightness(0.22) saturate(1.6);
+        transform: scale(1.12);
+    }
+    .hero-tint {
+        position: absolute; inset: 0;
+        opacity: 0.12;
+        pointer-events: none;
+    }
+    .hero-tint.downloaded  { background: var(--color-success); }
+    .hero-tint.queued      { background: var(--color-warning); }
+    .hero-tint.wanted      { background: var(--color-base-content); }
+    .hero-tint.downloading { background: var(--color-info); }
+    .cover-float {
+        position: relative;
+        margin-bottom: -100px;
+        z-index: 20;
+        flex-shrink: 0;
+    }
+    .fact-card {
+        display: flex;
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 0;
+    }
+    .fact-card dt {
+        font-size: 0.65rem;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        opacity: 0.38;
+        line-height: 1.2;
+        flex-shrink: 0;
+    }
+    .fact-card dd {
+        font-size: 0.8rem;
+        font-weight: 600;
+        line-height: 1.3;
+        text-align: right;
+        min-width: 0;
+        word-break: break-word;
+    }
+    .tab-scroll { scrollbar-width: thin; scrollbar-color: rgba(128,128,128,0.15) transparent; }
+    .tab-scroll::-webkit-scrollbar { width: 4px; }
+    .tab-scroll::-webkit-scrollbar-thumb { background: rgba(128,128,128,0.2); border-radius: 2px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="w-full" id="seriesDetailPage" data-series-asin="{{ series_asin }}">
+
+    <!-- Loading State -->
+    <div id="sdLoadingState" class="flex justify-center items-center py-32">
+        <span class="loading loading-spinner loading-lg"></span>
+    </div>
+
+    <!-- Error State -->
+    <div id="sdErrorState" class="hidden text-center py-32 px-6">
+        <i class="fas fa-exclamation-triangle text-6xl text-error mb-6"></i>
+        <h3 class="text-2xl font-bold mb-2">Series Not Found</h3>
+        <p class="text-base-content/60 mb-6" id="sdErrorMessage">Unable to load series details.</p>
+        <a href="/series" class="btn btn-soft btn-primary">
+            <i class="fas fa-arrow-left mr-1"></i> Back to Series
+        </a>
+    </div>
+
+    <!-- Main Content (hidden until loaded) -->
+    <div id="sdContent" class="hidden">
+
+        <!-- ── Hero + Progress: locked while book list scrolls ── -->
+        <div id="sdHeroAnchor">
+
+        <!-- ── Hero Header ── -->
+        <div class="relative overflow-hidden" style="min-height:300px;">
+
+            <!-- Blurred background -->
+            <div id="sdHeroBg"></div>
+
+            <!-- Gradient overlay bottom fade -->
+            <div class="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-base-100 pointer-events-none" style="background:linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.45) 60%, var(--color-base-100, #1a1a2e) 100%)"></div>
+
+            <!-- Content over hero -->
+            <div class="relative z-10 px-4 sm:px-8 lg:px-12 pt-6 pb-10">
+
+                <!-- Breadcrumb -->
+                <div class="text-sm breadcrumbs mb-6 text-white/70">
+                    <ul>
+                        <li><a href="/series" class="hover:text-white"><i class="fas fa-layer-group mr-1.5"></i>Series</a></li>
+                        <li id="sdBreadcrumb" class="text-white/90">—</li>
+                    </ul>
+                </div>
+
+                <div class="flex gap-7 items-start">
+
+                    <!-- Series Cover -->
+                    <div id="sdCoverWrap" class="hidden shrink-0 drop-shadow-2xl">
+                        <img id="sdCover" src="" alt="Series Cover"
+                             class="w-36 h-36 sm:w-52 sm:h-52 rounded object-cover ring-2 ring-white/10">
+                    </div>
+
+                    <!-- Title / stats / actions -->
+                    <div class="flex-1 min-w-0 pb-1">
+                        <div id="sdGenreTags" class="flex flex-wrap gap-1.5 mb-3"></div>
+                        <h1 id="sdTitle" class="text-3xl sm:text-4xl font-bold text-white leading-tight mb-1 drop-shadow">—</h1>
+                        <p id="sdAuthor" class="text-white/70 text-sm mb-4"></p>
+
+                        <!-- Stats row -->
+                        <div id="sdStats" class="flex flex-wrap gap-2 mb-5"></div>
+
+                        <!-- Action Toolbar -->
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button id="sdBtnRefresh" class="btn btn-sm btn-ghost text-white border-white/30 hover:bg-white/10 hover:border-white/50 rounded"
+                                    onclick="refreshSeriesDetail()">
+                                <i class="fas fa-rotate"></i> Refresh Metadata
+                            </button>
+                            <button id="sdBtnImport" class="btn btn-sm btn-primary rounded hidden"
+                                    onclick="importFullSeries()">
+                                <i class="fas fa-cloud-download-alt"></i> Import Series
+                            </button>
+                            <div class="dropdown dropdown-end">
+                                <button tabindex="0" class="btn btn-sm btn-ghost btn-circle text-white/70 hover:bg-white/10 rounded">
+                                    <i class="fas fa-ellipsis-v"></i>
+                                </button>
+                                <ul tabindex="0" class="dropdown-content menu menu-sm bg-base-200 shadow rounded w-44 mt-1 z-50 border border-base-300">
+                                    <li><a onclick="window.location.href='/series'"><i class="fas fa-layer-group mr-2"></i>All Series</a></li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Publisher's Summary (far right) -->
+                    <div id="sdDescWrap" class="hidden shrink-0 w-96 lg:w-[32rem] xl:w-[40rem] 2xl:w-[48rem] pb-1">
+                        <p class="text-xs font-semibold text-white/40 uppercase tracking-wider mb-2">Publisher's Summary</p>
+                        <div id="sdDescText" class="text-sm text-white/75 leading-relaxed"></div>
+                        <button id="sdDescToggle" onclick="toggleSeriesDesc()"
+                                class="text-xs text-white/50 hover:text-white mt-1.5 hover:underline hidden">Show more</button>
+                    </div>
+
+                </div>
+            </div>
+        </div><!-- /hero -->
+
+        <!-- ── Progress strip ── -->
+        <div class="px-4 sm:px-8 lg:px-12 py-4 bg-base-200 border-b border-base-content/10">
+            <div class="flex flex-wrap items-center gap-4">
+                <div class="flex items-center gap-3 shrink-0">
+                    <span class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Collection</span>
+                    <progress id="sdProgressBar" class="progress progress-primary w-32 sm:w-48" value="0" max="100"></progress>
+                    <span id="sdProgressLabel" class="text-sm font-bold">0%</span>
+                    <span id="sdProgressDetail" class="text-xs text-base-content/40 hidden sm:inline"></span>
+                </div>
+            </div>
+        </div>
+
+        </div><!-- /#sdHeroAnchor -->
+
+        <!-- ── Body: book list (only this scrolls) ── -->
+        <div id="sdBookArea" class="px-4 sm:px-8 lg:px-12 py-6">
+
+            <div id="sdBookList" class="space-y-5 max-w-4xl">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+
+    </div><!-- /#sdContent -->
+
+</div><!-- /#seriesDetailPage -->
+
+<!-- ── Book Detail Modal (shared with library) ── -->
+<dialog id="bookModal" class="modal modal-bottom sm:modal-middle">
+        <div class="modal-box max-w-6xl w-full p-0 overflow-hidden flex flex-col" style="height:min(92vh,820px);">
+        <div id="modalContent" class="flex flex-col flex-1 min-h-0 overflow-hidden">
+            <div class="flex justify-center py-8">
+                <span class="loading loading-spinner loading-lg"></span>
+            </div>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+    </form>
+</dialog>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/library.js"></script>
+<script src="/static/js/series_detail.js"></script>
+{% endblock %}

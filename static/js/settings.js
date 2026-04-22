@@ -3747,3 +3747,160 @@
         });
     }
 })();
+
+// ── Live Log Window ──────────────────────────────────────────────────────────
+(function () {
+    const logWindow   = document.getElementById('logWindow');
+    const pauseBtn    = document.getElementById('logPauseButton');
+    const pauseIcon   = document.getElementById('logPauseIcon');
+    const pauseLabel  = document.getElementById('logPauseLabel');
+    const clearBtn    = document.getElementById('logClearButton');
+    const liveIndicator = document.getElementById('logLiveIndicator');
+    if (!logWindow) return;
+
+    const POLL_INTERVAL = 3000; // ms
+    const MAX_LINES     = 500;  // max <pre> lines kept in DOM
+    let paused          = false;
+    let lastTimestamp   = null; // track last seen entry to avoid duplicates
+    let intervalId      = null;
+
+    const LEVEL_CLASSES = {
+        error:   'log-error',
+        warning: 'log-warning',
+        warn:    'log-warning',
+        debug:   'log-debug',
+        info:    '',
+        success: 'log-success',
+    };
+
+    const LEVEL_PREFIXES = {
+        error:   '✕',
+        warning: '!',
+        warn:    '!',
+        debug:   '·',
+        info:    '>',
+        success: '✓',
+    };
+
+    function levelClass(lvl) {
+        return LEVEL_CLASSES[(lvl || '').toLowerCase()] || 'text-base-content';
+    }
+
+    function levelPrefix(lvl) {
+        return LEVEL_PREFIXES[(lvl || '').toLowerCase()] || '>';
+    }
+
+    function appendLine(entry) {
+        // Remove placeholder if still there
+        const placeholder = logWindow.querySelector('pre[data-placeholder]');
+        if (placeholder) placeholder.remove();
+
+        const src  = entry.source ? ` [${entry.source}]` : '';
+        const ts   = entry.timestamp ? entry.timestamp.split(' ').pop() : '';  // just HH:MM:SS
+        const text = `${ts}${src}  ${entry.message}`;
+
+        const pre  = document.createElement('pre');
+        pre.setAttribute('data-prefix', levelPrefix(entry.level));
+        pre.className = levelClass(entry.level);
+        const code = document.createElement('code');
+        code.textContent = text;
+        pre.appendChild(code);
+        logWindow.appendChild(pre);
+
+        // Trim old lines
+        const lines = logWindow.querySelectorAll('pre');
+        if (lines.length > MAX_LINES) {
+            for (let i = 0; i < lines.length - MAX_LINES; i++) {
+                lines[i].remove();
+            }
+        }
+
+        // Auto-scroll if already near bottom
+        const nearBottom = logWindow.scrollHeight - logWindow.scrollTop - logWindow.clientHeight < 60;
+        if (nearBottom) {
+            logWindow.scrollTop = logWindow.scrollHeight;
+        }
+    }
+
+    async function fetchLogs() {
+        if (paused) return;
+        try {
+            const res  = await fetch('/settings/api/logs/latest');
+            const data = await res.json();
+            if (!data.success || !data.logs) return;
+
+            // Filter to only new entries after lastTimestamp
+            let entries = data.logs;
+            if (lastTimestamp) {
+                const idx = entries.findLastIndex(e => e.timestamp === lastTimestamp);
+                if (idx >= 0) entries = entries.slice(idx + 1);
+            }
+            if (entries.length > 0) {
+                lastTimestamp = entries[entries.length - 1].timestamp;
+                // First load — clear placeholder then add all
+                if (logWindow.querySelector('pre[data-placeholder]')) {
+                    logWindow.innerHTML = '';
+                }
+                entries.forEach(appendLine);
+            } else if (!lastTimestamp) {
+                // No logs at all yet
+                logWindow.innerHTML = '<pre data-placeholder style="color:#6b7280"><code>No log entries found.</code></pre>';
+            }
+
+            liveIndicator.querySelector('.status').classList.remove('status-error');
+            liveIndicator.querySelector('.status').classList.add('status-success');
+        } catch {
+            liveIndicator.querySelector('.status').classList.remove('status-success');
+            liveIndicator.querySelector('.status').classList.add('status-error');
+        }
+    }
+
+    // Remove default placeholder's data-placeholder so filter works after first load
+    const initial = logWindow.querySelector('pre');
+    if (initial) initial.setAttribute('data-placeholder', '');
+
+    // Initial fetch then start poll
+    fetchLogs();
+    intervalId = setInterval(fetchLogs, POLL_INTERVAL);
+
+    // Pause / resume
+    if (pauseBtn) {
+        pauseBtn.addEventListener('click', () => {
+            paused = !paused;
+            pauseIcon.className = paused ? 'fas fa-play text-[10px]' : 'fas fa-pause text-[10px]';
+            pauseLabel.textContent = paused ? 'Resume' : 'Pause';
+            const statusLabel = document.getElementById('logStatusLabel');
+            if (paused) {
+                liveIndicator.querySelector('.status').classList.remove('status-success', 'animate-pulse');
+                liveIndicator.querySelector('.status').classList.add('status-warning');
+                if (statusLabel) statusLabel.textContent = 'Paused';
+            } else {
+                liveIndicator.querySelector('.status').classList.remove('status-warning');
+                liveIndicator.querySelector('.status').classList.add('status-success', 'animate-pulse');
+                if (statusLabel) statusLabel.textContent = 'Live';
+                fetchLogs();
+            }
+        });
+    }
+
+    // Clear
+    if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+            logWindow.innerHTML = '<pre data-placeholder style="color:#6b7280"><code>Log cleared.</code></pre>';
+            lastTimestamp = null;
+        });
+    }
+
+    // Stop polling when navigating away from General panel
+    document.querySelectorAll('.settings-sub-link').forEach(link => {
+        link.addEventListener('click', () => {
+            const section = link.getAttribute('data-settings-section');
+            if (section === 'general') {
+                if (!intervalId) intervalId = setInterval(fetchLogs, POLL_INTERVAL);
+            } else {
+                clearInterval(intervalId);
+                intervalId = null;
+            }
+        });
+    });
+})();

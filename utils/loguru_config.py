@@ -18,9 +18,20 @@ Location:
 import logging
 import sys
 from pathlib import Path
-from typing import Union
+from typing import Optional, Union
 
 from loguru import logger
+
+# Byte offset in the log file where the current process's logs begin.
+# Set by setup_loguru() before any sinks are attached so the log window
+# can skip lines written by previous server sessions.
+_session_log_path: Optional[Path] = None
+_session_start_position: int = 0
+
+
+def get_session_log_info() -> tuple:
+    """Return (log_file_path_str_or_None, byte_offset) for the current session."""
+    return str(_session_log_path) if _session_log_path else None, _session_start_position
 
 
 def _standardize_name(raw_name: Union[str, int]) -> str:
@@ -87,6 +98,7 @@ FILE_FORMAT = "{time:YYYY-MM-DD HH:mm:ss.SSS} - {level} - {extra[logger_name]} -
 
 def setup_loguru(log_level: Union[str, int] = "INFO", log_file: str = "auralarchive_web.log", logger_name: str = "AuralArchive"):
     """Configure Loguru sinks and hook standard logging into Loguru."""
+    global _session_log_path, _session_start_position
 
     # Ensure SUCCESS level is available in Loguru (built-in by default, guard just in case)
     try:
@@ -98,6 +110,11 @@ def setup_loguru(log_level: Union[str, int] = "INFO", log_file: str = "auralarch
     log_dir = Path(__file__).resolve().parent.parent / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / log_file
+
+    # Snapshot the file size BEFORE any sinks are attached so the log window
+    # can skip entries written by previous server processes.
+    _session_log_path = log_path
+    _session_start_position = log_path.stat().st_size if log_path.exists() else 0
 
     # Reset existing Loguru configuration
     logger.remove()

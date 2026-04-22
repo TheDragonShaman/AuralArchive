@@ -440,6 +440,33 @@
         return null;
     };
 
+    const getStatusBadgeClass = (status) => {
+        const normalized = (status || '').toUpperCase();
+        const map = {
+            QUEUED: 'badge-ghost',
+            SEARCHING: 'badge-info',
+            FOUND: 'badge-info',
+            DOWNLOADING: 'badge-info',
+            AUDIBLE_DOWNLOADING: 'badge-info',
+            AUDIBLE_DOWNLOAD_FAILED: 'badge-error',
+            DOWNLOAD_COMPLETE: 'badge-success',
+            COMPLETE: 'badge-success',
+            CONVERTING: 'badge-warning',
+            CONVERTED: 'badge-warning',
+            PROCESSING: 'badge-warning',
+            PROCESSED: 'badge-warning',
+            IMPORTING: 'badge-warning',
+            IMPORTED: 'badge-success',
+            SEEDING: 'badge-secondary',
+            SEEDING_COMPLETE: 'badge-success',
+            PAUSED: 'badge-ghost',
+            FAILED: 'badge-error',
+            ERROR: 'badge-error',
+            CANCELLED: 'badge-ghost'
+        };
+        return map[normalized] || 'badge-ghost';
+    };
+
     const getStatusMeta = (status) => {
         const normalized = (status || '').toUpperCase();
         return {
@@ -570,6 +597,12 @@
         const { status, meta } = getStatusMeta(item.status);
         const progress = getProgressValue(item);
 
+        const badgeClass = getStatusBadgeClass(status);
+        const coverUrl = escapeHtml(item.cover_url || '');
+        const coverHtml = coverUrl
+            ? `<img class="size-[160px] rounded-box object-cover shrink-0" src="${coverUrl}" alt="" onerror="this.style.display='none'">`
+            : `<div class="size-[160px] rounded-box bg-base-300 flex items-center justify-center text-base-content/30 shrink-0"><i class="fas fa-headphones text-xl"></i></div>`;
+
         const chips = [];
         if (downloadType) {
             chips.push(`<span class="badge badge-outline badge-ghost badge-xs border-base-content/20 text-[10px]">${escapeHtml(downloadType)}</span>`);
@@ -617,30 +650,33 @@
 
         return `
             <div class="card bg-base-100 border border-base-content/10 shadow-sm">
-                <div class="card-body p-2.5 space-y-2">
-                    <div class="flex flex-wrap items-start justify-between gap-2">
-                        <div class="min-w-0 flex-1 space-y-1">
-                            <div class="flex items-center gap-2 text-[10px] text-base-content/60">
-                                <span class="badge badge-outline border-primary/40 text-primary/90 text-[10px]">
-                                    <i class="fas ${meta.icon} mr-1"></i>
-                                    ${escapeHtml(meta.label)}
-                                </span>
-                                <span class="truncate">${escapeHtml(meta.description)}</span>
+                <div class="card-body p-2.5 flex-row gap-3 items-center">
+                    ${coverHtml}
+                    <div class="min-w-0 flex-1 space-y-2">
+                        <div class="flex flex-wrap items-start justify-between gap-2">
+                            <div class="min-w-0 flex-1 space-y-1">
+                                <div class="flex items-center gap-2 text-[10px] text-base-content/60">
+                                    <span class="badge ${badgeClass} badge-sm text-[10px]">
+                                        <i class="fas ${meta.icon} mr-1"></i>
+                                        ${escapeHtml(meta.label)}
+                                    </span>
+                                    <span class="truncate">${escapeHtml(meta.description)}</span>
+                                </div>
+                                <div class="space-y-0.5">
+                                    <h3 class="text-sm font-semibold text-base-content leading-tight line-clamp-2">${title}</h3>
+                                    ${author ? `<p class="text-xs text-base-content/60 truncate">${author}</p>` : ''}
+                                </div>
                             </div>
-                            <div class="space-y-0.5">
-                                <h3 class="text-sm font-semibold text-base-content leading-tight line-clamp-2">${title}</h3>
-                                ${author ? `<p class="text-xs text-base-content/60 truncate">${author}</p>` : ''}
+                            <div class="text-right text-[10px] text-base-content/50 whitespace-nowrap">
+                                ${downloadId ? `<div class="font-semibold text-base-content/70">#${downloadId}</div>` : ''}
+                                ${queuedAt ? `<div>Queued ${formatRelativeTime(queuedAt)}</div>` : ''}
                             </div>
                         </div>
-                        <div class="text-right text-[10px] text-base-content/50 whitespace-nowrap">
-                            ${downloadId ? `<div class="font-semibold text-base-content/70">#${downloadId}</div>` : ''}
-                            ${queuedAt ? `<div>Queued ${formatRelativeTime(queuedAt)}</div>` : ''}
-                        </div>
+                        ${chips.length ? `<div class="flex flex-wrap gap-1 text-[10px] text-base-content/60">${chips.join('')}</div>` : ''}
+                        ${progressBlock}
+                        ${lastMessage ? `<div class="text-[11px] text-warning/80">${lastMessage}</div>` : ''}
+                        ${actions ? `<div class="flex flex-wrap justify-end gap-2">${actions}</div>` : ''}
                     </div>
-                    ${chips.length ? `<div class="flex flex-wrap gap-1 text-[10px] text-base-content/60">${chips.join('')}</div>` : ''}
-                    ${progressBlock}
-                    ${lastMessage ? `<div class="text-[11px] text-warning/80">${lastMessage}</div>` : ''}
-                    ${actions ? `<div class="flex flex-wrap justify-end gap-2">${actions}</div>` : ''}
                 </div>
             </div>
         `;
@@ -651,6 +687,10 @@
     const downloadId = escapeHtml(rawDownloadId);
         const title = escapeHtml(item.book_title || item.title || 'Untitled');
         const author = escapeHtml(item.book_author || item.author || '');
+        const coverUrl = escapeHtml(item.cover_url || '');
+        const coverHtml = coverUrl
+            ? `<img class="size-[160px] rounded-box object-cover shrink-0" src="${coverUrl}" alt="" onerror="this.style.display='none'">`
+            : `<div class="size-[160px] rounded-box bg-base-300 flex items-center justify-center text-base-content/30 shrink-0"><i class="fas fa-headphones text-xl"></i></div>`;
         const ratio = toNumber(item.seeding_ratio);
         const elapsed = Math.max(0, toNumber(item.seeding_time_seconds) || 0);
         const goalSeconds = Math.max(getSeedingGoalSeconds(item), elapsed || DEFAULT_SEEDING_GOAL_SECONDS);
@@ -698,20 +738,23 @@
 
         return `
             <div class="card bg-base-100 border border-base-content/10 shadow-sm">
-                <div class="card-body p-2 space-y-1.5">
-                    <div class="flex flex-wrap items-start justify-between gap-2">
-                        <div class="min-w-0 flex-1 space-y-0.5">
-                            <h3 class="text-sm font-semibold text-base-content leading-tight line-clamp-2">${title}</h3>
-                            ${author ? `<p class="text-xs text-base-content/60 truncate">${author}</p>` : ''}
+                <div class="card-body p-2 flex-row gap-3 items-center">
+                    ${coverHtml}
+                    <div class="min-w-0 flex-1 space-y-1.5">
+                        <div class="flex flex-wrap items-start justify-between gap-2">
+                            <div class="min-w-0 flex-1 space-y-0.5">
+                                <h3 class="text-sm font-semibold text-base-content leading-tight line-clamp-2">${title}</h3>
+                                ${author ? `<p class="text-xs text-base-content/60 truncate">${author}</p>` : ''}
+                            </div>
+                            <div class="text-right text-[10px] text-base-content/50 whitespace-nowrap">
+                                ${downloadId ? `<div class="font-semibold text-base-content/70">#${downloadId}</div>` : ''}
+                                ${startedAt ? `<div>${formatRelativeTime(startedAt)}</div>` : ''}
+                            </div>
                         </div>
-                        <div class="text-right text-[10px] text-base-content/50 whitespace-nowrap">
-                            ${downloadId ? `<div class="font-semibold text-base-content/70">#${downloadId}</div>` : ''}
-                            ${startedAt ? `<div>${formatRelativeTime(startedAt)}</div>` : ''}
-                        </div>
+                        ${metaLine}
+                        ${progressDetails}
+                        ${actions ? `<div class="flex justify-end gap-2">${actions}</div>` : ''}
                     </div>
-                    ${metaLine}
-                    ${progressDetails}
-                    ${actions ? `<div class="flex justify-end gap-2">${actions}</div>` : ''}
                 </div>
             </div>
         `;
@@ -882,7 +925,8 @@
             const timeB = dateB ? dateB.getTime() : 0;
             return timeB - timeA;
         });
-        const html = items.slice(0, 5).map((item) => {
+        const html = `<div class="space-y-2">
+            ${items.slice(0, 5).map((item) => {
             const title = escapeHtml(item.book_title || item.title || 'Imported Item');
             const authorText = formatContributors(item.book_author || item.author || '');
             const author = escapeHtml(authorText);
@@ -890,21 +934,30 @@
             const relative = formatRelativeTime(finishedAt);
             const absolute = formatDateTime(finishedAt);
             const downloadType = formatDownloadType(item.download_type);
-            const path = escapeHtml(item.final_file_path || item.converted_file_path || '');
+            const coverUrl = escapeHtml(item.cover_url || '');
             return `
-                <li class="border-b border-base-content/10 pb-1.5 last:border-b-0 last:pb-0">
-                    <div class="space-y-1">
-                        <div class="font-medium text-sm text-base-content">${title}</div>
-                        ${author ? `<div class="text-xs text-base-content/50">${author}</div>` : ''}
-                        <div class="text-[11px] text-base-content/50" title="${escapeHtml(absolute)}">
-                            Imported ${relative}
-                            ${downloadType ? ` • ${escapeHtml(downloadType)}` : ''}
+                <div class="card bg-base-100 border border-base-content/10 shadow-sm">
+                    <div class="card-body py-3 px-2.5 flex-row items-center gap-3">
+                        <div class="shrink-0">
+                            ${coverUrl
+                                ? `<img class="size-12 rounded-box object-cover" src="${coverUrl}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                                   <div class="size-12 rounded-box bg-base-300 hidden items-center justify-center text-base-content/40" style="display:none">
+                                       <i class="fas fa-headphones text-sm"></i>
+                                   </div>`
+                                : `<div class="size-12 rounded-box bg-base-300 flex items-center justify-center text-base-content/40">
+                                       <i class="fas fa-headphones text-sm"></i>
+                                   </div>`}
                         </div>
-                        ${path ? `<div class="text-[11px] text-base-content/40 break-all">${path}</div>` : ''}
+                        <div class="min-w-0 flex-1">
+                            <div class="text-xs font-semibold text-base-content leading-tight truncate">${title}</div>
+                            ${author ? `<div class="text-[11px] text-base-content/50 truncate">${author}</div>` : ''}
+                            <div class="text-[10px] text-base-content/40 mt-0.5" title="${escapeHtml(absolute)}">${relative}${downloadType ? ` · ${escapeHtml(downloadType)}` : ''}</div>
+                        </div>
                     </div>
-                </li>
+                </div>
             `;
-        }).join('');
+        }).join('')}
+        </div>`;
         container.innerHTML = html;
     };
 
@@ -989,7 +1042,7 @@
             if (!silent && elements.refreshHistoryBtn) {
                 setButtonLoading(elements.refreshHistoryBtn, true);
             }
-            const response = await fetchJson('/api/downloads/queue?status=IMPORTED&limit=10');
+            const response = await fetchJson('/api/downloads/history?limit=10');
             state.history = response.downloads || [];
             renderHistory();
         } catch (error) {

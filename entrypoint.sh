@@ -82,11 +82,5 @@ chown -R "${PUID}:${PGID}" /app/audible_dl 2>/dev/null || true
 echo "Starting AuralArchive as user auralarchive (${PUID}:${PGID})..."
 echo "-----------------------------------"
 
-# Run as the specified user via Gunicorn + Eventlet
-exec gosu auralarchive gunicorn \
-    --worker-class geventwebsocket.gunicorn.workers.GeventWebSocketWorker \
-    -w 1 \
-    --bind "0.0.0.0:${AURALARCHIVE_PORT:-8765}" \
-    --timeout 120 \
-    --log-level info \
-    wsgi:application
+# Run as the specified user
+exec gosu auralarchive python /app/auralarchive/app.py

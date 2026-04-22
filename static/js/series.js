@@ -170,8 +170,8 @@ function displayTableView(series) {
                 </div>
             </td>
             <td class="text-right">
-                <button class="btn btn-soft btn-primary btn-xs" onclick="event.stopPropagation(); openSeriesModal('${s.series_asin}')">
-                    <i class="fas fa-eye"></i> View
+                <button class="btn btn-soft btn-primary btn-xs" onclick="event.stopPropagation(); window.location.href='/series/${s.series_asin}'">
+                    <i class="fas fa-arrow-right"></i> Details
                 </button>
             </td>
         `;
@@ -210,8 +210,8 @@ function displayCompactView(series) {
                             <div class="text-2xl font-bold">${percentage}%</div>
                             <div class="text-xs text-base-content/60">Complete</div>
                         </div>
-                        <button class="btn btn-soft btn-primary btn-sm" onclick="event.stopPropagation(); openSeriesModal('${s.series_asin}')">
-                            <i class="fas fa-eye"></i> View Details
+                        <button class="btn btn-soft btn-primary btn-sm" onclick="event.stopPropagation(); window.location.href='/series/${s.series_asin}'">
+                            <i class="fas fa-arrow-right"></i> View Details
                         </button>
                     </div>
                 </div>

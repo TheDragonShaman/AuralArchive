@@ -74,6 +74,7 @@ reference_data/
 readme/
 review-index.md
 ROADMAP.md
+mockups/
 
 # Docker and environment files
 config/users.json

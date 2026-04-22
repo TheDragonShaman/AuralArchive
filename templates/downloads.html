@@ -14,34 +14,26 @@
             </div>
         </div>
 
-        <div class="mt-6 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-            <div class="card bg-base-200 border border-base-content/10 shadow-sm">
-                <div class="card-body p-4 space-y-2">
-                    <span class="text-xs uppercase tracking-[0.3em] text-base-content/50">Active Queue</span>
-                    <span class="text-xl font-semibold" id="stat-active">{{ service_status.get('queue_statistics', {}).get('total_active', 0) }}</span>
-                    <span class="text-[11px] text-base-content/60">Items currently in-flight</span>
-                </div>
+        <div class="mt-6 grid grid-cols-2 xl:grid-cols-4 gap-4">
+            <div class="stat bg-base-200 border border-base-content/10 rounded-box shadow-sm">
+                <div class="stat-title">Active Queue</div>
+                <div class="stat-value text-2xl" id="stat-active">{{ service_status.get('queue_statistics', {}).get('total_active', 0) }}</div>
+                <div class="stat-desc">Items currently in-flight</div>
             </div>
-            <div class="card bg-base-200 border border-base-content/10 shadow-sm">
-                <div class="card-body p-4 space-y-2">
-                    <span class="text-xs uppercase tracking-[0.3em] text-base-content/50">Downloading</span>
-                    <span class="text-xl font-semibold" id="stat-downloading">{{ service_status.get('queue_statistics', {}).get('DOWNLOADING', 0) }}</span>
-                    <span class="text-[11px] text-base-content/60">Client transfers in progress</span>
-                </div>
+            <div class="stat bg-base-200 border border-base-content/10 rounded-box shadow-sm">
+                <div class="stat-title">Downloading</div>
+                <div class="stat-value text-2xl" id="stat-downloading">{{ service_status.get('queue_statistics', {}).get('DOWNLOADING', 0) }}</div>
+                <div class="stat-desc">Client transfers in progress</div>
             </div>
-            <div class="card bg-base-200 border border-base-content/10 shadow-sm">
-                <div class="card-body p-4 space-y-2">
-                    <span class="text-xs uppercase tracking-[0.3em] text-base-content/50">Converting</span>
-                    <span class="text-xl font-semibold" id="stat-converting">{{ service_status.get('queue_statistics', {}).get('CONVERTING', 0) }}</span>
-                    <span class="text-[11px] text-base-content/60">Audible post-processing</span>
-                </div>
+            <div class="stat bg-base-200 border border-base-content/10 rounded-box shadow-sm">
+                <div class="stat-title">Converting</div>
+                <div class="stat-value text-2xl" id="stat-converting">{{ service_status.get('queue_statistics', {}).get('CONVERTING', 0) }}</div>
+                <div class="stat-desc">Audible post-processing</div>
             </div>
-            <div class="card bg-base-200 border border-base-content/10 shadow-sm">
-                <div class="card-body p-4 space-y-2">
-                    <span class="text-xs uppercase tracking-[0.3em] text-base-content/50">Seeding</span>
-                    <span class="text-xl font-semibold" id="stat-seeding">{{ service_status.get('queue_statistics', {}).get('SEEDING', 0) }}</span>
-                    <span class="text-[11px] text-base-content/60">Torrents currently seeding</span>
-                </div>
+            <div class="stat bg-base-200 border border-base-content/10 rounded-box shadow-sm">
+                <div class="stat-title">Seeding</div>
+                <div class="stat-value text-2xl" id="stat-seeding">{{ service_status.get('queue_statistics', {}).get('SEEDING', 0) }}</div>
+                <div class="stat-desc">Torrents currently seeding</div>
             </div>
         </div>
     </section>
@@ -54,7 +46,7 @@
                     <p class="text-xs text-base-content/50">Monitor active transfers and seeding jobs supervised by the coordinator.</p>
                 </div>
                 <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-                    <div id="queueTabs" class="tabs tabs-boxed hidden">
+                    <div id="queueTabs" class="tabs tabs-border hidden">
                         <button id="tabDownloads" type="button" class="tab tab-active" data-tab="downloads">
                             Downloads
                         </button>

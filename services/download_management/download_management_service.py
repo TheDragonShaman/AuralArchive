@@ -744,7 +744,16 @@ class DownloadManagementService:
             self._overlay_seeding_metrics(all_items, self.client_selector.get_client)
         except Exception as overlay_error:
             self.logger.debug("Unable to overlay seeding metrics: %s", overlay_error)
-        
+
+        # Resolve cover_image (raw CDN URL) to a cached local web URL for all items.
+        try:
+            from services.image_cache.helpers import cache_image
+            for item in all_items:
+                raw_url = item.get('cover_image')
+                item['cover_url'] = cache_image(raw_url) if raw_url else None
+        except Exception as cover_error:
+            self.logger.debug("Unable to resolve cover URLs: %s", cover_error)
+
         # Apply pagination if limit is specified
         if limit is not None:
             return all_items[offset:offset + limit]

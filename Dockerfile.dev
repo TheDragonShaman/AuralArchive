@@ -40,5 +40,5 @@ EXPOSE 8765
 
 # Use entrypoint script to handle PUID/PGID
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["gunicorn", "--worker-class", "geventwebsocket.gunicorn.workers.GeventWebSocketWorker", "-w", "1", "--bind", "0.0.0.0:8765", "--timeout", "120", "wsgi:application"]
+CMD ["python", "app.py"]
 

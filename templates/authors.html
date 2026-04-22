@@ -15,11 +15,11 @@
     <div class="bg-base-200 border-y border-base-content/10 px-4 sm:px-6 lg:px-10 py-5 -mt-px">
         <div class="flex flex-wrap items-center gap-4">
             <div class="flex-1 min-w-[200px] max-w-md">
-                <label class="text-xs font-semibold uppercase tracking-wider text-base-content/60 block mb-1">Search Authors</label>
+                <label for="searchInput" class="label"><span class="label-text">Search Authors</span></label>
                 <input id="searchInput" type="text" placeholder="Search authors by name..." class="input input-sm input-bordered w-full bg-base-100">
             </div>
             <div class="min-w-[140px]">
-                <label class="text-xs font-semibold uppercase tracking-wider text-base-content/60 block mb-1">Sort By</label>
+                <label for="sortFilter" class="label"><span class="label-text">Sort By</span></label>
                 <select id="sortFilter" class="select select-sm select-bordered w-full bg-base-100">
                     <option value="name">Name</option>
                     <option value="books">Book Count</option>
@@ -28,7 +28,7 @@
                 </select>
             </div>
             <div class="min-w-[80px]">
-                <label class="text-xs font-semibold uppercase tracking-wider text-base-content/60 block mb-1">View</label>
+                <div class="label"><span class="label-text">View</span></div>
                 <div class="join" role="group" aria-label="Author view options">
                     <button class="join-item btn btn-soft" id="tableViewBtn" onclick="setView('table')" type="button" aria-label="Table view">
                         <i class="fas fa-list"></i>

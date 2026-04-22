@@ -411,7 +411,8 @@ function createBookCard(book) {
         <div class="mt-1.5">
             <h3 class="text-sm line-clamp-2 leading-tight font-semibold text-base-content">${escapeHtml(book.title || '')}</h3>
             <p class="text-xs text-base-content/60 line-clamp-1">${escapeHtml(book.author || '')}</p>
-            ${hasRating ? `<div class="flex items-center gap-1.5 mt-0.5 text-xs text-base-content/60">
+            ${hasRating ? `<div class="flex items-center gap-1 mt-0.5 text-xs text-base-content/60">
+                <i class="fas fa-star text-warning text-[10px]"></i>
                 <span>${escapeHtml(rating)}</span>
                 ${numRatings ? `<span class="text-base-content/50">${escapeHtml(numRatings)}</span>` : ''}
             </div>` : ''}
@@ -528,131 +529,389 @@ async function openBookModal(bookId) {
 function displayBookModal(book) {
     const modal = document.getElementById('bookModal');
     const content = document.getElementById('modalContent');
-    
+    const e = escapeHtml;
+
+    // Status → badge class + label + hero tint class
+    const rawStatus = (book.status || book.ownership_status || '').toLowerCase();
+    const statusMap = {
+        downloaded:      ['badge-success', 'Downloaded',      'downloaded'],
+        downloading:     ['badge-info',    'Downloading',     'downloading'],
+        queued:          ['badge-warning', 'Queued',          'queued'],
+        owned:           ['badge-success', 'Owned',           'downloaded'],
+        wanted:          ['badge-ghost',   'Wanted',          'wanted'],
+        audible_library: ['badge-primary', 'Audible Library', 'wanted'],
+    };
+    const [statusCls, statusText, tintClass] = statusMap[rawStatus] || ['badge-ghost', book.status || book.ownership_status || '', 'wanted'];
+    const statusBadge = statusText
+        ? `<span class="badge ${statusCls} badge-sm">${e(statusText)}</span>`
+        : '';
+
+    // Cover
+    const coverUrl = book.cover_image || '';
+    const coverHtml = coverUrl
+        ? `<img src="${e(coverUrl)}" alt="${e(book.title || '')}" class="w-full h-full object-cover" onerror="this.style.display='none'" />`
+        : `<div class="w-full h-full flex items-center justify-center"><i class="fas fa-book text-5xl opacity-20"></i></div>`;
+
+    // Rating
+    const ratingValue = parseFloat(book.rating) || 0;
+    const ratingHtml = ratingValue > 0 ? `
+        <div class="flex items-center gap-1.5 mt-1.5">
+            <i class="fas fa-star text-warning text-xs"></i>
+            <span class="text-sm font-bold text-white">${ratingValue.toFixed(1)}</span>
+            ${book.num_ratings && book.num_ratings > 0 ? `<span class="text-xs text-white/30">(${Number(book.num_ratings).toLocaleString()} ratings)</span>` : ''}
+        </div>` : '';
+
+    // Series
+    const hasSeries = book.series && book.series !== 'N/A';
+    const seriesText = hasSeries
+        ? `${e(book.series)}${book.sequence && book.sequence !== 'N/A' && book.sequence !== '' ? ' #' + e(book.sequence) : ''}`
+        : '';
+
+    // Conditional series tab + panel
+    const seriesTab = hasSeries && book.series_asin
+        ? `<button role="tab" class="tab text-sm" onclick="bookModalSwitchTab('series', this)">
+               <i class="fas fa-layer-group mr-1.5 opacity-50 text-xs"></i>Series
+           </button>`
+        : '';
+    const seriesPanel = hasSeries && book.series_asin
+        ? `<div id="bookTab-series" class="book-tab-panel tab-scroll overflow-y-auto flex-1 pt-3 space-y-3"
+               data-series-asin="${e(book.series_asin)}" data-loaded="false">
+               <div class="flex justify-center py-8"><span class="loading loading-spinner loading-md"></span></div>
+           </div>`
+        : '';
+
+    // Synopsis
+    const synopsisHtml = book.summary
+        ? `<div>
+            <h3 class="text-[10px] font-bold uppercase tracking-widest text-base-content/35 mb-2">Synopsis</h3>
+            <div class="text-sm text-base-content/70 leading-relaxed space-y-3">${
+                book.summary
+                    .split(/<\/?\s*p\s*>/i)
+                    .map(s => s.replace(/<[^>]*>/g, '').trim())
+                    .filter(s => s.length > 0)
+                    .map(s => `<p>${e(s)}</p>`)
+                    .join('')
+            }</div>
+           </div>`
+        : `<p class="text-sm text-base-content/40">No synopsis available.</p>`;
+
+    // Files tab
+    const filesHtml = book.file_location
+        ? `<div class="bg-base-200 border border-base-300 overflow-hidden" style="border-radius:0.25rem;">
+               <div class="flex items-start gap-3 p-4">
+                   <div class="w-8 h-8 bg-success/10 flex items-center justify-center flex-shrink-0 mt-0.5" style="border-radius:0.25rem;">
+                       <i class="fas fa-file-audio text-success text-sm"></i>
+                   </div>
+                   <div class="min-w-0">
+                       <p class="text-[10px] text-base-content/40 uppercase tracking-wider mb-0.5">File Location</p>
+                       <p class="text-xs font-mono text-base-content/65 break-all leading-relaxed">${e(book.file_location)}</p>
+                   </div>
+               </div>
+           </div>`
+        : `<p class="text-sm text-base-content/40">No file location recorded.</p>`;
+
+    // Fact-card sidebar rows (only show rows with data)
+    const factRows = [
+        book.narrator && book.narrator !== 'Unknown'
+            ? `<div class="fact-card"><dt><i class="fas fa-microphone mr-1.5 opacity-50"></i>Narrator</dt><dd>${e(book.narrator)}</dd></div>` : '',
+        book.runtime
+            ? `<div class="fact-card"><dt><i class="fas fa-clock mr-1.5 opacity-50"></i>Runtime</dt><dd>${e(book.runtime)}</dd></div>` : '',
+        hasSeries
+            ? `<div class="fact-card"><dt><i class="fas fa-layer-group mr-1.5 opacity-50"></i>Series</dt><dd>${e(book.series)}</dd></div>` : '',
+        hasSeries && book.sequence && book.sequence !== 'N/A' && book.sequence !== ''
+            ? `<div class="fact-card"><dt><i class="fas fa-hashtag mr-1.5 opacity-50"></i>Book</dt><dd>#${e(book.sequence)}</dd></div>` : '',
+        book.release_date && book.release_date !== 'Unknown'
+            ? `<div class="fact-card"><dt><i class="fas fa-calendar mr-1.5 opacity-50"></i>Released</dt><dd>${e(book.release_date)}</dd></div>` : '',
+        book.publisher && book.publisher !== 'Unknown'
+            ? `<div class="fact-card"><dt><i class="fas fa-building mr-1.5 opacity-50"></i>Publisher</dt><dd>${e(book.publisher)}</dd></div>` : '',
+        book.language
+            ? `<div class="fact-card"><dt><i class="fas fa-globe mr-1.5 opacity-50"></i>Language</dt><dd>${e(book.language)}</dd></div>` : '',
+        book.asin
+            ? `<div class="fact-card"><dt><i class="fas fa-fingerprint mr-1.5 opacity-50"></i>ASIN</dt><dd class="font-mono text-[0.65rem]">${e(book.asin)}</dd></div>` : '',
+    ].filter(Boolean).join('');
+
     content.innerHTML = `
-        <div class="card card-side bg-base-100">
-            <!-- Book Cover -->
-            <figure class="w-64 flex-shrink-0 flex items-start" style="border-radius: 0.25rem;">
-                ${book.cover_image ? 
-                    `<img src="${book.cover_image}" alt="${book.title}" class="w-full h-auto object-contain" style="border-radius: 0.25rem;" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">` :
-                    ''
-                }
-                <div class="w-full aspect-[2/3] bg-base-300 flex flex-col items-center justify-center gap-3 ${book.cover_image ? 'hidden' : ''}" style="border-radius: 0.25rem;">
-                    <i class="fas fa-book text-6xl opacity-30"></i>
-                    <span class="font-semibold opacity-30 text-sm">AUDIO BOOK</span>
+        <!-- ════ HERO ════ -->
+        <div class="relative overflow-visible flex-shrink-0" style="min-height:188px">
+            <div class="hero-blur" id="bookModalHeroBlur"></div>
+            <div class="hero-tint ${tintClass}"></div>
+            <div class="absolute inset-x-0 bottom-0 h-20 pointer-events-none"
+                 style="background:linear-gradient(to bottom, transparent 0%, var(--color-base-100) 100%)"></div>
+            <button class="btn btn-circle btn-ghost btn-sm absolute top-3 right-3 z-30 text-white/60 hover:text-white hover:bg-white/10"
+                    onclick="document.getElementById('bookModal').close()">
+                <i class="fas fa-xmark"></i>
+            </button>
+            <div class="relative z-10 flex items-end gap-5 px-6 pt-6 pb-0">
+                <div class="cover-float shadow-2xl ring-2 ring-white/10 overflow-hidden" style="width:200px;height:200px;border-radius:0.25rem;">
+                    ${coverHtml}
                 </div>
-            </figure>
-            
-            <!-- Book Details -->
-            <div class="card-body p-6 gap-0">
-                <h2 class="card-title text-3xl mb-0.5">${book.title}</h2>
-                <p class="text-lg mb-2">by ${book.author}</p>
-                
-                ${book.series && book.series !== 'N/A' ? 
-                    `<p class="mb-0.5"><strong>Series:</strong> ${book.series}</p>` : 
-                    ''
-                }
-                
-                ${book.sequence && book.sequence !== 'N/A' && book.sequence !== '' ? 
-                    `<p class="mb-0.5"><strong>Book Number:</strong> ${book.sequence}</p>` : 
-                    ''
-                }
-                
-                ${book.narrator && book.narrator !== 'Unknown' ? 
-                    `<p class="mb-0.5"><strong>Narrator:</strong> ${book.narrator}</p>` : 
-                    ''
-                }
-                
-                ${book.runtime ? 
-                    `<p class="mb-0.5"><strong>Runtime:</strong> ${book.runtime}</p>` : 
-                    ''
-                }
-                
-                ${book.rating && book.rating !== 'N/A' ? 
-                    `<p class="mb-0.5">
-                        <strong>Rating:</strong> 
-                        ${book.rating}
-                        ${book.num_ratings && book.num_ratings > 0 ? `(${book.num_ratings.toLocaleString()} ratings)` : ''}
-                    </p>` : 
-                    ''
-                }
-                
-                ${book.release_date && book.release_date !== 'Unknown' ? 
-                    `<p class="mb-0.5"><strong>Release Date:</strong> ${book.release_date}</p>` : 
-                    ''
-                }
-                
-                ${book.publisher && book.publisher !== 'Unknown' ? 
-                    `<p class="mb-0.5"><strong>Publisher:</strong> ${book.publisher}</p>` : 
-                    ''
-                }
-                
-                ${book.language ? 
-                    `<p class="mb-0.5"><strong>Language:</strong> ${book.language}</p>` : 
-                    ''
-                }
-                
-                ${book.ownership_status || book.status ? 
-                    `<p class="mb-0.5"><strong>Status:</strong> 
-                        <span>
-                            ${book.status || book.ownership_status}
-                        </span>
-                    </p>` : 
-                    ''
-                }
-                
-                <p class="mb-0.5"><strong>Source:</strong> 
-                    <span>
-                        ${formatSourceLabel(book)}
-                    </span>
-                </p>
-                
-                ${book.file_location ? 
-                    `<div class="mb-0.5"><strong>File Location:</strong>
-                        <code class="block text-xs break-all">${book.file_location}</code>
-                    </div>` : 
-                    ''
-                }
-                
-                ${book.asin ? 
-                    `<p class="mb-0.5"><strong>ASIN:</strong> ${book.asin}</p>` : 
-                    ''
-                }
-                
-                ${book.summary ? 
-                    `<div class="mt-4">
-                        <h4 class="font-bold mb-2">Summary:</h4>
-                        <p class="leading-relaxed opacity-80">${book.summary}</p>
-                    </div>` : 
-                    ''
-                }
+                <div class="flex-1 min-w-0 pb-3">
+                    <div class="flex flex-wrap items-center gap-1.5 mb-1.5">${statusBadge}</div>
+                    <h1 class="text-2xl sm:text-[1.65rem] font-bold text-white leading-tight">${e(book.title || '')}</h1>
+                    <p class="text-sm text-white/50 mt-0.5">
+                        by <a href="/authors/${encodeURIComponent(book.author || '')}" class="text-white/80 hover:text-white hover:underline font-medium">${e(book.author || '')}</a>
+                        ${hasSeries ? `<span class="opacity-30 mx-1">&middot;</span><span class="text-white/40">${seriesText}</span>` : ''}
+                    </p>
+                    ${ratingHtml}
+                </div>
+                <div class="flex items-center gap-1.5 pb-4 flex-shrink-0">
+                    <button class="btn btn-primary btn-sm gap-1.5" onclick="autoDownloadBook(${book.id}, this)">
+                        <i class="fas fa-bolt text-xs"></i> Download
+                    </button>
+                    <button class="btn btn-ghost btn-sm text-white/60 hover:text-white hover:bg-white/10"
+                            title="Interactive Search"
+                            data-title="${e(book.title || '')}" data-author="${e(book.author || '')}"
+                            onclick="searchForBook(${book.id}, this.dataset.title, this.dataset.author)">
+                        <i class="fas fa-search text-xs"></i>
+                    </button>
+                    <button class="btn btn-ghost btn-sm text-white/60 hover:text-white hover:bg-white/10"
+                            title="Refresh Metadata"
+                            onclick="updateBookMetadata(${book.id})">
+                        <i class="fas fa-rotate text-xs"></i>
+                    </button>
+                    <div class="dropdown dropdown-end">
+                        <button tabindex="0" class="btn btn-ghost btn-sm btn-circle text-white/60 hover:text-white hover:bg-white/10">
+                            <i class="fas fa-ellipsis-v text-xs"></i>
+                        </button>
+                        <ul tabindex="0" class="dropdown-content menu menu-sm bg-base-200 shadow-xl w-44 mt-1 z-[100] border border-base-300 p-1" style="border-radius:0.25rem;">
+                            <li><a class="text-error text-xs" onclick="deleteBook(${book.id})"><i class="fas fa-trash mr-2"></i>Delete Book</a></li>
+                        </ul>
+                    </div>
+                </div>
             </div>
         </div>
+
+        <!-- ════ BODY ════ -->
+        <div class="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[1fr_260px] bg-base-100 overflow-hidden"
+             style="padding-top:108px">
+
+            <!-- Left: Tabs -->
+            <div class="flex flex-col min-h-0 border-r border-base-200 px-5 pt-0 pb-4">
+                <div role="tablist" class="tabs tabs-border flex-shrink-0 -mx-1 mb-1">
+                    <button role="tab" class="tab tab-active text-sm" onclick="bookModalSwitchTab('overview', this)">
+                        <i class="fas fa-align-left mr-1.5 opacity-50 text-xs"></i>Overview
+                    </button>
+                    <button role="tab" class="tab text-sm" onclick="bookModalSwitchTab('files', this)">
+                        <i class="fas fa-folder mr-1.5 opacity-50 text-xs"></i>Files
+                    </button>
+                    ${seriesTab}
+                    <button role="tab" class="tab text-sm" onclick="bookModalSwitchTab('history', this)">
+                        <i class="fas fa-clock-rotate-left mr-1.5 opacity-50 text-xs"></i>History
+                    </button>
+                </div>
+
+                <div id="bookTab-overview" class="book-tab-panel book-tab-active tab-scroll overflow-y-auto flex-1 pt-3 space-y-4">
+                    ${synopsisHtml}
+                </div>
+
+                <div id="bookTab-files" class="book-tab-panel tab-scroll overflow-y-auto flex-1 pt-3 space-y-3">
+                    ${filesHtml}
+                </div>
+
+                ${seriesPanel}
+
+                <div id="bookTab-history" class="book-tab-panel tab-scroll overflow-y-auto flex-1 pt-4"
+                     data-book-id="${book.id}" data-loaded="false">
+                    <div class="flex justify-center py-8"><span class="loading loading-spinner loading-md"></span></div>
+                </div>
+            </div>
+
+            <!-- Right: Details Sidebar -->
+            <div class="flex-shrink-0 bg-base-100 px-4 pt-3 pb-4 overflow-y-auto tab-scroll">
+                <p class="text-[10px] font-bold uppercase tracking-widest text-base-content/30 mb-3">Details</p>
+                <div class="divide-y divide-base-200">
+                    ${factRows}
+                </div>
+            </div>
+
+        </div>
     `;
-    
-    // Update modal action buttons
-    const modalActions = modal.querySelector('.modal-action');
-    if (modalActions) {
-        modalActions.innerHTML = `
-            <button class="btn btn-soft btn-primary btn-md" onclick="updateBookMetadata(${book.id})">
-                <i class="fas fa-sync"></i> Update Metadata
-            </button>
-            <button class="btn btn-soft btn-accent btn-md" onclick="searchForBook(${book.id}, this.dataset.title, this.dataset.author)" data-title="${escapeHtml(book.title || '')}" data-author="${escapeHtml(book.author || '')}">
-                <i class="fas fa-search"></i> Interactive Download
-            </button>
-            <button class="btn btn-soft btn-warning btn-md" onclick="autoDownloadBook(${book.id}, this)">
-                <i class="fas fa-bolt"></i> Auto Download
-            </button>
-            <button class="btn btn-soft btn-error btn-md" onclick="deleteBook(${book.id})">
-                <i class="fas fa-trash"></i> Delete
-            </button>
-            <form method="dialog">
-                <button class="btn btn-soft btn-md">Close</button>
-            </form>
-        `;
+
+    // Set hero blur background via JS (avoids CSS injection risk)
+    if (coverUrl) {
+        const heroBlur = document.getElementById('bookModalHeroBlur');
+        if (heroBlur) heroBlur.style.backgroundImage = `url("${coverUrl.replace(/"/g, '%22')}")`;
     }
-    
+
     modal.showModal();
+}
+
+function bookModalSwitchTab(name, btn) {
+    document.querySelectorAll('#modalContent .book-tab-panel')
+        .forEach(p => p.classList.remove('book-tab-active'));
+    document.querySelectorAll('#modalContent [role="tab"]')
+        .forEach(t => t.classList.remove('tab-active'));
+    document.getElementById('bookTab-' + name).classList.add('book-tab-active');
+    btn.classList.add('tab-active');
+
+    if (name === 'series') {
+        const panel = document.getElementById('bookTab-series');
+        if (panel && panel.dataset.loaded === 'false') {
+            bookModalLoadSeriesTab(panel, panel.dataset.seriesAsin);
+        }
+    }
+    if (name === 'history') {
+        const panel = document.getElementById('bookTab-history');
+        if (panel && panel.dataset.loaded === 'false') {
+            bookModalLoadHistoryTab(panel, panel.dataset.bookId);
+        }
+    }
+}
+
+async function bookModalLoadSeriesTab(panel, seriesAsin) {
+    const e = escapeHtml;
+    try {
+        const res = await fetch(`/series/api/${encodeURIComponent(seriesAsin)}/books`);
+        const data = await res.json();
+        panel.dataset.loaded = 'true';
+
+        if (!data.success) {
+            panel.innerHTML = `<p class="text-sm text-error">Failed to load series data.</p>`;
+            return;
+        }
+
+        const books = Array.isArray(data.books) ? data.books : [];
+        const stats = data.statistics || {};
+        const importAuthor = data.primary_author || '';
+
+        const rows = books.length ? books.map(book => {
+            const isOwned = book.in_library || ['in_library','owned'].includes((book.library_status||'').toLowerCase());
+            const isPending = ['wanted','queued','pending'].includes((book.library_status||'').toLowerCase());
+            let badge;
+            if (isOwned)        badge = '<span class="badge badge-success badge-xs">In Library</span>';
+            else if (isPending) badge = '<span class="badge badge-warning badge-xs">Wanted</span>';
+            else                badge = '<span class="badge badge-ghost badge-xs">Not Owned</span>';
+
+            const titleCell = isOwned && book.asin
+                ? `<button class="text-sm text-left hover:underline text-primary" onclick="openBookModal('${e(book.asin)}')">${e(book.title || 'Unknown')}</button>`
+                : `<span class="text-sm">${e(book.title || 'Unknown')}</span>`;
+
+            const bookAuthor = book.author || importAuthor;
+            const actionCell = !isOwned && book.asin
+                ? `<button class="btn btn-xs btn-soft btn-primary js-series-tab-import"
+                       data-asin="${e(book.asin)}" data-author="${e(bookAuthor)}" data-title="${e(book.title || '')}"
+                       data-series-asin="${e(seriesAsin)}">
+                       <i class="fas fa-download"></i> ${isPending ? 'Queue' : 'Add'}
+                   </button>`
+                : '';
+
+            return `<tr class="hover">
+                <td class="text-xs font-semibold w-10">${e(String(book.sequence || '—'))}</td>
+                <td>${titleCell}</td>
+                <td>${badge}</td>
+                <td class="text-right">
+                    ${(book.rating && book.rating !== 'N/A')
+                        ? `<span class="text-xs">${e(String(book.rating))} <i class="fas fa-star text-warning text-[10px]"></i></span>`
+                        : '<span class="text-xs opacity-40">—</span>'
+                    }
+                </td>
+                <td class="text-right">${actionCell}</td>
+            </tr>`;
+        }).join('') : `<tr><td colspan="5" class="text-center text-sm text-base-content/40 py-4">No books found.</td></tr>`;
+
+        panel.innerHTML = `
+            <div class="space-y-3">
+                <div class="flex flex-wrap gap-2 items-center">
+                    ${stats.total_books  ? `<span class="badge badge-ghost badge-sm">${stats.total_books} Books</span>` : ''}
+                    ${stats.owned_books  ? `<span class="badge badge-success badge-sm">${stats.owned_books} Owned</span>` : ''}
+                    ${stats.missing_books > 0 ? `<span class="badge badge-warning badge-sm">${stats.missing_books} Missing</span>` : ''}
+                </div>
+                <div class="border border-base-300 rounded overflow-hidden">
+                    <table class="table table-sm w-full">
+                        <thead class="bg-base-200 text-xs uppercase tracking-wide text-base-content/50">
+                            <tr><th>#</th><th>Title</th><th>Status</th><th class="text-right">Rating</th><th></th></tr>
+                        </thead>
+                        <tbody class="text-sm">${rows}</tbody>
+                    </table>
+                </div>
+            </div>`;
+
+        // Wire up import buttons
+        panel.querySelectorAll('.js-series-tab-import').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const asin = btn.dataset.asin;
+                const author = btn.dataset.author;
+                const thisSeries = btn.dataset.seriesAsin;
+                btn.disabled = true;
+                btn.innerHTML = '<span class="loading loading-spinner loading-xs"></span>';
+                try {
+                    const r = await fetch('/authors/api/import-book', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ author_name: author, asin })
+                    });
+                    const result = await r.json();
+                    if (result.success) {
+                        showNotification(result.message || 'Import queued.', 'success');
+                        // Reload series tab
+                        panel.dataset.loaded = 'false';
+                        bookModalLoadSeriesTab(panel, thisSeries);
+                    } else {
+                        showNotification(result.error || 'Import failed.', 'error');
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="fas fa-download"></i> Add';
+                    }
+                } catch (err) {
+                    showNotification('Import request failed.', 'error');
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-download"></i> Add';
+                }
+            });
+        });
+
+    } catch (err) {
+        panel.dataset.loaded = 'true';
+        panel.innerHTML = `<p class="text-sm text-error">Error loading series: ${e(err.message)}</p>`;
+    }
+}
+
+async function bookModalLoadHistoryTab(panel, bookId) {
+    const e = escapeHtml;
+    try {
+        const res = await fetch(`/library/book/${encodeURIComponent(bookId)}/history`);
+        const data = await res.json();
+        panel.dataset.loaded = 'true';
+
+        if (!data.success || !data.events || data.events.length === 0) {
+            panel.innerHTML = `<p class="text-sm text-base-content/40">No history recorded for this book.</p>`;
+            return;
+        }
+
+        const typeMap = {
+            success: 'status-success',
+            info:    'status-info',
+            warning: 'status-warning',
+            error:   'status-error',
+        };
+
+        const rows = data.events.map((ev, i) => {
+            const dot = typeMap[ev.type] || 'status-info';
+            const isLast = i === data.events.length - 1;
+            const tsDisplay = ev.ts ? new Date(ev.ts).toLocaleString(undefined, {
+                month: 'short', day: 'numeric', year: 'numeric',
+                hour: 'numeric', minute: '2-digit'
+            }) : '';
+            return `
+            <div class="flex items-start gap-3 py-2.5 ${isLast ? '' : 'border-b border-base-300/50'}">
+                <span class="status ${dot} status-xs mt-1.5 flex-shrink-0"></span>
+                <div class="min-w-0 flex-1">
+                    <p class="text-sm">${e(ev.label)}</p>
+                    ${tsDisplay ? `<p class="text-xs text-base-content/40">${e(tsDisplay)}</p>` : ''}
+                </div>
+            </div>`;
+        }).join('');
+
+        panel.innerHTML = `<div class="space-y-0">${rows}</div>`;
+    } catch (err) {
+        panel.dataset.loaded = 'true';
+        panel.innerHTML = `<p class="text-sm text-error">Error loading history: ${e(err.message)}</p>`;
+    }
+}
+
+function toggleBookSynopsis(btn) {
+    const p = document.getElementById('bookModalSynopsis');
+    const nowClamped = p.classList.toggle('line-clamp-5');
+    btn.textContent = nowClamped ? 'Show more' : 'Show less';
 }
 
 function formatSourceLabel(book) {

@@ -57,6 +57,7 @@ def series_list():
 
 
 @series_bp.route('/<series_asin>')
+@login_required
 def series_detail(series_asin):
     """Display details of a specific series"""
     try:
@@ -136,12 +137,29 @@ def api_series_books(series_asin):
         missing_books = total_books - owned_books
 
         primary_author, author_candidates = _analyze_series_authors(books)
-        
+
+        # Use series description; fall back to Book 1's summary if empty
+        series_description = (series_metadata.get('description') or '').strip()
+
+        # Find Book 1 for cover and description fallbacks
+        book_one = next(
+            (b for b in books if str(b.get('sequence', '')).strip() == '1'),
+            books[0] if books else None
+        )
+        if not series_description and book_one:
+            series_description = (book_one.get('summary') or '').strip()
+
+        # Fall back to Book 1 cover when series has no cover_url
+        series_cover_url = (series_metadata.get('cover_url') or '').strip()
+        if not series_cover_url and book_one:
+            series_cover_url = (book_one.get('cover_image') or '').strip()
+
         return jsonify({
             'success': True,
             'series_asin': series_asin,
             'series_title': series_metadata['series_title'],
-            'series_cover_url': series_metadata.get('cover_url'),
+            'series_cover_url': series_cover_url,
+            'series_description': series_description,
             'books': books,
             'statistics': {
                 'total_books': total_books,

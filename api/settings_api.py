@@ -76,12 +76,29 @@ INITIAL_LOG_LINE_LIMIT = 80
 MAX_LOG_RESPONSE_SIZE = 120
 
 
-def _read_log_lines(log_file: str, state: dict, initial_limit: int = INITIAL_LOG_LINE_LIMIT):
-    """Read new log lines, tailing on first read and streaming thereafter."""
+def _read_log_lines(log_file: str, state: dict, initial_limit: int = INITIAL_LOG_LINE_LIMIT, start_position: int = None):
+    """Read new log lines, streaming from session start on first read and by position thereafter."""
     lines = []
     with open(log_file, 'r', encoding='utf-8', errors='ignore') as log_handle:
+        # Detect log rotation: if the file is smaller than our stored position the
+        # file has been rotated; reset to the beginning.
+        log_handle.seek(0, 2)  # seek to end
+        file_size = log_handle.tell()
+        if state.get('position', 0) > file_size:
+            state['position'] = 0
+            state['initialized'] = False
+
         if not state.get('initialized'):
-            lines = list(deque(log_handle, maxlen=initial_limit))
+            if start_position is not None:
+                log_handle.seek(start_position)
+            else:
+                log_handle.seek(0)
+                lines_all = log_handle.readlines()
+                lines = list(lines_all[-initial_limit:]) if len(lines_all) > initial_limit else lines_all
+                state['position'] = log_handle.tell()
+                state['initialized'] = True
+                return lines
+            lines = log_handle.readlines()
             state['position'] = log_handle.tell()
             state['initialized'] = True
         else:
@@ -299,56 +316,38 @@ def get_system_health():
 @settings_api_bp.route('/logs/latest')
 def get_latest_logs():
     """Get latest log entries for live streaming."""
-    global last_log_check, log_cache
-    
     try:
-        # Read recent log entries from file
-        log_file = get_log_file_path()
+        from utils.loguru_config import get_session_log_info
+        log_file, session_start = get_session_log_info()
+        if not log_file:
+            log_file = get_log_file_path()
+            session_start = None
+
         new_logs = []
-        
         if os.path.exists(log_file):
-            with open(log_file, 'r') as f:
-                lines = f.readlines()
-                # Get last 50 lines for performance
-                recent_lines = lines[-50:] if len(lines) > 50 else lines
-                
-                for line in recent_lines:
-                    if line.strip():
-                        # Parse log line
-                        log_entry = parse_log_line(line.strip())
-                        if log_entry:
-                            new_logs.append(log_entry)
-        
-        # Update cache and return new logs
-        log_cache.extend(new_logs)
-        if len(log_cache) > 1000:  # Limit cache size
-            log_cache = log_cache[-1000:]
-        
-        last_log_check = datetime.now()
-        
-        return jsonify({
-            'success': True,
-            'logs': new_logs[-20:] if len(new_logs) > 20 else new_logs  # Return last 20 for performance
-        })
-    
+            lines = _read_log_lines(log_file, log_stream_state, start_position=session_start)
+            for line in lines:
+                if line.strip():
+                    log_entry = parse_log_line(line.strip())
+                    if log_entry:
+                        new_logs.append(log_entry)
+
+        return jsonify({'success': True, 'logs': new_logs})
+
     except Exception as e:
         logger.error(f"Error getting latest logs: {e}")
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'logs': []
-        })
+        return jsonify({'success': False, 'error': str(e), 'logs': []})
 
 def parse_log_line(line):
     """Parse a log line into structured data."""
     try:
-        # Basic log line parsing - adjust based on your log format
+        # File format: {timestamp} - {level} - {logger_name} - {message}
         if ' - ' in line:
             parts = line.split(' - ')
             if len(parts) >= 4:
                 timestamp = parts[0].strip()
-                logger_name = parts[1].strip()
-                level = parts[2].strip()
+                level = parts[1].strip()
+                logger_name = parts[2].strip()
                 message = ' - '.join(parts[3:]).strip()
 
                 return {
@@ -369,7 +368,7 @@ def parse_log_line(line):
                 }
     except Exception:
         pass
-    
+
     # Return raw line if parsing fails
     return {
         'timestamp': datetime.now().strftime('%H:%M:%S'),

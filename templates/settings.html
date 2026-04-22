@@ -31,39 +31,31 @@
             </div>
             <form id="generalForm" data-status-target="generalStatus" class="space-y-6" novalidate>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div class="form-control">
-                        <label class="label pb-1">
-                            <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Log level</span>
-                        </label>
+                    <fieldset class="fieldset gap-1">
+                        <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Log level</legend>
                         <select id="app_log_level" class="select select-bordered w-full">
                             <option value="DEBUG">Debug</option>
                             <option value="INFO">Info</option>
                             <option value="WARNING">Warning</option>
                             <option value="ERROR">Error</option>
                         </select>
-                    </div>
-                    <div class="form-control">
-                        <label class="label pb-1">
-                            <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Theme</span>
-                        </label>
+                    </fieldset>
+                    <fieldset class="fieldset gap-1">
+                        <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Theme</legend>
                         <select id="app_theme" class="select select-bordered w-full">
                             <option value="dark">Dark</option>
                             <option value="light">Light</option>
                             <option value="nord">Nord</option>
                             <option value="blueberry">BlueBerry</option>
                         </select>
-                        <label class="label">
-                            <span class="label-text-alt text-base-content/60">Preview changes instantly; save to keep the preference.</span>
-                        </label>
-                    </div>
-                    <div class="form-control">
-                        <label class="label pb-1">
-                            <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Quality threshold</span>
-                        </label>
+                        <p class="label text-xs text-base-content/60">Preview changes instantly; save to keep the preference.</p>
+                    </fieldset>
+                    <fieldset class="fieldset gap-1">
+                        <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Quality threshold</legend>
                         <input id="quality_threshold" type="number" min="0" step="1" class="input input-bordered w-full" placeholder="5" />
-                    </div>
+                    </fieldset>
                 </div>
-                <div class="form-control">
+                <div>
                     <label class="label cursor-pointer">
                         <span class="label-text">Enable automatic downloads</span>
                         <input id="auto_download_enabled" type="checkbox" class="toggle toggle-primary" />
@@ -77,6 +69,43 @@
                     </button>
                 </div>
             </form>
+
+            <!-- ── Live Log Window ── -->
+            <style>
+                #logWindow pre { color: #d4d4d4 !important; }
+                #logWindow pre.log-error { color: oklch(var(--er) / 1) !important; }
+                #logWindow pre.log-warning { color: oklch(var(--wa) / 1) !important; }
+                #logWindow pre.log-debug { color: #6b7280 !important; }
+                #logWindow pre.log-success { color: oklch(var(--su) / 1) !important; }
+            </style>
+            <div class="space-y-2 max-w-3xl">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-sm font-semibold uppercase tracking-wide text-base-content/60">
+                        <i class="fas fa-terminal mr-1.5 opacity-60"></i>Application Logs
+                    </h3>
+                    <div class="flex items-center gap-2">
+                        <span id="logLiveIndicator" class="flex items-center gap-1.5 text-xs text-base-content/50">
+                            <span class="status status-success status-xs animate-pulse"></span>
+                            <span id="logStatusLabel">Live</span>
+                        </span>
+                        <button type="button" id="logClearButton" class="btn btn-ghost btn-xs gap-1.5">
+                            <i class="fas fa-trash-can text-[10px]"></i>
+                            Clear
+                        </button>
+                        <a href="/settings/api/logs/download" class="btn btn-ghost btn-xs gap-1.5">
+                            <i class="fas fa-download text-[10px]"></i>
+                            Download
+                        </a>
+                        <button type="button" id="logPauseButton" class="btn btn-ghost btn-xs gap-1.5">
+                            <i class="fas fa-pause text-[10px]" id="logPauseIcon"></i>
+                            <span id="logPauseLabel">Pause</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="mockup-code max-h-[42rem] overflow-y-auto text-xs leading-relaxed" id="logWindow">
+                    <pre data-prefix="~" style="color:#6b7280"><code>Connecting to log stream…</code></pre>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -105,76 +134,62 @@
             <div id="absConnectionStatus" class="text-xs text-base-content/60 min-h-4"></div>
             <form id="absForm" data-status-target="absStatus" class="space-y-6" novalidate>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div class="form-control">
-                        <label class="label pb-1">
-                            <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Server URL</span>
-                        </label>
+                    <fieldset class="fieldset gap-1">
+                        <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Server URL</legend>
                         <input id="abs_host" type="text" class="input input-bordered w-full" placeholder="http://127.0.0.1:13378" />
-                    </div>
-                    <div class="form-control">
-                        <label class="label pb-1">
-                            <span class="label-text text-xs uppercase tracking-wide text-base-content/60">API key</span>
-                        </label>
+                    </fieldset>
+                    <fieldset class="fieldset gap-1">
+                        <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">API key</legend>
                         <input id="abs_api_key" type="password" class="input input-bordered w-full" autocomplete="off" />
-                    </div>
-                    <div class="form-control md:col-span-2">
-                        <label class="label pb-1">
-                            <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Library</span>
-                        </label>
+                    </fieldset>
+                    <fieldset class="fieldset gap-1 md:col-span-2">
+                        <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Library</legend>
                         <select id="abs_library_id" class="select select-bordered w-full">
                             <option value="">Select a library</option>
                         </select>
-                        <label class="label">
-                            <span id="absLibraryHelper" class="label-text-alt text-base-content/60">Load libraries after testing the connection.</span>
-                        </label>
-                    </div>
+                        <p class="label text-xs text-base-content/60">Load libraries after testing the connection.</p>
+                    </fieldset>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div class="form-control">
+                    <div>
                         <label class="label cursor-pointer">
                             <span class="label-text">Enable sync</span>
                             <input id="abs_enabled" type="checkbox" class="toggle toggle-primary" />
                         </label>
                     </div>
-                    <div class="form-control">
+                    <div>
                         <label class="label cursor-pointer">
                             <span class="label-text">Match metadata during sync</span>
                             <input id="abs_sync_metadata" type="checkbox" class="toggle toggle-primary" />
                         </label>
                     </div>
-                    <div class="form-control">
+                    <div>
                         <label class="label cursor-pointer">
                             <span class="label-text">Sync owned titles only</span>
                             <input id="abs_sync_only_owned" type="checkbox" class="toggle toggle-primary" />
                         </label>
                     </div>
-                    <div class="form-control">
+                    <div>
                         <label class="label cursor-pointer">
                             <span class="label-text">Auto sync on schedule</span>
                             <input id="abs_auto_sync" type="checkbox" class="toggle toggle-primary" />
                         </label>
                     </div>
-                    <div class="form-control">
+                    <div>
                         <label class="label cursor-pointer">
                             <span class="label-text">Auto-match new imports (ABS)</span>
                             <input id="abs_auto_match_imports" type="checkbox" class="toggle toggle-primary" />
                         </label>
-                        <label class="label">
-                            <span class="label-text-alt text-base-content/60">Match ~10s after import completes.</span>
-                        </label>
+                        <p class="label text-xs text-base-content/60">Match ~10s after import completes.</p>
                     </div>
-                    <div class="form-control">
-                        <label class="label pb-1">
-                            <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Sync frequency</span>
-                        </label>
+                    <fieldset class="fieldset gap-1">
+                        <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Sync frequency</legend>
                         <input id="abs_sync_frequency" type="text" class="input input-bordered w-full" placeholder="30min" />
-                    </div>
-                    <div class="form-control">
-                        <label class="label pb-1">
-                            <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Auto-match delay (seconds)</span>
-                        </label>
+                    </fieldset>
+                    <fieldset class="fieldset gap-1">
+                        <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Auto-match delay (seconds)</legend>
                         <input id="abs_auto_match_delay_seconds" type="number" min="0" class="input input-bordered w-full" placeholder="10" />
-                    </div>
+                    </fieldset>
                 </div>
                 <div id="absStatus" class="text-xs text-base-content/60 min-h-4"></div>
                 <div class="flex justify-end">
@@ -360,10 +375,8 @@
                             </div>
                         </div>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div class="form-control">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Client Type</span>
-                                </label>
+                            <fieldset class="fieldset gap-1">
+                                <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Client Type</legend>
                                 <select id="download_client_type" class="select select-bordered w-full">
                                     <optgroup label="Torrent">
                                         <option value="qbittorrent">qBittorrent</option>
@@ -375,11 +388,9 @@
                                         <option value="nzbget">NZBGet</option>
                                     </optgroup>
                                 </select>
-                                <label class="label">
-                                    <span id="downloadClientTypeHelper" class="label-text-alt text-base-content/60">Torrent: qBittorrent. Usenet: SABnzbd, NZBGet. Deluge and Transmission coming soon.</span>
-                                </label>
-                            </div>
-                            <div class="form-control">
+                                <p class="label text-xs text-base-content/60">Torrent: qBittorrent. Usenet: SABnzbd, NZBGet. Deluge and Transmission coming soon.</p>
+                            </fieldset>
+                            <div>
                                 <label class="label cursor-pointer">
                                     <span class="label-text">Enable client</span>
                                     <input id="download_client_enabled" type="checkbox" class="toggle toggle-primary" />
@@ -388,46 +399,34 @@
                         </div>
 
                         <div data-client-panel="qbittorrent" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div class="form-control">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Host</span>
-                                </label>
+                            <fieldset class="fieldset gap-1">
+                                <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Host</legend>
                                 <input id="qb_host" type="text" class="input input-bordered w-full" placeholder="127.0.0.1" />
-                            </div>
-                            <div class="form-control">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Port</span>
-                                </label>
+                            </fieldset>
+                            <fieldset class="fieldset gap-1">
+                                <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Port</legend>
                                 <input id="qb_port" type="number" min="1" step="1" class="input input-bordered w-full" placeholder="8080" />
-                            </div>
-                            <div class="form-control">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Username</span>
-                                </label>
+                            </fieldset>
+                            <fieldset class="fieldset gap-1">
+                                <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Username</legend>
                                 <input id="qb_username" type="text" class="input input-bordered w-full" />
-                            </div>
-                            <div class="form-control">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Password</span>
-                                </label>
+                            </fieldset>
+                            <fieldset class="fieldset gap-1">
+                                <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Password</legend>
                                 <input id="qb_password" type="password" class="input input-bordered w-full" autocomplete="off" />
-                            </div>
-                            <div class="form-control md:col-span-2">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Category</span>
-                                </label>
+                            </fieldset>
+                            <fieldset class="fieldset gap-1 md:col-span-2">
+                                <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Category</legend>
                                 <input id="qb_category" type="text" class="input input-bordered w-full" placeholder="auralarchive" />
-                            </div>
-                                <div class="form-control md:col-span-2">
+                            </fieldset>
+                                <div class="md:col-span-2">
                                     <label class="label cursor-pointer">
                                         <span class="label-text">Enable remote path mappings</span>
                                         <input id="qb_path_mapping_enabled" type="checkbox" class="toggle toggle-primary" />
                                     </label>
                                 </div>
-                            <div class="form-control md:col-span-2" data-qb-path-mappings>
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Path mappings</span>
-                                </label>
+                            <fieldset class="fieldset gap-1 md:col-span-2" data-qb-path-mappings>
+                                <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Path mappings</legend>
                                 <div id="qbPathMappings" class="space-y-2"></div>
                                 <div class="flex items-center justify-between mt-2">
                                     <p class="text-xs text-base-content/50">Map qBittorrent's internal paths to the host paths AuralArchive can access.</p>
@@ -436,164 +435,120 @@
                                         <span>Add Mapping</span>
                                     </button>
                                 </div>
-                            </div>
+                            </fieldset>
                         </div>
 
                         <div data-client-panel="deluge" class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden">
-                            <div class="form-control">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Host</span>
-                                </label>
+                            <fieldset class="fieldset gap-1">
+                                <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Host</legend>
                                 <input id="deluge_host" type="text" class="input input-bordered w-full" placeholder="127.0.0.1" />
-                            </div>
-                            <div class="form-control">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Port</span>
-                                </label>
+                            </fieldset>
+                            <fieldset class="fieldset gap-1">
+                                <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Port</legend>
                                 <input id="deluge_port" type="number" min="1" step="1" class="input input-bordered w-full" placeholder="8112" />
-                            </div>
-                            <div class="form-control md:col-span-2">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Password</span>
-                                </label>
+                            </fieldset>
+                            <fieldset class="fieldset gap-1 md:col-span-2">
+                                <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Password</legend>
                                 <input id="deluge_password" type="password" class="input input-bordered w-full" autocomplete="off" />
-                            </div>
+                            </fieldset>
                         </div>
 
                         <div data-client-panel="transmission" class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden">
-                            <div class="form-control">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Host</span>
-                                </label>
+                            <fieldset class="fieldset gap-1">
+                                <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Host</legend>
                                 <input id="transmission_host" type="text" class="input input-bordered w-full" placeholder="127.0.0.1" />
-                            </div>
-                            <div class="form-control">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Port</span>
-                                </label>
+                            </fieldset>
+                            <fieldset class="fieldset gap-1">
+                                <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Port</legend>
                                 <input id="transmission_port" type="number" min="1" step="1" class="input input-bordered w-full" placeholder="9091" />
-                            </div>
-                            <div class="form-control">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Username</span>
-                                </label>
+                            </fieldset>
+                            <fieldset class="fieldset gap-1">
+                                <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Username</legend>
                                 <input id="transmission_username" type="text" class="input input-bordered w-full" />
-                            </div>
-                            <div class="form-control">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Password</span>
-                                </label>
+                            </fieldset>
+                            <fieldset class="fieldset gap-1">
+                                <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Password</legend>
                                 <input id="transmission_password" type="password" class="input input-bordered w-full" autocomplete="off" />
-                            </div>
+                            </fieldset>
                         </div>
 
                         <div data-client-panel="sabnzbd" class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden">
-                            <div class="form-control">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Host</span>
-                                </label>
+                            <fieldset class="fieldset gap-1">
+                                <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Host</legend>
                                 <input id="sabnzbd_host" type="text" class="input input-bordered w-full" placeholder="127.0.0.1" />
-                            </div>
-                            <div class="form-control">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Port</span>
-                                </label>
+                            </fieldset>
+                            <fieldset class="fieldset gap-1">
+                                <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Port</legend>
                                 <input id="sabnzbd_port" type="number" min="1" step="1" class="input input-bordered w-full" placeholder="8080" />
-                            </div>
-                            <div class="form-control md:col-span-2">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">API Key</span>
-                                </label>
+                            </fieldset>
+                            <fieldset class="fieldset gap-1 md:col-span-2">
+                                <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">API Key</legend>
                                 <input id="sabnzbd_api_key" type="password" class="input input-bordered w-full" autocomplete="off" placeholder="SABnzbd API key" />
-                            </div>
-                            <div class="form-control">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">URL Base</span>
-                                </label>
+                            </fieldset>
+                            <fieldset class="fieldset gap-1">
+                                <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">URL Base</legend>
                                 <input id="sabnzbd_url_base" type="text" class="input input-bordered w-full" placeholder="/api" />
-                                <label class="label">
-                                    <span class="label-text-alt text-base-content/60">Default: /api (use /sabnzbd/api if behind a reverse proxy with URL base configured)</span>
-                                </label>
-                            </div>
-                            <div class="form-control">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Category</span>
-                                </label>
+                                <p class="label text-xs text-base-content/60">Default: /api (use /sabnzbd/api if behind a reverse proxy with URL base configured)</p>
+                            </fieldset>
+                            <fieldset class="fieldset gap-1">
+                                <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Category</legend>
                                 <input id="sabnzbd_category" type="text" class="input input-bordered w-full" placeholder="audiobooks" />
-                            </div>
-                            <div class="form-control">
+                            </fieldset>
+                            <div>
                                 <label class="label cursor-pointer">
                                     <span class="label-text">Use SSL</span>
                                     <input id="sabnzbd_use_ssl" type="checkbox" class="toggle toggle-primary" />
                                 </label>
                             </div>
-                            <div class="form-control">
+                            <div>
                                 <label class="label cursor-pointer">
                                     <span class="label-text">Verify certificate</span>
                                     <input id="sabnzbd_verify_cert" type="checkbox" class="toggle toggle-primary" checked />
                                 </label>
                             </div>
-                            <div class="form-control">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">SABnzbd Download Path (remote)</span>
-                                </label>
+                            <fieldset class="fieldset gap-1">
+                                <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">SABnzbd Download Path (remote)</legend>
                                 <input id="sabnzbd_remote_path" type="text" class="input input-bordered w-full" placeholder="/downloads" />
-                                <label class="label">
-                                    <span class="label-text-alt text-base-content/60">Path as SABnzbd sees it (e.g. /downloads). Leave blank if paths match.</span>
-                                </label>
-                            </div>
-                            <div class="form-control">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">SABnzbd Download Path (local)</span>
-                                </label>
+                                <p class="label text-xs text-base-content/60">Path as SABnzbd sees it (e.g. /downloads). Leave blank if paths match.</p>
+                            </fieldset>
+                            <fieldset class="fieldset gap-1">
+                                <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">SABnzbd Download Path (local)</legend>
                                 <input id="sabnzbd_local_path" type="text" class="input input-bordered w-full" placeholder="/media/MS_Server/Downloads" />
-                                <label class="label">
-                                    <span class="label-text-alt text-base-content/60">Corresponding path on this machine.</span>
-                                </label>
-                            </div>
+                                <p class="label text-xs text-base-content/60">Corresponding path on this machine.</p>
+                            </fieldset>
                         </div>
 
                         <div data-client-panel="nzbget" class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden">
-                            <div class="form-control">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Host</span>
-                                </label>
+                            <fieldset class="fieldset gap-1">
+                                <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Host</legend>
                                 <input id="nzbget_host" type="text" class="input input-bordered w-full" placeholder="127.0.0.1" />
-                            </div>
-                            <div class="form-control">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Port</span>
-                                </label>
+                            </fieldset>
+                            <fieldset class="fieldset gap-1">
+                                <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Port</legend>
                                 <input id="nzbget_port" type="number" min="1" step="1" class="input input-bordered w-full" placeholder="6789" />
-                            </div>
-                            <div class="form-control">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Username</span>
-                                </label>
+                            </fieldset>
+                            <fieldset class="fieldset gap-1">
+                                <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Username</legend>
                                 <input id="nzbget_username" type="text" class="input input-bordered w-full" placeholder="nzbget" />
-                            </div>
-                            <div class="form-control">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Password</span>
-                                </label>
+                            </fieldset>
+                            <fieldset class="fieldset gap-1">
+                                <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Password</legend>
                                 <input id="nzbget_password" type="password" class="input input-bordered w-full" autocomplete="off" />
-                            </div>
-                            <div class="form-control">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Category</span>
-                                </label>
+                            </fieldset>
+                            <fieldset class="fieldset gap-1">
+                                <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Category</legend>
                                 <input id="nzbget_category" type="text" class="input input-bordered w-full" placeholder="audiobooks" />
-                            </div>
-                            <div class="form-control">
+                            </fieldset>
+                            <div>
                                 <!-- spacer -->
                             </div>
-                            <div class="form-control">
+                            <div>
                                 <label class="label cursor-pointer">
                                     <span class="label-text">Use SSL</span>
                                     <input id="nzbget_use_ssl" type="checkbox" class="toggle toggle-primary" />
                                 </label>
                             </div>
-                            <div class="form-control">
+                            <div>
                                 <label class="label cursor-pointer">
                                     <span class="label-text">Verify certificate</span>
                                     <input id="nzbget_verify_cert" type="checkbox" class="toggle toggle-primary" checked />
@@ -644,18 +599,14 @@
                                     <span class="font-semibold text-sm">Prowlarr</span>
                                     <span id="prowlarrConnectionStatus" class="badge badge-ghost badge-sm hidden"></span>
                                 </div>
-                                <div class="form-control">
-                                    <label class="label py-0 pb-1">
-                                        <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Base URL</span>
-                                    </label>
+                                <fieldset class="fieldset gap-1">
+                                    <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Base URL</legend>
                                     <input id="prowlarr_base_url" type="text" class="input input-bordered input-sm w-full" placeholder="http://192.168.1.10:9696" autocomplete="off" />
-                                </div>
-                                <div class="form-control">
-                                    <label class="label py-0 pb-1">
-                                        <span class="label-text text-xs uppercase tracking-wide text-base-content/60">API Key</span>
-                                    </label>
+                                </fieldset>
+                                <fieldset class="fieldset gap-1">
+                                    <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">API Key</legend>
                                     <input id="prowlarr_api_key" type="password" class="input input-bordered input-sm w-full" autocomplete="off" placeholder="Paste API key" />
-                                </div>
+                                </fieldset>
                                 <div class="flex items-center gap-2 pt-1">
                                     <button type="button" id="prowlarrTestButton" class="btn btn-outline btn-xs gap-1">
                                         <i class="fas fa-plug"></i> Test
@@ -677,18 +628,14 @@
                                     <span class="font-semibold text-sm">NZBHydra2</span>
                                     <span id="nzbhydra2ConnectionStatus" class="badge badge-ghost badge-sm hidden"></span>
                                 </div>
-                                <div class="form-control">
-                                    <label class="label py-0 pb-1">
-                                        <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Base URL</span>
-                                    </label>
+                                <fieldset class="fieldset gap-1">
+                                    <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Base URL</legend>
                                     <input id="nzbhydra2_base_url" type="text" class="input input-bordered input-sm w-full" placeholder="http://192.168.1.10:5076" autocomplete="off" />
-                                </div>
-                                <div class="form-control">
-                                    <label class="label py-0 pb-1">
-                                        <span class="label-text text-xs uppercase tracking-wide text-base-content/60">API Key</span>
-                                    </label>
+                                </fieldset>
+                                <fieldset class="fieldset gap-1">
+                                    <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">API Key</legend>
                                     <input id="nzbhydra2_api_key" type="password" class="input input-bordered input-sm w-full" autocomplete="off" placeholder="Paste API key" />
-                                </div>
+                                </fieldset>
                                 <div class="flex items-center gap-2 pt-1">
                                     <button type="button" id="nzbhydra2TestButton" class="btn btn-outline btn-xs gap-1">
                                         <i class="fas fa-plug"></i> Test
@@ -755,33 +702,25 @@
                             </div>
                         </div>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div class="form-control md:col-span-2">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Display Name</span>
-                                </label>
+                            <fieldset class="fieldset gap-1 md:col-span-2">
+                                <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Display Name</legend>
                                 <input id="indexer_name" type="text" class="input input-bordered w-full" placeholder="Jackett - My Tracker" />
-                            </div>
-                            <div class="form-control md:col-span-2">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Indexer Key</span>
-                                </label>
+                            </fieldset>
+                            <fieldset class="fieldset gap-1 md:col-span-2">
+                                <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Indexer Key</legend>
                                 <input id="indexer_custom_key" type="text" class="input input-bordered w-full" placeholder="jackett_primary" />
-                                <label class="label">
-                                    <span class="label-text-alt text-base-content/60">Used internally to identify this indexer. Letters, numbers, and underscores only.</span>
-                                </label>
-                            </div>
-                            <div class="form-control">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Type</span>
-                                </label>
+                                <p class="label text-xs text-base-content/60">Used internally to identify this indexer. Letters, numbers, and underscores only.</p>
+                            </fieldset>
+                            <fieldset class="fieldset gap-1">
+                                <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Type</legend>
                                 <select id="indexer_type" class="select select-bordered w-full">
                                     <option value="jackett">Jackett</option>
                                     <option value="prowlarr">Prowlarr</option>
                                     <option value="nzbhydra2">NZBHydra2</option>
                                     <option value="direct">Direct</option>
                                 </select>
-                            </div>
-                            <div class="form-control">
+                            </fieldset>
+                            <div>
                                 <label class="label cursor-pointer">
                                     <span class="label-text">Enabled</span>
                                     <input id="indexer_enabled" type="checkbox" class="toggle toggle-primary" />
@@ -789,40 +728,26 @@
                             </div>
                         </div>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div class="form-control md:col-span-2" data-indexer-field="standard">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Feed URL</span>
-                                </label>
+                            <fieldset class="fieldset gap-1 md:col-span-2" data-indexer-field="standard">
+                                <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Feed URL</legend>
                                 <input id="indexer_feed_url" type="text" class="input input-bordered w-full" placeholder="http://127.0.0.1:9117/api/v2.0/indexers/all/results/torznab" />
-                            </div>
-                            <div class="form-control md:col-span-2" data-indexer-field="api-key">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">API Key</span>
-                                </label>
+                            </fieldset>
+                            <fieldset class="fieldset gap-1 md:col-span-2" data-indexer-field="api-key">
+                                <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">API Key</legend>
                                 <input id="indexer_api_key" type="text" class="input input-bordered w-full" autocomplete="off" />
-                            </div>
-                            <div class="form-control md:col-span-2 hidden" data-indexer-field="base-url">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Base URL</span>
-                                </label>
+                            </fieldset>
+                            <fieldset class="fieldset gap-1 md:col-span-2 hidden" data-indexer-field="base-url">
+                                <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Base URL</legend>
                                 <input id="indexer_base_url" type="text" class="input input-bordered w-full" placeholder="http://127.0.0.1:5076" />
-                                <label class="label">
-                                    <span class="label-text-alt text-base-content/60">Root endpoint, no trailing slash.</span>
-                                </label>
-                            </div>
-                            <div class="form-control md:col-span-2 hidden" data-indexer-field="direct">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Session ID</span>
-                                </label>
+                                <p class="label text-xs text-base-content/60">Root endpoint, no trailing slash.</p>
+                            </fieldset>
+                            <fieldset class="fieldset gap-1 md:col-span-2 hidden" data-indexer-field="direct">
+                                <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Session ID</legend>
                                 <textarea id="indexer_session_id" class="textarea textarea-bordered w-full font-mono break-all" rows="3" autocomplete="off" placeholder="Paste active session token" spellcheck="false"></textarea>
-                                <label class="label">
-                                    <span class="label-text-alt text-base-content/60">Used as the authentication token when calling the direct provider API.</span>
-                                </label>
-                            </div>
-                            <div class="form-control hidden" data-indexer-field="direct">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Search scope</span>
-                                </label>
+                                <p class="label text-xs text-base-content/60">Used as the authentication token when calling the direct provider API.</p>
+                            </fieldset>
+                            <fieldset class="fieldset gap-1 hidden" data-indexer-field="direct">
+                                <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Search scope</legend>
                                 <select id="indexer_search_type" class="select select-bordered w-full">
                                     <option value="all">Everything</option>
                                     <option value="fl">Freeleech only</option>
@@ -832,30 +757,20 @@
                                     <option value="active">Active (seeded)</option>
                                     <option value="inactive">Inactive (0 seeders)</option>
                                 </select>
-                                <label class="label">
-                                    <span class="label-text-alt text-base-content/60">MyAnonamouse supports filtering by VIP/freeleech/active status.</span>
-                                </label>
-                            </div>
+                                <p class="label text-xs text-base-content/60">MyAnonamouse supports filtering by VIP/freeleech/active status.</p>
+                            </fieldset>
                         </div>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div class="form-control">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Priority</span>
-                                </label>
+                            <fieldset class="fieldset gap-1">
+                                <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Priority</legend>
                                 <input id="indexer_priority" type="number" min="0" max="999" step="1" class="input input-bordered w-full" placeholder="100" />
-                                <label class="label">
-                                    <span class="label-text-alt">Lower numbers run first during searches.</span>
-                                </label>
-                            </div>
-                            <div class="form-control">
-                                <label class="label pb-1">
-                                    <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Categories</span>
-                                </label>
+                                <p class="label text-xs text-base-content/60">Lower numbers run first during searches.</p>
+                            </fieldset>
+                            <fieldset class="fieldset gap-1">
+                                <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Categories</legend>
                                 <input id="indexer_categories" type="text" class="input input-bordered w-full" placeholder="3030, 3031" />
-                                <label class="label">
-                                    <span class="label-text-alt">Comma separated torznab category IDs.</span>
-                                </label>
-                            </div>
+                                <p class="label text-xs text-base-content/60">Comma separated torznab category IDs.</p>
+                            </fieldset>
                         </div>
                         <div id="indexerStatus" class="text-xs text-base-content/60 h-4"></div>
                         <div class="flex justify-end">
@@ -885,12 +800,10 @@
                         <p class="text-sm text-base-content/60">Select how organized files are structured when moved into the library.</p>
                     </div>
                     <div class="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4">
-                        <div class="form-control">
-                            <label class="label pb-1">
-                                <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Template</span>
-                            </label>
+                        <fieldset class="fieldset gap-1">
+                            <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Template</legend>
                             <select id="mm_naming_template" class="select select-bordered w-full"></select>
-                        </div>
+                        </fieldset>
                         <div class="rounded-lg border border-base-300 bg-base-200/40 p-4">
                             <p class="text-xs font-semibold uppercase tracking-wide text-base-content/60 mb-2">Preview</p>
                             <ul id="mmNamingPreviewList" class="space-y-1 text-sm text-base-content/80">
@@ -898,33 +811,21 @@
                             </ul>
                         </div>
                     </div>
-                    <div class="form-control">
-                        <label class="label pb-1">
-                            <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Library path</span>
-                        </label>
+                    <fieldset class="fieldset gap-1">
+                        <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Library path</legend>
                         <input id="mm_library_path" type="text" class="input input-bordered w-full" placeholder="Auto-detected" />
-                        <label class="label">
-                            <span class="label-text-alt text-base-content/60">Leave blank for auto-detection (Docker: /audiobooks, Bare Metal: ./audiobooks). Override with custom path if needed.</span>
-                        </label>
-                    </div>
-                    <div class="form-control">
-                        <label class="label pb-1">
-                            <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Import path</span>
-                        </label>
+                        <p class="label text-xs text-base-content/60">Leave blank for auto-detection (Docker: /audiobooks, Bare Metal: ./audiobooks). Override with custom path if needed.</p>
+                    </fieldset>
+                    <fieldset class="fieldset gap-1">
+                        <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Import path</legend>
                         <input id="mm_import_directory" type="text" class="input input-bordered w-full" placeholder="Auto-detected" />
-                        <label class="label">
-                            <span class="label-text-alt text-base-content/60">Leave blank for auto-detection (Docker: /import, Bare Metal: ./import). Override with custom path if needed.</span>
-                        </label>
-                    </div>
-                    <div class="form-control">
-                        <label class="label pb-1">
-                            <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Downloads path</span>
-                        </label>
+                        <p class="label text-xs text-base-content/60">Leave blank for auto-detection (Docker: /import, Bare Metal: ./import). Override with custom path if needed.</p>
+                    </fieldset>
+                    <fieldset class="fieldset gap-1">
+                        <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Downloads path</legend>
                         <input id="dm_downloads_path" type="text" class="input input-bordered w-full" placeholder="Auto-detected" />
-                        <label class="label">
-                            <span class="label-text-alt text-base-content/60">Leave blank for auto-detection (Docker: /downloads, Bare Metal: ./downloads). Override with custom path if needed.</span>
-                        </label>
-                    </div>
+                        <p class="label text-xs text-base-content/60">Leave blank for auto-detection (Docker: /downloads, Bare Metal: ./downloads). Override with custom path if needed.</p>
+                    </fieldset>
                 </section>
                 <section class="space-y-4">
                     <div class="space-y-1">
@@ -932,34 +833,32 @@
                         <p class="text-sm text-base-content/60">Tune queue behavior, cleanup policies, and staging directories.</p>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div class="form-control">
+                        <div>
                             <label class="label cursor-pointer">
                                 <span class="label-text">Enable seeding</span>
                                 <input id="dm_seeding_enabled" type="checkbox" class="toggle toggle-primary" />
                             </label>
                         </div>
-                        <div class="form-control">
+                        <div>
                             <label class="label cursor-pointer">
                                 <span class="label-text">Delete source after import</span>
                                 <input id="dm_delete_source" type="checkbox" class="toggle toggle-primary" />
                             </label>
                         </div>
-                        <div class="form-control">
+                        <div>
                             <label class="label cursor-pointer">
                                 <span class="label-text">Overwrite existing library files</span>
                                 <input id="import_overwrite_existing" type="checkbox" class="toggle toggle-primary" />
                             </label>
-                            <label class="label">
-                                <span class="label-text-alt text-base-content/60">(If enabled, importer will replace any existing destination file.)</span>
-                            </label>
+                            <p class="label text-xs text-base-content/60">(If enabled, importer will replace any existing destination file.)</p>
                         </div>
-                        <div class="form-control">
+                        <div>
                             <label class="label cursor-pointer">
                                 <span class="label-text">Auto start monitoring</span>
                                 <input id="dm_auto_start_monitoring" type="checkbox" class="toggle toggle-primary" />
                             </label>
                         </div>
-                        <div class="form-control">
+                        <div>
                             <label class="label cursor-pointer">
                                 <span class="label-text">Monitor seeding downloads</span>
                                 <input id="dm_monitor_seeding" type="checkbox" class="toggle toggle-primary" />
@@ -967,56 +866,40 @@
                         </div>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div class="form-control">
-                            <label class="label pb-1">
-                                <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Max concurrent downloads</span>
-                            </label>
+                        <fieldset class="fieldset gap-1">
+                            <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Max concurrent downloads</legend>
                             <input id="dm_max_concurrent_downloads" type="number" min="1" step="1" class="input input-bordered w-full" placeholder="2" />
-                        </div>
-                        <div class="form-control">
-                            <label class="label pb-1">
-                                <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Default queue priority</span>
-                            </label>
+                        </fieldset>
+                        <fieldset class="fieldset gap-1">
+                            <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Default queue priority</legend>
                             <input id="dm_queue_priority" type="number" min="0" max="10" step="1" class="input input-bordered w-full" placeholder="5" />
-                        </div>
-                        <div class="form-control">
-                            <label class="label pb-1">
-                                <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Polling interval (seconds)</span>
-                            </label>
+                        </fieldset>
+                        <fieldset class="fieldset gap-1">
+                            <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Polling interval (seconds)</legend>
                             <input id="dm_monitor_interval" type="number" min="1" step="1" class="input input-bordered w-full" placeholder="2" />
-                        </div>
+                        </fieldset>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div class="form-control">
-                            <label class="label pb-1">
-                                <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Search retry attempts</span>
-                            </label>
+                        <fieldset class="fieldset gap-1">
+                            <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Search retry attempts</legend>
                             <input id="dm_retry_search" type="number" min="0" step="1" class="input input-bordered w-full" placeholder="3" />
-                        </div>
-                        <div class="form-control">
-                            <label class="label pb-1">
-                                <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Download retry attempts</span>
-                            </label>
+                        </fieldset>
+                        <fieldset class="fieldset gap-1">
+                            <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Download retry attempts</legend>
                             <input id="dm_retry_download" type="number" min="0" step="1" class="input input-bordered w-full" placeholder="2" />
-                        </div>
-                        <div class="form-control">
-                            <label class="label pb-1">
-                                <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Conversion retry attempts</span>
-                            </label>
+                        </fieldset>
+                        <fieldset class="fieldset gap-1">
+                            <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Conversion retry attempts</legend>
                             <input id="dm_retry_conversion" type="number" min="0" step="1" class="input input-bordered w-full" placeholder="1" />
-                        </div>
-                        <div class="form-control">
-                            <label class="label pb-1">
-                                <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Import retry attempts</span>
-                            </label>
+                        </fieldset>
+                        <fieldset class="fieldset gap-1">
+                            <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Import retry attempts</legend>
                             <input id="dm_retry_import" type="number" min="0" step="1" class="input input-bordered w-full" placeholder="2" />
-                        </div>
-                        <div class="form-control md:col-span-2">
-                            <label class="label pb-1">
-                                <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Retry backoff (minutes)</span>
-                            </label>
+                        </fieldset>
+                        <fieldset class="fieldset gap-1 md:col-span-2">
+                            <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Retry backoff (minutes)</legend>
                             <input id="dm_retry_backoff" type="number" min="1" step="1" class="input input-bordered w-full" placeholder="30" />
-                        </div>
+                        </fieldset>
                     </div>
                 </section>
                 <section class="space-y-4">
@@ -1025,64 +908,58 @@
                         <p class="text-sm text-base-content/60">Choose the default format, quality, and safety options when downloading owned Audible titles.</p>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div class="form-control">
-                            <label class="label pb-1">
-                                <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Preferred format</span>
-                            </label>
+                        <fieldset class="fieldset gap-1">
+                            <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Preferred format</legend>
                             <select id="audible_format" class="select select-bordered w-full">
                                 <option value="aaxc">AAXC (Enhanced)</option>
                                 <option value="aax">AAX (Legacy)</option>
                                 <option value="aax-fallback">AAX with automatic fallback</option>
                             </select>
-                        </div>
-                        <div class="form-control">
-                            <label class="label pb-1">
-                                <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Audio quality</span>
-                            </label>
+                        </fieldset>
+                        <fieldset class="fieldset gap-1">
+                            <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Audio quality</legend>
                             <select id="audible_quality" class="select select-bordered w-full">
                                 <option value="best">Best available</option>
                                 <option value="high">High</option>
                                 <option value="normal">Standard</option>
                             </select>
-                        </div>
+                        </fieldset>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div class="form-control">
+                        <div>
                             <label class="label cursor-pointer">
                                 <span class="label-text">Fallback if preferred format fails</span>
                                 <input id="audible_aax_fallback" type="checkbox" class="toggle toggle-primary" />
                             </label>
                         </div>
-                        <div class="form-control">
+                        <div>
                             <label class="label cursor-pointer">
                                 <span class="label-text">Save voucher files for AAXC downloads</span>
                                 <input id="audible_save_voucher" type="checkbox" class="toggle toggle-primary" />
                             </label>
                         </div>
-                        <div class="form-control">
+                        <div>
                             <label class="label cursor-pointer">
                                 <span class="label-text">Download cover artwork</span>
                                 <input id="audible_include_cover" type="checkbox" class="toggle toggle-primary" />
                             </label>
                         </div>
-                        <div class="form-control">
+                        <div>
                             <label class="label cursor-pointer">
                                 <span class="label-text">Download chapter metadata</span>
                                 <input id="audible_include_chapters" type="checkbox" class="toggle toggle-primary" />
                             </label>
                         </div>
-                        <div class="form-control">
+                        <div>
                             <label class="label cursor-pointer">
                                 <span class="label-text">Download supplemental PDF (when available)</span>
                                 <input id="audible_include_pdf" type="checkbox" class="toggle toggle-primary" />
                             </label>
                         </div>
-                        <div class="form-control">
-                            <label class="label pb-1">
-                                <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Concurrent Audible downloads</span>
-                            </label>
+                        <fieldset class="fieldset gap-1">
+                            <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Concurrent Audible downloads</legend>
                             <input id="audible_concurrent_downloads" type="number" min="1" max="5" step="1" class="input input-bordered w-full" placeholder="1" />
-                        </div>
+                        </fieldset>
                     </div>
                 </section>
                 <div id="mediaStatus" class="text-xs text-base-content/60 h-4"></div>
@@ -1166,22 +1043,16 @@
                 <p class="text-sm text-base-content/60">Enter your Audible credentials. They are exchanged for a device token; the password is never stored.</p>
             </div>
             <form id="audibleAuthForm" class="space-y-4" novalidate>
-                <div class="form-control">
-                    <label class="label pb-1">
-                        <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Email</span>
-                    </label>
+                <fieldset class="fieldset gap-1">
+                    <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Email</legend>
                     <input id="audible_auth_email" type="email" class="input input-bordered w-full" autocomplete="username" required />
-                </div>
-                <div class="form-control">
-                    <label class="label pb-1">
-                        <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Password</span>
-                    </label>
+                </fieldset>
+                <fieldset class="fieldset gap-1">
+                    <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Password</legend>
                     <input id="audible_auth_password" type="password" class="input input-bordered w-full" autocomplete="current-password" required />
-                </div>
-                <div class="form-control">
-                    <label class="label pb-1">
-                        <span class="label-text text-xs uppercase tracking-wide text-base-content/60">Marketplace</span>
-                    </label>
+                </fieldset>
+                <fieldset class="fieldset gap-1">
+                    <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">Marketplace</legend>
                     <select id="audible_auth_country" class="select select-bordered w-full">
                         <option value="us">United States (US)</option>
                         <option value="ca">Canada (CA)</option>
@@ -1192,10 +1063,8 @@
                         <option value="es">Spain (ES)</option>
                         <option value="au">Australia (AU)</option>
                     </select>
-                    <label class="label">
-                        <span class="label-text-alt text-base-content/60">Select the Audible marketplace tied to your account.</span>
-                    </label>
-                </div>
+                    <p class="label text-xs text-base-content/60">Select the Audible marketplace tied to your account.</p>
+                </fieldset>
                 <div id="audibleAuthFormStatus" class="text-xs text-error min-h-4"></div>
                 <div class="modal-action">
                     <button type="button" class="btn btn-ghost" data-modal-close="audibleAuthModal">Cancel</button>
@@ -1218,12 +1087,10 @@
                 <p class="text-sm text-base-content/60">Check your authenticator or SMS and enter the six-digit code.</p>
             </div>
             <form id="audibleOtpForm" class="space-y-4" novalidate>
-                <div class="form-control">
-                    <label class="label pb-1">
-                        <span class="label-text text-xs uppercase tracking-wide text-base-content/60">OTP Code</span>
-                    </label>
+                <fieldset class="fieldset gap-1">
+                    <legend class="fieldset-legend text-xs uppercase tracking-wide text-base-content/60">OTP Code</legend>
                     <input id="audible_auth_otp" type="text" class="input input-bordered w-full text-center text-lg tracking-widest" maxlength="6" pattern="[0-9]{6}" inputmode="numeric" autocomplete="one-time-code" required />
-                </div>
+                </fieldset>
                 <div id="audibleOtpFormStatus" class="text-xs text-error min-h-4"></div>
                 <div class="modal-action">
                     <button type="button" class="btn btn-ghost" data-modal-close="audibleOtpModal">Cancel</button>

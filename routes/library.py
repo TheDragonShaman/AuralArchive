@@ -74,6 +74,7 @@ def format_book_for_template(book):
         'genre': get_genre_from_summary(book.get('Summary', '')),
         'series': book.get('Series', 'N/A'),
         'sequence': book.get('Sequence', ''),
+        'series_asin': book.get('series_asin', ''),
         'runtime': book.get('Runtime', '0 hrs 0 mins'),
         'rating': book.get('Overall Rating', 'N/A'),
         'num_ratings': book.get('num_ratings', 0),
@@ -222,6 +223,71 @@ def get_book_details(book_id):
     except Exception as e:
         logger.error("Error fetching book details: %s", e)
         return jsonify({'error': 'Failed to fetch book details'}), 500
+
+@library_bp.route('/book/<int:book_id>/history')
+def get_book_history(book_id):
+    """Return a timeline of events for a specific book."""
+    try:
+        db_service = get_database_service()
+        book = db_service.get_book_by_id(book_id)
+        if not book:
+            return jsonify({'success': False, 'error': 'Book not found'}), 404
+
+        events = []
+
+        # Added to library
+        created = book.get('Created At') or book.get('created_at')
+        if created:
+            events.append({'type': 'info', 'label': 'Added to library', 'ts': str(created)})
+
+        # Metadata updated
+        updated = book.get('Updated At') or book.get('updated_at')
+        if updated and updated != created:
+            events.append({'type': 'info', 'label': 'Metadata updated', 'ts': str(updated)})
+
+        # Imported to library
+        import_date = book.get('import_date')
+        if import_date:
+            events.append({'type': 'success', 'label': 'Imported to library', 'ts': str(import_date)})
+
+        # Download queue entries
+        try:
+            conn, cursor = db_service.connection_manager.connect_db()
+            asin = book.get('ASIN') or book.get('asin')
+            if asin:
+                cursor.execute("""
+                    SELECT status, download_client, file_format, file_size,
+                           queued_at, started_at, completed_at, error_message
+                    FROM download_queue
+                    WHERE book_asin = ?
+                    ORDER BY queued_at DESC
+                    LIMIT 20
+                """, (asin,))
+                rows = cursor.fetchall()
+                for row in rows:
+                    status, client, fmt, fsize, queued_at, started_at, completed_at, err = row
+                    if queued_at:
+                        events.append({'type': 'info', 'label': f'Download queued via {client or "unknown"}', 'ts': str(queued_at)})
+                    if started_at:
+                        events.append({'type': 'info', 'label': f'Download started · {client or ""}', 'ts': str(started_at)})
+                    if completed_at and status == 'completed':
+                        size_label = f' · {round(fsize / 1073741824, 1)} GB' if fsize and fsize > 0 else ''
+                        fmt_label = f' · {fmt}' if fmt else ''
+                        events.append({'type': 'success', 'label': f'Download completed{fmt_label}{size_label}', 'ts': str(completed_at)})
+                    if status == 'failed' and err:
+                        ts = completed_at or started_at or queued_at
+                        events.append({'type': 'error', 'label': f'Download failed: {err}', 'ts': str(ts) if ts else ''})
+        except Exception as ex:
+            logger.warning("Could not fetch download queue history for book %s: %s", book_id, ex)
+
+        # Sort newest first
+        events.sort(key=lambda x: x.get('ts', ''), reverse=True)
+
+        return jsonify({'success': True, 'events': events})
+
+    except Exception as e:
+        logger.error("Error fetching book history: %s", e)
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @library_bp.route('/book/<int:book_id>/status', methods=['PUT'])
 def update_book_status(book_id):

@@ -2,6 +2,63 @@
 
 {% block title %}Library - AuralArchive{% endblock %}
 
+{% block extra_css %}
+<style>
+    .book-tab-panel         { display: none; }
+    .book-tab-panel.book-tab-active { display: flex; flex-direction: column; }
+
+    /* ── Book detail modal v2 ── */
+    .hero-blur {
+        position: absolute; inset: 0;
+        background-size: cover; background-position: center 25%;
+        filter: blur(36px) brightness(0.22) saturate(1.6);
+        transform: scale(1.12);
+    }
+    .hero-tint {
+        position: absolute; inset: 0;
+        opacity: 0.12;
+        pointer-events: none;
+    }
+    .hero-tint.downloaded  { background: var(--color-success); }
+    .hero-tint.queued      { background: var(--color-warning); }
+    .hero-tint.wanted      { background: var(--color-base-content); }
+    .hero-tint.downloading { background: var(--color-info); }
+    .cover-float {
+        position: relative;
+        margin-bottom: -100px;
+        z-index: 20;
+        flex-shrink: 0;
+    }
+    .fact-card {
+        display: flex;
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 0;
+    }
+    .fact-card dt {
+        font-size: 0.65rem;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        opacity: 0.38;
+        line-height: 1.2;
+        flex-shrink: 0;
+    }
+    .fact-card dd {
+        font-size: 0.8rem;
+        font-weight: 600;
+        line-height: 1.3;
+        text-align: right;
+        min-width: 0;
+        word-break: break-word;
+    }
+    .tab-scroll { scrollbar-width: thin; scrollbar-color: rgba(128,128,128,0.15) transparent; }
+    .tab-scroll::-webkit-scrollbar { width: 4px; }
+    .tab-scroll::-webkit-scrollbar-thumb { background: rgba(128,128,128,0.2); border-radius: 2px; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="w-full space-y-4">
     <!-- Top Control Bar -->
@@ -24,14 +81,14 @@
         <div class="library-toolbar" role="group" aria-label="Library filters">
             <!-- Search Library -->
             <div class="form-control library-field library-field--wide">
-                <label for="searchInput" class="library-label">Search Library</label>
+                <label for="searchInput" class="label"><span class="label-text">Search Library</span></label>
                 <input type="text" id="searchInput" placeholder="Search by title, author, or series" 
                        class="input input-sm input-bordered w-full bg-base-100">
             </div>
 
             <!-- Status Filter -->
             <div class="form-control library-field">
-                <label for="statusFilter" class="library-label">Status</label>
+                <label for="statusFilter" class="label"><span class="label-text">Status</span></label>
                 <select id="statusFilter" class="select select-sm select-bordered w-full bg-base-100">
                     <option value="">All Status</option>
                     <option value="owned">Owned</option>
@@ -43,7 +100,7 @@
 
             <!-- Genre Filter -->
             <div class="form-control library-field">
-                <label for="genreFilter" class="library-label">Genre</label>
+                <label for="genreFilter" class="label"><span class="label-text">Genre</span></label>
                 <select id="genreFilter" class="select select-sm select-bordered w-full bg-base-100">
                     <option value="">All Genres</option>
                     <option value="fiction">Fiction</option>
@@ -56,7 +113,7 @@
 
             <!-- Sort By -->
             <div class="form-control library-field">
-                <label for="sortFilter" class="library-label">Sort By</label>
+                <label for="sortFilter" class="label"><span class="label-text">Sort By</span></label>
                 <select id="sortFilter" class="select select-sm select-bordered w-full bg-base-100">
                     <option value="title">Title</option>
                     <option value="author">Author</option>
@@ -67,7 +124,7 @@
 
             <!-- Size Slider -->
             <div class="library-size" aria-label="Adjust card size">
-                <label for="sizeSlider" class="library-label">Card Density</label>
+                <label for="sizeSlider" class="label"><span class="label-text">Card Density</span></label>
                 <div class="library-size__control">
                     <i class="fas fa-image text-xs text-base-content/60"></i>
                     <input type="range" id="sizeSlider" min="0" max="100" value="50" 
@@ -126,17 +183,11 @@
 
 <!-- Book Details Modal -->
 <dialog id="bookModal" class="modal modal-bottom sm:modal-middle">
-    <div class="modal-box max-w-5xl">
-        <div id="modalContent">
-            <!-- Modal content will be loaded dynamically -->
+    <div class="modal-box max-w-6xl w-full p-0 overflow-hidden flex flex-col" style="height:min(92vh,820px);">
+        <div id="modalContent" class="flex flex-col flex-1 min-h-0 overflow-hidden">
             <div class="flex justify-center py-8">
                 <span class="loading loading-spinner loading-lg"></span>
             </div>
-        </div>
-        <div class="modal-action">
-            <form method="dialog">
-                <button class="btn btn-soft btn-md">Close</button>
-            </form>
         </div>
     </div>
     <form method="dialog" class="modal-backdrop">

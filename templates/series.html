@@ -11,18 +11,14 @@
             
             <!-- Search Series -->
             <div class="flex-1 min-w-[200px] max-w-md">
-                <label class="text-xs font-semibold uppercase tracking-wider text-base-content/60 block mb-1">
-                    Search Series
-                </label>
+                <label for="searchInput" class="label"><span class="label-text">Search Series</span></label>
                 <input type="text" id="searchInput" placeholder="Search series by title..." 
                        class="input input-sm input-bordered w-full bg-base-100">
             </div>
 
             <!-- Sort By -->
             <div class="min-w-[140px]">
-                <label class="text-xs font-semibold uppercase tracking-wider text-base-content/60 block mb-1">
-                    Sort By
-                </label>
+                <label for="sortFilter" class="label"><span class="label-text">Sort By</span></label>
                 <select id="sortFilter" class="select select-sm select-bordered w-full bg-base-100">
                     <option value="title">Title</option>
                     <option value="total_books">Book Count</option>
@@ -32,9 +28,7 @@
 
             <!-- View Controls -->
             <div class="min-w-[80px]">
-                <label class="text-xs font-semibold uppercase tracking-wider text-base-content/60 block mb-1">
-                    View
-                </label>
+                <div class="label"><span class="label-text">View</span></div>
                 <div class="join" role="group" aria-label="View options">
                     <button class="join-item btn btn-soft" id="tableViewBtn" onclick="setView('table')" aria-label="Table view">
                         <i class="fas fa-list"></i>
