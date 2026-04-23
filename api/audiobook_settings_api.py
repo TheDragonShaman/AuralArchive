@@ -2,7 +2,7 @@
 Module Name: audiobook_settings_api.py
 Author: TheDragonShaman
 Created: July 6, 2025
-Last Modified: December 23, 2025
+Last Modified: April 23, 2026
 Description:
     REST endpoints for audiobook services configuration: indexers, clients,
     download coordination, file processing, validation, reload, and status.
@@ -28,6 +28,7 @@ Endpoints:
 - GET    /api/audiobook-services/status                          - Service status
 """
 from flask import Blueprint, jsonify, request
+from flask_login import current_user
 from functools import wraps
 
 from utils.logger import get_module_logger
@@ -35,6 +36,13 @@ from utils.logger import get_module_logger
 # Create blueprint
 audiobook_settings_bp = Blueprint('audiobook_settings', __name__)
 logger = get_module_logger("API.Audiobook.Settings")
+
+
+@audiobook_settings_bp.before_request
+def _require_auth():
+    if not current_user.is_authenticated:
+        return jsonify({'error': 'Authentication required'}), 401
+
 
 def handle_errors(f):
     """Decorator to handle API errors"""

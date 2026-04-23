@@ -2,7 +2,7 @@
 Module Name: event_monitoring_api.py
 Author: TheDragonShaman
 Created: July 28, 2025
-Last Modified: December 23, 2025
+Last Modified: April 23, 2026
 Description:
     Event system monitoring API stub. The legacy event bus/service coordinator
     has been removed; these endpoints return stubbed responses for compatibility.
@@ -22,6 +22,7 @@ Endpoints:
 - POST   /api/events/publish        - Publish test event (stub)
 """
 from flask import Blueprint, jsonify, request
+from flask_login import current_user
 import logging
 from functools import wraps
 from datetime import datetime, timedelta
@@ -30,6 +31,13 @@ from utils.logger import get_module_logger
 # Create blueprint
 event_monitoring_bp = Blueprint('event_monitoring', __name__)
 logger = get_module_logger("API.Event.Monitoring")
+
+
+@event_monitoring_bp.before_request
+def _require_auth():
+    if not current_user.is_authenticated:
+        return jsonify({'error': 'Authentication required'}), 401
+
 
 def handle_errors(f):
     """Decorator to handle API errors"""

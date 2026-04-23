@@ -2,7 +2,7 @@
 Module Name: health_monitoring_api.py
 Author: TheDragonShaman
 Created: July 2, 2025
-Last Modified: December 23, 2025
+Last Modified: April 23, 2026
 Description:
     REST endpoints for service health monitoring and system metrics. Interfaces
     with the health monitor to fetch status, histories, alerts, and to start or
@@ -26,6 +26,7 @@ Endpoints:
 - GET    /api/health/alerts                 - Recent health alerts
 """
 from flask import Blueprint, jsonify, request
+from flask_login import current_user
 import logging
 from functools import wraps
 from datetime import datetime
@@ -34,6 +35,13 @@ from utils.logger import get_module_logger
 # Create blueprint
 health_monitoring_bp = Blueprint('health_monitoring', __name__)
 logger = get_module_logger("API.Health.Monitoring")
+
+
+@health_monitoring_bp.before_request
+def _require_auth():
+    if not current_user.is_authenticated:
+        return jsonify({'error': 'Authentication required'}), 401
+
 
 def handle_errors(f):
     """Decorator to handle API errors"""

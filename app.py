@@ -2,7 +2,7 @@
 Module Name: app.py
 Author: TheDragonShaman
 Created: July 15, 2025
-Last Modified: December 23, 2025
+Last Modified: April 23, 2026
 Description:
     Application bootstrap for AuralArchive. Builds the Flask/SocketIO app,
     wires blueprints, and initializes core services and background tasks for
@@ -48,6 +48,11 @@ from api.audible_auth_api import audible_auth_api
 from api.audible_library_api import audible_library_api
 from api.status_api import status_api_bp
 from api.import_api import import_api_bp
+from api.health_monitoring_api import health_monitoring_bp
+from api.audiobook_settings_api import audiobook_settings_bp
+from api.search_api import search_api_bp
+from api.system_validation_api import system_validation_bp
+from api.event_monitoring_api import event_monitoring_bp
 
 LOGGER_NAME = "Core.App"
 logger = get_module_logger(LOGGER_NAME)
@@ -169,6 +174,11 @@ def create_app(config_class=Config):
     app.register_blueprint(audible_library_api)
     app.register_blueprint(status_api_bp)
     app.register_blueprint(import_api_bp)
+    app.register_blueprint(health_monitoring_bp)
+    app.register_blueprint(audiobook_settings_bp)
+    app.register_blueprint(search_api_bp)
+    app.register_blueprint(system_validation_bp)
+    app.register_blueprint(event_monitoring_bp)
     
     # Initialize core services at startup to prevent lazy loading issues
     try:

@@ -2,7 +2,7 @@
 Module Name: search_api.py
 Author: TheDragonShaman
 Created: July 9, 2025
-Last Modified: December 23, 2025
+Last Modified: April 23, 2026
 Description:
     Audiobook Search REST API powered by SearchEngineService and IndexerServiceManager.
     Supports manual and direct provider searches plus legacy endpoints used by
@@ -27,6 +27,7 @@ Endpoints (selected):
 """
 
 from flask import Blueprint, request, jsonify
+from flask_login import current_user
 from datetime import datetime
 import logging
 from typing import Any, Dict, List
@@ -38,6 +39,13 @@ from utils.search_normalization import normalize_search_terms
 
 search_api_bp = Blueprint('search_api', __name__, url_prefix='/api/search')
 logger = get_module_logger("API.Search")
+
+
+@search_api_bp.before_request
+def _require_auth():
+    if not current_user.is_authenticated:
+        return jsonify({'error': 'Authentication required'}), 401
+
 
 search_engine_service = None
 indexer_manager_service = None
